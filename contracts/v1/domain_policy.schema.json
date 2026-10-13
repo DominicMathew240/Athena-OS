@@ -1,0 +1,82 @@
+{
+  "$defs": {
+    "ContractVersion": {
+      "enum": [
+        "v1"
+      ],
+      "title": "ContractVersion",
+      "type": "string"
+    },
+    "Severity": {
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical",
+        "unknown"
+      ],
+      "title": "Severity",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Versioned domain knowledge used to interpret model output.\n\nDoes not change Core contract semantics; specializes label vocabulary,\nseverity mapping, and action policy for a domain (e.g. solar, assembly).",
+  "properties": {
+    "contract_version": {
+      "$ref": "#/$defs/ContractVersion",
+      "default": "v1",
+      "description": "Wire version of this contract. Consumers must reject unknown major versions rather than guess field meaning."
+    },
+    "policy_id": {
+      "description": "Globally unique domain policy identifier.",
+      "title": "Policy Id",
+      "type": "string"
+    },
+    "domain": {
+      "description": "e.g. 'solar', 'assembly'.",
+      "title": "Domain",
+      "type": "string"
+    },
+    "version": {
+      "title": "Version",
+      "type": "string"
+    },
+    "label_taxonomy": {
+      "description": "Labels this policy knows how to interpret.",
+      "items": {
+        "type": "string"
+      },
+      "title": "Label Taxonomy",
+      "type": "array"
+    },
+    "severity_map": {
+      "additionalProperties": {
+        "$ref": "#/$defs/Severity"
+      },
+      "description": "Label -> severity mapping owned by this policy.",
+      "title": "Severity Map",
+      "type": "object"
+    },
+    "effective_at": {
+      "format": "date-time",
+      "title": "Effective At",
+      "type": "string"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "title": "Metadata",
+      "type": "object"
+    }
+  },
+  "required": [
+    "policy_id",
+    "domain",
+    "version",
+    "effective_at"
+  ],
+  "title": "DomainPolicy",
+  "type": "object",
+  "$id": "https://athena-forge.dev/schemas/v1/domain_policy.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

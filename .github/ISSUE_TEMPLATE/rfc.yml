@@ -1,0 +1,43 @@
+name: RFC — Core contract change
+description: Propose a change to a Core contract, SDK interface, or adapter/runtime contract.
+labels: ["rfc", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Core contract changes require an RFC before implementation. See
+        [CONTRIBUTING.md](../CONTRIBUTING.md) for the process.
+  - type: input
+    id: contract
+    attributes:
+      label: Affected contract or interface
+      placeholder: e.g. AssetStateFinding, ModelAdapter, DomainPolicy
+    validations:
+      required: true
+  - type: textarea
+    id: motivation
+    attributes:
+      label: Motivation
+      description: Why is this change needed?
+    validations:
+      required: true
+  - type: textarea
+    id: design
+    attributes:
+      label: Proposed design
+      description: Include the exact field changes, new enums, or interface methods.
+    validations:
+      required: true
+  - type: textarea
+    id: compatibility
+    attributes:
+      label: Backward compatibility
+      description: Is this a minor or breaking change? If breaking, how should it be versioned?
+    validations:
+      required: true
+  - type: textarea
+    id: examples
+    attributes:
+      label: Example usage
+      description: Show how the new contract or interface would be used.
+      render: python

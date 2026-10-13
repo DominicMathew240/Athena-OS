@@ -1,0 +1,88 @@
+{
+  "$defs": {
+    "ContractVersion": {
+      "enum": [
+        "v1"
+      ],
+      "title": "ContractVersion",
+      "type": "string"
+    },
+    "ModelStage": {
+      "enum": [
+        "training",
+        "evaluation",
+        "staged",
+        "released",
+        "deprecated"
+      ],
+      "title": "ModelStage",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "An immutable, identified artifact produced by a training or conversion run.\n\nLoading, exporting, or passing a smoke test does not make a Model a\nrelease; release/approval status is tracked outside this contract.",
+  "properties": {
+    "contract_version": {
+      "$ref": "#/$defs/ContractVersion",
+      "default": "v1",
+      "description": "Wire version of this contract. Consumers must reject unknown major versions rather than guess field meaning."
+    },
+    "model_id": {
+      "description": "Globally unique model artifact identifier.",
+      "title": "Model Id",
+      "type": "string"
+    },
+    "name": {
+      "title": "Name",
+      "type": "string"
+    },
+    "stage": {
+      "$ref": "#/$defs/ModelStage"
+    },
+    "task_type": {
+      "description": "e.g. 'detection', 'segmentation', 'classification'.",
+      "title": "Task Type",
+      "type": "string"
+    },
+    "version": {
+      "description": "Semantic or content-addressed model version.",
+      "title": "Version",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "checksum": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Content hash of the artifact.",
+      "title": "Checksum"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "title": "Metadata",
+      "type": "object"
+    }
+  },
+  "required": [
+    "model_id",
+    "name",
+    "stage",
+    "task_type",
+    "version",
+    "created_at"
+  ],
+  "title": "Model",
+  "type": "object",
+  "$id": "https://athena-forge.dev/schemas/v1/model.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

@@ -1,0 +1,9 @@
+All documentation in `athena-oss/docs/`, `athena-oss/contracts/README.md`,
+and the top-level `athena-oss/README.md` is licensed under the
+
+    Creative Commons Attribution 4.0 International License (CC-BY-4.0)
+
+Full license text: https://creativecommons.org/licenses/by/4.0/legalcode
+
+Code (SDK, CLI, contracts schema definitions, examples, tests) is licensed
+separately under Apache-2.0 — see [`../LICENSE`](../LICENSE).

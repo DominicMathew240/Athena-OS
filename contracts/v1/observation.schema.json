@@ -1,0 +1,106 @@
+{
+  "$defs": {
+    "ContractVersion": {
+      "enum": [
+        "v1"
+      ],
+      "title": "ContractVersion",
+      "type": "string"
+    },
+    "Modality": {
+      "enum": [
+        "rgb_image",
+        "thermal_image",
+        "depth",
+        "point_cloud",
+        "sensor_timeseries",
+        "other"
+      ],
+      "title": "Modality",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "An immutable, provenance-linked capture or derived input.\n\nAn Observation is evidence input, not a model conclusion.",
+  "properties": {
+    "contract_version": {
+      "$ref": "#/$defs/ContractVersion",
+      "default": "v1",
+      "description": "Wire version of this contract. Consumers must reject unknown major versions rather than guess field meaning."
+    },
+    "observation_id": {
+      "description": "Globally unique observation identifier.",
+      "title": "Observation Id",
+      "type": "string"
+    },
+    "modality": {
+      "$ref": "#/$defs/Modality"
+    },
+    "captured_at": {
+      "description": "Capture timestamp, UTC.",
+      "format": "date-time",
+      "title": "Captured At",
+      "type": "string"
+    },
+    "source_uri": {
+      "description": "Locator for the raw or derived observation artifact.",
+      "title": "Source Uri",
+      "type": "string"
+    },
+    "sensor_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Identifier of the capturing sensor/device, if known.",
+      "title": "Sensor Id"
+    },
+    "site_id": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Site Id"
+    },
+    "quality_score": {
+      "anyOf": [
+        {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "description": "Optional normalized capture-quality signal.",
+      "title": "Quality Score"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "title": "Metadata",
+      "type": "object"
+    }
+  },
+  "required": [
+    "observation_id",
+    "modality",
+    "captured_at",
+    "source_uri"
+  ],
+  "title": "Observation",
+  "type": "object",
+  "$id": "https://athena-forge.dev/schemas/v1/observation.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

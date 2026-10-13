@@ -1,0 +1,78 @@
+{
+  "$defs": {
+    "ContractVersion": {
+      "enum": [
+        "v1"
+      ],
+      "title": "ContractVersion",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "Retained material supporting a specific statement or decision.\n\nEvidence references, not embeds, its underlying artifacts.",
+  "properties": {
+    "contract_version": {
+      "$ref": "#/$defs/ContractVersion",
+      "default": "v1",
+      "description": "Wire version of this contract. Consumers must reject unknown major versions rather than guess field meaning."
+    },
+    "evidence_id": {
+      "description": "Globally unique evidence identifier.",
+      "title": "Evidence Id",
+      "type": "string"
+    },
+    "subject_type": {
+      "description": "Type of the entity this evidence supports, e.g. 'finding', 'release'.",
+      "title": "Subject Type",
+      "type": "string"
+    },
+    "subject_id": {
+      "title": "Subject Id",
+      "type": "string"
+    },
+    "kind": {
+      "description": "e.g. 'observation_ref', 'metric_report', 'review_record'.",
+      "title": "Kind",
+      "type": "string"
+    },
+    "uri": {
+      "description": "Locator for the retained evidence artifact.",
+      "title": "Uri",
+      "type": "string"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "checksum": {
+      "anyOf": [
+        {
+          "type": "string"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Checksum"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "title": "Metadata",
+      "type": "object"
+    }
+  },
+  "required": [
+    "evidence_id",
+    "subject_type",
+    "subject_id",
+    "kind",
+    "uri",
+    "created_at"
+  ],
+  "title": "Evidence",
+  "type": "object",
+  "$id": "https://athena-forge.dev/schemas/v1/evidence.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

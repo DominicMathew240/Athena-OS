@@ -1,0 +1,113 @@
+{
+  "$defs": {
+    "ContractVersion": {
+      "enum": [
+        "v1"
+      ],
+      "title": "ContractVersion",
+      "type": "string"
+    },
+    "Severity": {
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical",
+        "unknown"
+      ],
+      "title": "Severity",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A domain-neutral record of an asserted or unknown asset/component state.\n\nGrounded in one or more Observations, produced by a Model, and optionally\ninterpreted by a DomainPolicy. This is the open, minimal shape of the\nconcept described in the Athena architecture glossary \u2014 it intentionally\nomits proprietary calibration, topology, and measurement-provenance\nfields that remain part of the closed implementation.",
+  "properties": {
+    "contract_version": {
+      "$ref": "#/$defs/ContractVersion",
+      "default": "v1",
+      "description": "Wire version of this contract. Consumers must reject unknown major versions rather than guess field meaning."
+    },
+    "finding_id": {
+      "description": "Globally unique finding identifier.",
+      "title": "Finding Id",
+      "type": "string"
+    },
+    "asset_id": {
+      "title": "Asset Id",
+      "type": "string"
+    },
+    "observation_ids": {
+      "description": "Observations this finding is grounded in.",
+      "items": {
+        "type": "string"
+      },
+      "minItems": 1,
+      "title": "Observation Ids",
+      "type": "array"
+    },
+    "model_id": {
+      "description": "Model artifact that produced this finding.",
+      "title": "Model Id",
+      "type": "string"
+    },
+    "label": {
+      "description": "Domain-defined state or defect label.",
+      "title": "Label",
+      "type": "string"
+    },
+    "confidence": {
+      "anyOf": [
+        {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "type": "number"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null,
+      "title": "Confidence"
+    },
+    "severity": {
+      "$ref": "#/$defs/Severity",
+      "default": "unknown"
+    },
+    "is_unknown_state": {
+      "default": false,
+      "description": "True when the model could not confidently classify the state, rather than asserting a specific known label.",
+      "title": "Is Unknown State",
+      "type": "boolean"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "evidence_ids": {
+      "items": {
+        "type": "string"
+      },
+      "title": "Evidence Ids",
+      "type": "array"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "title": "Metadata",
+      "type": "object"
+    }
+  },
+  "required": [
+    "finding_id",
+    "asset_id",
+    "observation_ids",
+    "model_id",
+    "label",
+    "created_at"
+  ],
+  "title": "AssetStateFinding",
+  "type": "object",
+  "$id": "https://athena-forge.dev/schemas/v1/asset_state_finding.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

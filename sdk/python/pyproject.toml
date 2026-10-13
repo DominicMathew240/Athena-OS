@@ -1,0 +1,20 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "athena-sdk"
+version = "0.1.0"
+description = "Open SDK and Core contracts for the Athena industrial AI standard."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+dependencies = [
+    "pydantic>=2.6,<3",
+]
+
+[project.urls]
+Homepage = "https://github.com/DominicMathew240/athena-forge/tree/main/athena-oss"
+
+[tool.setuptools.packages.find]
+include = ["athena_sdk*"]

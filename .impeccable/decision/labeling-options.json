@@ -1,0 +1,125 @@
+{
+  "title": "Choose Athena Studio's visual direction",
+  "question": "The first surface is the no-code operational UI builder for an image-detection project. Keep the assigned direction, choose an alternate, or re-roll.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "Inspection Tag System",
+      "kicker": "THE ROLL",
+      "lineage": "Japanese manufacturing inspection and disposition labels",
+      "thesis": "A confident label hierarchy makes every operator decision legible and traceable.",
+      "palette": ["#F4EFE3", "#182944", "#E45A3A", "#D6AE41"],
+      "materials": ["uncoated inspection stock", "deep indigo ink", "one vermilion disposition mark"],
+      "viewport": "A familiar project shell holds a live operational-screen preview in the center and guided layout settings beside it; the same clear label hierarchy appears in annotation, model, and operator-decision states.",
+      "risk": "A stamp-like mark could imply a final legal verdict; show human review and never style model output as certification.",
+      "raised": [
+        {"from": "dark developer console", "raise": "Keep destructive project and model actions isolated from routine operator controls."},
+        {"from": "Saville catalog sleeve", "raise": "Expose readable dataset and model version IDs; never encode meaning in color blocks alone."}
+      ],
+      "html": ".impeccable/mocks/decision/assigned.html"
+    },
+    {
+      "id": "impeccable-pick",
+      "label": "Tokyo Rail Wayfinding",
+      "kicker": "IMPECCABLE’S PICK",
+      "lineage": "Japanese rail network maps and station wayfinding",
+      "thesis": "One progress line traces how a labeled sample becomes an approved live model.",
+      "palette": ["#F5F1E7", "#132C52", "#007E87", "#E75B3C", "#E3B73A"],
+      "materials": ["matte route-map stock", "crisp sans-serif wayfinding type", "flat route-color bands"],
+      "viewport": "Standard project navigation and controls stay familiar; a single horizontal route line links Label, Train, Configure, and Run, while the live operator-screen preview and its source/model provenance lead the work area.",
+      "risk": "A route line can become decorative transit cosplay; keep it to one progress/provenance cue and retain text labels and ordinary controls.",
+      "html": ".impeccable/mocks/decision/impeccable-pick.html"
+    },
+    {
+      "id": "challenger-dark-console",
+      "label": "Dark Developer Console",
+      "verdict": "declined",
+      "lineage": "Dark-first developer workbenches",
+      "thesis": "Panel seams and deliberate action spacing prioritize safe system operation.",
+      "palette": ["#171C24", "#E6E8EB", "#71C7A6", "#E3B45C"],
+      "materials": ["graphite panels", "hairline seams", "monospaced data"],
+      "viewport": "A standard project shell shows status and model controls in compact panels; destructive actions sit alone behind deliberate confirmation.",
+      "case": "The safety discipline is useful, but the developer-console look misidentifies a product for nontechnical industry operators.",
+      "kept": "Isolate destructive project/model actions from everyday controls.",
+      "risk": "Reads technical and intimidating to the intended operator."
+    },
+    {
+      "id": "challenger-doujin-catalog",
+      "label": "Numbered Contact-Sheet Catalog",
+      "verdict": "competitive",
+      "lineage": "Japanese event catalogs and postage-stamp image grids",
+      "thesis": "A whole-cell image catalog makes a growing reviewed dataset easy to scan.",
+      "palette": ["#F2EBDD", "#181818", "#B74332", "#406C68"],
+      "materials": ["newsprint-like flat paper", "dense ink grid", "one marked selection"],
+      "viewport": "A standard project shell surrounds a numbered image-contact sheet, each cell carrying a readable class and review state; selecting a cell opens its full annotation and provenance.",
+      "case": "Strong for image-heavy dataset discovery and sample navigation; weaker for the trained model and deployed interface workflow.",
+      "risk": "Dense thumbnails become unreadable on narrow screens; repack only in whole cells and preserve a list view.",
+      "html": ".impeccable/mocks/decision/challenger-doujin-catalog.html"
+    },
+    {
+      "id": "challenger-acetate-manual",
+      "label": "Layered Technical Manual",
+      "verdict": "competitive",
+      "lineage": "Japanese technical manuals and annotated cutaway plates",
+      "thesis": "Separating source image, human annotation, and model result makes provenance visible.",
+      "palette": ["#F4EEDD", "#27384B", "#D98435", "#5A8F86"],
+      "materials": ["clean technical linework", "section-color index", "clearly named overlays"],
+      "viewport": "The familiar app shell keeps navigation and controls; the center preview layers the original scan, human box annotations, and model output with explicit labels and independent visibility controls.",
+      "case": "The overlay model clarifies source-versus-human-versus-model evidence; the manual's document-led form loses to the assigned operator workflow.",
+      "risk": "Layer toggles can be confused with visibility of the source itself; name each layer and retain an always-available raw view.",
+      "html": ".impeccable/mocks/decision/challenger-acetate-manual.html"
+    },
+    {
+      "id": "challenger-saville-sleeve",
+      "label": "Coded Catalog Sleeve",
+      "verdict": "declined",
+      "lineage": "Minimal Japanese-influenced record catalog graphics",
+      "thesis": "Compact codes make a large model and dataset catalog feel precise.",
+      "palette": ["#10151B", "#F2F0E8", "#B84C37", "#5A8295"],
+      "materials": ["matte dark field", "thin signal lines", "coded color strips"],
+      "viewport": "A standard shell keeps a model registry and one live-preview panel, using stable version codes as the primary index.",
+      "case": "The coded-artifact look loses both operator identification and immediate task clarity.",
+      "kept": "Make dataset/model version identifiers stable, visible, and copyable.",
+      "risk": "Color strips and abbreviated IDs hide meaning from nontechnical users."
+    },
+    {
+      "id": "challenger-garden-map",
+      "label": "Color-Region Guide Map",
+      "verdict": "competitive",
+      "lineage": "Japanese garden and visitor-guide maps",
+      "thesis": "A small number of color-coded work areas make project progress feel approachable.",
+      "palette": ["#F5F1E4", "#2C2E2A", "#8ED462", "#FF705D", "#2BA0FF", "#F5E211"],
+      "materials": ["flat color fields", "unmodulated ink", "rounded state markers"],
+      "viewport": "A conventional shell remains intact; one generous work area shows dataset, training, and live-interface status as clearly named colored regions, never as a replacement for labels or controls.",
+      "case": "The approachable color grouping helps a novice understand project areas; it is less suited to detailed image review and technical provenance.",
+      "risk": "Color alone must never identify class or state; pair every region with a text label and icon/shape.",
+      "html": ".impeccable/mocks/decision/challenger-garden-map.html"
+    },
+    {
+      "id": "challenger-variable-specimen",
+      "label": "Live Variable Specimen",
+      "verdict": "wins",
+      "lineage": "Interactive type specimens and Japanese type-design publishing",
+      "thesis": "Every safe configuration change immediately reshapes the real operational-screen preview.",
+      "palette": ["#F8F7F2", "#101114", "#D84B31", "#243A66"],
+      "materials": ["near-white specimen paper", "large workhorse sans", "compact monospace coordinates"],
+      "viewport": "A standard project shell presents guided settings beside a live, full-screen operator preview; edits to labels, layout, and thresholds update the preview and named feedback states together.",
+      "case": "The live specimen is a direct metaphor for no-code UI customization and gives nontechnical operators immediate proof of each change.",
+      "risk": "A typography-first look could minimize the underlying industrial task; keep detected image states and provenance larger than decorative type.",
+      "html": ".impeccable/mocks/decision/challenger-variable-specimen.html"
+    }
+  ],
+  "reroll": {"registers": ["safer", "bolder"]},
+  "buildPath": {"value": "code", "toggle": false},
+  "canon": true,
+  "canonCard": {
+    "label": "The category standard",
+    "thesis": "The expected industrial project dashboard, executed with complete clarity.",
+    "palette": ["#FFFFFF", "#152238", "#315E9B", "#E8EDF3"],
+    "materials": ["neutral UI surfaces", "standard sans-serif type", "clear dividers"],
+    "viewport": "Conventional sidebar, project header, readable status cards, an ordinary configuration form, and a well-sized live preview with explicit states.",
+    "risk": "Familiar and easy to scan, but less distinctive than the grounded visual systems.",
+    "html": ".impeccable/mocks/decision/canon.html"
+  },
+  "steer": true
+}

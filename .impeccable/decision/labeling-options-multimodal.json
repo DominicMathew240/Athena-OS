@@ -1,0 +1,96 @@
+{
+  "title": "Choose Athena Studio's multimodal direction",
+  "question": "The scope is now one platform for heterogeneous data—not an image-only dashboard. These directions keep a shared project and dataset workspace while showing task-specific tools by modality. Choose one or re-roll.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "Multimodal Signal Board",
+      "kicker": "THE ROLL",
+      "lineage": "Japanese rail-concourse split-flap information boards",
+      "thesis": "One high-clarity workspace tracks every dataset type without pretending they use the same annotation tool.",
+      "palette": ["#080A0B", "#F5F3EC", "#D7A93C", "#B74437"],
+      "materials": ["matte black signal panels", "fixed-cell bold type", "amber and red for meaningful status only"],
+      "viewport": "A familiar project shell presents one sortable multimodal registry for images, video, audio/speech, text/documents, tables/time series, depth/point clouds, and custom plugins; each row names its task, source, dataset version, model state, and next action. A restrained live-status flip marks real updates, while task tools remain modality-specific.",
+      "risk": "A departure board can feel too operational or transient; preserve durable project context, visible source/version IDs, keyboard controls, and a no-motion reduced-motion mode.",
+      "html": ".impeccable/mocks/decision/multimodal-assigned.html"
+    },
+    {
+      "id": "challenger-streaming-wall",
+      "label": "Multimodal Sample Wall",
+      "verdict": "wins",
+      "lineage": "Streaming catalog walls and focused title cards",
+      "thesis": "A small visible sample from each data type makes a heterogeneous workspace immediately understandable.",
+      "palette": ["#101318", "#F4F1E9", "#56A9A2", "#E1B64B"],
+      "materials": ["deep neutral shell", "full-color source previews", "one focus border"],
+      "viewport": "The standard dashboard shell contains rows for image, audio waveform, speech/transcript, video, tables/time-series, and custom formats; focusing a card reveals its task, label/review state, connector, and a direct route into the correct tool.",
+      "case": "This makes unfamiliar modalities tangible for nontechnical users and communicates the shared platform better than a text-only status board.",
+      "risk": "A media-library metaphor may overemphasize images/video; give text, audio, structured data, and custom plugins equal first-class space and keep a sortable table view.",
+      "html": ".impeccable/mocks/decision/multimodal-stream-wall.html"
+    },
+    {
+      "id": "challenger-bitmap-specimen",
+      "label": "Pixel-True Data Specimen",
+      "verdict": "competitive",
+      "lineage": "Emigre bitmap type specimens and Japanese digital publishing",
+      "thesis": "Each modality is represented by its native shape, not by a generic file icon.",
+      "palette": ["#F6F5EF", "#101114", "#D84B31"],
+      "materials": ["crisp bitmap display marks", "compact data typography", "one synthetic accent"],
+      "viewport": "The normal project shell shows native previews—a thumbnail, waveform, text excerpt, time-series sparkline, or point-cloud silhouette—beside common project metadata and one action into the appropriate workflow.",
+      "case": "Native previews help operators recognize what a dataset contains; the type-specimen treatment is less useful for scanning status across many projects.",
+      "risk": "Low-resolution styling must never degrade actual source content or unreadable text; reserve bitmap treatment for headings and indicators.",
+      "html": ".impeccable/mocks/decision/multimodal-bitmap.html"
+    },
+    {
+      "id": "challenger-cassette-jcard",
+      "label": "Folded Dataset Index",
+      "verdict": "competitive",
+      "lineage": "Cassette J-cards, tracklists, and fold-out sleeves",
+      "thesis": "A dataset carries its modality, label set, source, and version with it as a compact, readable record.",
+      "palette": ["#F8F8F4", "#233E5B", "#C94D3E", "#84678C"],
+      "materials": ["lined paper", "carbon-copy numerals", "one strong identifier stripe"],
+      "viewport": "A shared workspace shows each dataset as a fold-out record with stable ID, modality, task, source connector, and version; audio/speech adds timeline and transcript cues, while other formats keep their own preview and tool link.",
+      "case": "Durable records fit provenance and audio/speech timelines, but the cassette form is too specific to become the platform's universal interface.",
+      "risk": "Do not make every modality look like an audio asset; use the fold only as a compact record treatment and retain familiar navigation.",
+      "html": ".impeccable/mocks/decision/multimodal-jcard.html"
+    },
+    {
+      "id": "challenger-lexicon",
+      "label": "Open Multimodal Lexicon",
+      "verdict": "wins",
+      "lineage": "Reference lexicons with margin guides and bordered plates",
+      "thesis": "Every unfamiliar format gets a plain-language definition, a real preview, and a direct next action.",
+      "palette": ["#F2EBDD", "#181612", "#B74735", "#426B78"],
+      "materials": ["warm paper", "strong black text", "color contained inside labeled previews"],
+      "viewport": "A familiar dashboard shell contains a modality index with guide words and clear task names; each row explains the format in plain language and places its preview inside a bordered plate, with connector and review status in the margin.",
+      "case": "The glossary treatment supports a genuinely broad, extensible system and helps nontechnical operators learn what each data type means.",
+      "risk": "A reference-book metaphor can make an active workspace feel static; show current status and actions at equal visual weight to the definitions.",
+      "html": ".impeccable/mocks/decision/multimodal-lexicon.html"
+    },
+    {
+      "id": "challenger-labanotation",
+      "label": "Synchronized Data Score",
+      "verdict": "competitive",
+      "lineage": "Labanotation and synchronized movement scores",
+      "thesis": "Time-based modalities share one aligned timeline without erasing their different channels.",
+      "palette": ["#FAF9F5", "#151515", "#697A8D", "#C58C31"],
+      "materials": ["white score paper", "shaped channel blocks", "clear interval marks"],
+      "viewport": "The shared shell shows synchronized video frames, speech transcript, audio events, and sensor tracks in named lanes with aligned timestamps; non-temporal image and document workspaces remain separate task tools.",
+      "case": "The score is powerful for audio/video/sensor alignment and annotation; it cannot be the dashboard's default for static images, documents, or tables.",
+      "risk": "A temporal score only applies to some data; present it as a task-specific tool, never as the universal dataset model.",
+      "html": ".impeccable/mocks/decision/multimodal-score.html"
+    }
+  ],
+  "reroll": {"registers": ["safer", "bolder"]},
+  "buildPath": {"value": "code", "toggle": false},
+  "canon": true,
+  "canonCard": {
+    "label": "The category standard",
+    "thesis": "One standard project dashboard with clear modality filters and a familiar table.",
+    "palette": ["#FFFFFF", "#172B49", "#315E9B", "#E9EDF2"],
+    "materials": ["neutral UI surfaces", "system sans-serif type", "ordinary tabs and tables"],
+    "viewport": "A conventional sidebar, a modality filter row, a sortable dataset table with visible task/status fields, and a right-hand panel previewing the selected dataset and linking to its dedicated tool.",
+    "risk": "Highly familiar, but can feel like a generic file manager if modality-specific previews and meaningful next steps are missing.",
+    "html": ".impeccable/mocks/decision/multimodal-canon.html"
+  },
+  "steer": true
+}

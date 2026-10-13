@@ -1,0 +1,1338 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080a0b">
+  <title>Athena — Multimodal workspace</title>
+  <style>
+    :root {
+      color-scheme: light;
+      --ink: #101211;
+      --black: #080a0b;
+      --paper: #f5f3ec;
+      --surface: #fffefa;
+      --line: #d5d3cb;
+      --muted: #595b56;
+      --amber: #d7a93c;
+      --red: #b74437;
+      --green: #395d4d;
+      --nav-width: 226px;
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      font-synthesis: none;
+      text-rendering: optimizeLegibility;
+      -webkit-font-smoothing: antialiased;
+      -moz-osx-font-smoothing: grayscale;
+      font-variant-numeric: tabular-nums;
+    }
+    * { box-sizing: border-box; }
+    body { margin: 0; background: var(--paper); color: var(--ink); }
+    button, input { font: inherit; }
+    button { color: inherit; }
+    button:focus-visible, input:focus-visible, [tabindex]:focus-visible {
+      outline: 3px solid var(--amber); outline-offset: 3px;
+    }
+    ::selection { background: var(--amber); color: var(--black); }
+    .app { min-height: 100vh; display: grid; grid-template-columns: var(--nav-width) minmax(0, 1fr); }
+    .rail { position: relative; min-height: 100vh; padding: 27px 20px 80px; background: var(--black); color: #f5f3ec; }
+    .brand { display: flex; align-items: center; gap: 12px; font-size: 22px; font-weight: 900; letter-spacing: .13em; }
+    .brand-mark { width: 31px; height: 31px; display: grid; grid-template-columns: 1fr 1fr; gap: 3px; }
+    .brand-mark i { background: var(--amber); display: block; }
+    .brand-mark i:nth-child(2), .brand-mark i:nth-child(3) { background: #f5f3ec; }
+    .brand small { display: block; margin-top: 4px; color: #c7c5be; font: 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .2em; }
+    .rail-heading { margin: 48px 0 10px 11px; color: #c7c5be; font: 11px/1 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .16em; }
+    .nav { display: grid; gap: 4px; }
+    .nav button { width: 100%; min-height: 42px; padding: 10px 12px; border: 0; background: transparent; color: #d2d0c9; text-align: left; font-size: 14px; cursor: default; }
+    .nav button[aria-current="page"] { background: #f5f3ec; color: var(--black); font-weight: 750; cursor: default; }
+    .nav button:disabled { opacity: .66; }
+    .rail-foot { position: absolute; left: 20px; right: 20px; bottom: 23px; border-top: 1px solid #414343; padding-top: 13px; color: #c7c5be; font: 11px/1.65 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; }
+    .main { min-width: 0; padding: 28px clamp(20px, 3vw, 44px) 32px; }
+    .page-head { display: flex; justify-content: space-between; align-items: end; gap: 20px; border-bottom: 2px solid var(--ink); padding: 0 0 17px; }
+    h1 { max-width: 800px; margin: 0; font-size: clamp(25px, 2.5vw, 35px); line-height: 1.08; letter-spacing: -.04em; }
+    .subtitle { margin: 8px 0 0; color: #454742; font-size: 14px; }
+    .head-actions { display: grid; justify-items: end; gap: 9px; }
+    .sample-label { flex: 0 0 auto; padding: 7px 10px; border: 1px solid var(--ink); font: 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .1em; white-space: nowrap; }
+    .primary { min-height: 38px; padding: 8px 13px; border: 1px solid var(--black); background: var(--black); color: white; font-size: 13px; font-weight: 750; cursor: pointer; }
+    .status-row { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 9px; margin: 14px 0; }
+    .status-cell { display: flex; justify-content: space-between; align-items: center; min-height: 42px; gap: 12px; padding: 8px 11px; border: 1px solid var(--ink); background: var(--surface); }
+    .status-cell span { font: 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; }
+    .flip { padding: 4px 7px; background: var(--black); color: white; font: 13px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; transform-origin: center; }
+    .flip.bump { animation: flip-in .28s ease-out; }
+    @keyframes flip-in { from { transform: rotateX(-75deg); } to { transform: rotateX(0); } }
+    @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }
+    .toolbar { display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 13px 0 9px; }
+    .filters { display: flex; flex-wrap: wrap; gap: 6px; }
+    .filter { min-height: 34px; padding: 7px 10px; border: 1px solid #7a7b75; background: var(--surface); font-size: 12px; cursor: pointer; }
+    .filter[aria-pressed="true"] { border-color: var(--black); background: var(--black); color: white; }
+    .search { width: min(260px, 27vw); min-height: 36px; padding: 7px 10px; border: 1px solid #777971; background: var(--surface); color: var(--ink); font-size: 12px; }
+    .search::placeholder { color: #595b56; }
+    .table-wrap { overflow-x: auto; border: 1px solid var(--ink); background: var(--surface); }
+    table { width: 100%; border-collapse: collapse; text-align: left; }
+    thead { background: var(--black); color: white; }
+    th { padding: 10px 9px; font: 11px/1.25 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; white-space: nowrap; }
+    td { padding: 10px 9px; border-bottom: 1px solid var(--line); font-size: 12px; vertical-align: middle; }
+    tbody tr:last-child td { border-bottom: 0; }
+    tbody tr { cursor: pointer; }
+    tbody tr:hover { background: #f0eee6; }
+    tbody tr[aria-selected="true"] { background: #f4edda; }
+    .project-name { font-weight: 750; font-size: 13px; }
+    .dataset-id { margin-top: 3px; color: var(--muted); font: 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .type-tag { display: inline-block; border: 1px solid #6c6e68; padding: 4px 6px; font: 11px/1.1 ui-monospace, SFMono-Regular, Menlo, monospace; white-space: nowrap; }
+    .state { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; white-space: nowrap; }
+    .state::before { width: 7px; height: 7px; border: 1px solid currentColor; content: ""; display: inline-block; }
+    .state.review::before { background: var(--red); border-color: var(--red); }
+    .state.ready::before { background: var(--amber); border-color: var(--amber); }
+    .state.plugin::before { background: transparent; }
+    .row-action { border: 1px solid var(--black); background: var(--black); color: white; min-height: 29px; padding: 5px 8px; font-size: 11px; font-weight: 700; white-space: nowrap; cursor: pointer; }
+    .row-action:hover, .primary:hover { background: #303230; }
+    .no-results { padding: 24px 12px; color: var(--muted); text-align: center; font-size: 13px; }
+    .no-results p { margin: 0 0 11px; }
+    .below { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(260px, .85fr); gap: 12px; margin-top: 13px; }
+    .panel { min-width: 0; border: 1px solid var(--ink); background: var(--surface); padding: 14px; }
+    .panel h2 { margin: 0; font-size: 17px; line-height: 1.25; letter-spacing: -.02em; }
+    .panel-intro { margin: 5px 0 12px; color: var(--muted); font-size: 12px; }
+    .task-lines { display: grid; gap: 8px; }
+    .task-line { display: grid; grid-template-columns: 102px minmax(0,1fr) max-content; gap: 10px; align-items: center; font-size: 12px; }
+    .task-line strong { font: 11px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .06em; }
+    .sample-strip { height: 17px; background: repeating-linear-gradient(90deg, var(--ink) 0 2px, transparent 2px 8px); }
+    .sample-strip.wave { height: 20px; background: linear-gradient(90deg, transparent 0 4%, var(--ink) 4% 6%, transparent 6% 12%, var(--ink) 12% 17%, transparent 17% 21%, var(--ink) 21% 30%, transparent 30% 38%, var(--ink) 38% 41%, transparent 41% 49%, var(--ink) 49% 61%, transparent 61% 67%, var(--ink) 67% 75%, transparent 75%); }
+    .sample-strip.text { height: 23px; background: repeating-linear-gradient(180deg, var(--ink) 0 2px, transparent 2px 6px); }
+    .sample-strip.signal { height: 25px; background: linear-gradient(160deg, transparent 0 29%, var(--amber) 30% 34%, transparent 35% 51%, var(--ink) 52% 56%, transparent 57% 70%, var(--amber) 71% 74%, transparent 75%); }
+    .format-note { color: var(--muted); font-size: 11px; white-space: nowrap; }
+    .plugin-copy { max-width: 62ch; margin: 8px 0 12px; color: #454742; font-size: 12px; line-height: 1.5; }
+    .plugin-steps { display: flex; flex-wrap: wrap; gap: 5px; margin: 0 0 11px; }
+    .plugin-steps span { padding: 5px 7px; border: 1px solid var(--line); font: 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .secondary { min-height: 32px; padding: 6px 9px; border: 1px solid var(--ink); background: transparent; font-size: 11px; font-weight: 700; cursor: pointer; }
+    .notice { display: none; margin-top: 10px; padding: 9px 10px; border: 1px solid #a16f20; background: #f8f0dc; color: #3e3117; font-size: 12px; line-height: 1.4; }
+    .notice[data-open="true"] { display: block; }
+    .delete-action { margin-left: 12px; padding: 5px 8px; border: 1px solid var(--red); background: transparent; color: var(--red); font-size: 11px; font-weight: 750; cursor: pointer; }
+    .footer-note { margin: 12px 0 0; color: var(--muted); font-size: 12px; }
+    .safety-note { margin: 12px 0 0; padding: 10px 11px; border: 1px solid #916722; background: #f8f0dc; color: #3e3117; font-size: 12px; line-height: 1.4; }
+    .asset-panel { margin-top: 13px; }
+    .asset-upload { display: flex; flex-wrap: wrap; align-items: end; gap: 10px; margin: 12px 0; }
+    .asset-upload label { display: grid; gap: 5px; min-width: min(100%, 320px); font-size: 12px; font-weight: 700; }
+    .asset-upload input { min-height: 38px; max-width: 100%; padding: 7px; border: 1px solid #777971; background: white; font-size: 12px; }
+    .asset-help, .asset-status { color: var(--muted); font-size: 11px; line-height: 1.45; }
+    .asset-list { display: grid; gap: 7px; }
+    .asset-row { display: grid; grid-template-columns: 64px minmax(0,1fr) max-content; align-items: center; gap: 11px; padding: 8px; border: 1px solid var(--line); }
+    .asset-row img { width: 64px; height: 48px; object-fit: cover; border: 1px solid var(--line); background: var(--paper); }
+    .asset-name { min-width: 0; overflow-wrap: anywhere; font-size: 12px; font-weight: 700; }
+    .asset-meta { margin-top: 3px; color: var(--muted); font: 10px/1.4 ui-monospace, SFMono-Regular, Menlo, monospace; overflow-wrap: anywhere; }
+    .asset-actions { display: flex; flex-wrap: wrap; justify-content: end; gap: 6px; }
+    .asset-annotate { min-height: 30px; padding: 5px 8px; border: 1px solid var(--black); background: var(--black); color: white; font-size: 11px; font-weight: 700; cursor: pointer; }
+    .asset-remove { min-height: 30px; padding: 5px 8px; border: 1px solid var(--red); background: transparent; color: var(--red); font-size: 11px; font-weight: 700; cursor: pointer; }
+    dialog { width: min(560px, calc(100vw - 28px)); max-height: calc(100vh - 32px); overflow-y: auto; padding: 0; border: 1px solid var(--ink); background: var(--paper); color: var(--ink); }
+    dialog::backdrop { background: rgb(8 10 11 / .62); }
+    .dialog-head { display: flex; justify-content: space-between; align-items: start; gap: 16px; padding: 18px 20px; background: var(--black); color: white; }
+    .dialog-head h2 { margin: 0; font-size: 22px; }
+    .dialog-head p { margin: 5px 0 0; color: #d2d0c9; font-size: 12px; }
+    .dialog-close { min-width: 34px; min-height: 34px; border: 1px solid #aaa; background: transparent; color: white; font-size: 18px; cursor: pointer; }
+    .project-form { display: grid; gap: 13px; padding: 18px 20px 20px; }
+    .project-form label { display: grid; gap: 5px; font-size: 13px; font-weight: 700; }
+    .project-form input, .project-form select { width: 100%; min-height: 39px; padding: 8px 10px; border: 1px solid #777971; border-radius: 0; background: white; color: var(--ink); font-size: 13px; }
+    .field-help { color: var(--muted); font-size: 11px; font-weight: 400; line-height: 1.4; }
+    .form-error { display: none; margin: 0; padding: 9px 10px; border: 1px solid var(--red); color: #63251f; background: #f8e9e6; font-size: 12px; }
+    .form-error[data-open="true"] { display: block; }
+    .form-actions { display: flex; justify-content: end; gap: 8px; margin-top: 3px; }
+    .annotation-dialog { width: min(1120px, calc(100vw - 24px)); }
+    .annotation-content { padding: 16px; }
+    .annotation-toolbar { display: flex; align-items: end; gap: 10px; margin-bottom: 12px; }
+    .annotation-toolbar label { display: grid; gap: 5px; font-size: 12px; font-weight: 700; }
+    .annotation-toolbar select { min-width: 210px; min-height: 36px; padding: 6px 8px; border: 1px solid #777971; background: white; color: var(--ink); }
+    .annotation-view-tools { display: flex; align-items: center; flex-wrap: wrap; gap: 6px; margin-left: auto; }
+    .zoom-control { min-width: 34px; min-height: 34px; border: 1px solid var(--ink); background: var(--surface); font-size: 15px; font-weight: 800; cursor: pointer; }
+    .zoom-control:disabled { opacity: .45; cursor: default; }
+    .zoom-level { min-width: 48px; text-align: center; font: 11px/1.2 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .pan-hint { color: var(--muted); font-size: 10px; }
+    .annotation-workspace { display: grid; grid-template-columns: minmax(0,1fr) minmax(220px,260px); gap: 12px; }
+    .annotation-stage-scroll { display: flex; justify-content: center; align-items: center; min-height: 240px; max-height: 66vh; overflow: auto; background: #121414; }
+    .annotation-stage-scroll.is-zoomed { justify-content: flex-start; align-items: flex-start; }
+    .annotation-stage { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
+    #annotation-image { display: block; max-width: 100%; max-height: 64vh; width: auto; height: auto; object-fit: contain; }
+    #annotation-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
+    .annotation-side { max-height: 66vh; overflow: auto; border: 1px solid var(--line); padding: 10px; }
+    .annotation-side h3 { margin: 0 0 7px; font: 12px/1.3 ui-monospace, SFMono-Regular, Menlo, monospace; letter-spacing: .08em; }
+    .annotation-list { display: grid; gap: 7px; }
+    .annotation-entry { display: grid; gap: 6px; padding: 8px; border: 1px solid var(--line); }
+    .annotation-entry select { min-height: 32px; padding: 4px 6px; border: 1px solid #777971; background: white; color: var(--ink); font-size: 12px; }
+    .annotation-coordinates { color: var(--muted); font: 10px/1.35 ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .annotation-remove { justify-self: start; min-height: 28px; padding: 4px 7px; border: 1px solid var(--red); background: transparent; color: var(--red); font-size: 10px; font-weight: 700; cursor: pointer; }
+    .annotation-status { min-height: 18px; margin: 9px 0 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
+    .keyboard-box-entry { margin: 10px 0 12px; border: 1px solid var(--line); background: var(--surface); }
+    .keyboard-box-entry summary { padding: 9px 10px; font-size: 12px; font-weight: 700; cursor: pointer; }
+    .keyboard-box-form { display: grid; gap: 9px; padding: 0 10px 10px; }
+    .keyboard-box-form p { margin: 0; color: var(--muted); font-size: 11px; line-height: 1.4; }
+    .keyboard-box-grid { display: grid; grid-template-columns: repeat(4,minmax(0,1fr)); gap: 8px; }
+    .keyboard-box-grid label { display: grid; gap: 4px; font-size: 11px; font-weight: 700; }
+    .keyboard-box-grid input { min-width: 0; min-height: 34px; padding: 5px 7px; border: 1px solid #777971; background: white; color: var(--ink); }
+    .annotation-select { justify-self: start; min-height: 28px; padding: 4px 7px; border: 1px solid var(--ink); background: transparent; font-size: 10px; font-weight: 700; cursor: pointer; }
+    .annotation-select[aria-pressed="true"] { background: var(--black); color: white; }
+    .mobile-list { display: none; }
+    @media (max-width: 1120px) {
+      :root { --nav-width: 196px; }
+      .main { padding-right: 22px; padding-left: 22px; }
+      td { padding-right: 7px; padding-left: 7px; }
+      .task-line { grid-template-columns: 88px minmax(0,1fr) max-content; }
+    }
+    @media (max-width: 850px) {
+      .app { grid-template-columns: 1fr; }
+      .rail { min-height: 0; padding: 12px 17px; display: flex; align-items: center; gap: 16px; }
+      .brand { font-size: 18px; }
+      .brand-mark { width: 25px; height: 25px; }
+      .brand small, .rail-heading, .rail-foot { display: none; }
+      .nav { display: flex; overflow-x: auto; gap: 4px; margin: 0 0 0 auto; }
+      .nav button { width: auto; min-width: max-content; min-height: 36px; padding: 8px; font-size: 12px; }
+      .main { padding: 19px 17px 25px; }
+      .desktop-table { display: none; }
+      .mobile-list { display: grid; gap: 0; }
+      .mobile-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; align-items: center; padding: 11px; border-bottom: 1px solid var(--line); background: var(--surface); }
+      .mobile-row:last-child { border-bottom: 0; }
+      .mobile-row[aria-selected="true"] { background: #f4edda; }
+      .mobile-row button.select { border: 0; background: transparent; padding: 0; text-align: left; cursor: pointer; }
+      .mobile-row .details { display: flex; flex-wrap: wrap; align-items: center; gap: 7px; margin-top: 6px; color: var(--muted); font-size: 11px; }
+      .mobile-row .row-action { grid-column: 2; grid-row: 1 / span 2; }
+      .table-wrap { overflow: visible; background: transparent; }
+    }
+    @media (max-width: 580px) {
+      .rail { align-items: flex-start; flex-direction: column; gap: 9px; }
+      .nav { width: 100%; margin: 0; }
+      .nav button { flex: 0 0 auto; }
+      .main { padding: 17px 12px 22px; }
+      .page-head { align-items: start; }
+      .head-actions { gap: 7px; }
+      .head-actions .sample-label { display: none; }
+      .head-actions { align-items: end; }
+      .sample-label { font-size: 11px; padding: 6px; }
+      .subtitle { max-width: 39ch; font-size: 12px; }
+      .status-row { grid-template-columns: 1fr; gap: 6px; margin: 10px 0; }
+      .status-cell { min-height: 35px; }
+      .toolbar { align-items: stretch; flex-direction: column; }
+      .filters { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); }
+      .filter { text-align: left; }
+      .search { width: 100%; }
+      .below { grid-template-columns: 1fr; }
+      .task-line { grid-template-columns: 90px minmax(60px,1fr) max-content; }
+      .format-note { font-size: 11px; }
+      .annotation-workspace { grid-template-columns: 1fr; }
+      .annotation-side { max-height: 26vh; }
+      .annotation-stage-scroll { min-height: 180px; max-height: 48vh; }
+      .keyboard-box-grid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <aside class="rail" aria-label="Athena navigation">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>ATHENA<small>ONE DATA PLATFORM</small></span></div>
+      <div class="rail-heading">WORKSPACE</div>
+      <nav class="nav" aria-label="Main navigation">
+        <button aria-current="page">Workspace</button>
+        <button disabled aria-disabled="true" title="Project detail pages are not implemented yet">Projects</button>
+        <button disabled aria-disabled="true" title="Dataset management is not implemented yet">Datasets</button>
+        <button disabled aria-disabled="true" title="The image project panel supports bounding boxes; other task workspaces are still in progress">Annotation tools</button>
+        <button disabled aria-disabled="true" title="Training workflows are not implemented yet">Training</button>
+        <button disabled aria-disabled="true" title="Operational interfaces are not implemented yet">Operational UIs</button>
+        <button disabled aria-disabled="true" title="Connectors are not implemented yet">Connectors</button>
+      </nav>
+      <div class="rail-foot">MULTIMODAL · EXTENSIBLE<br>ONE SHARED PROJECT LIFECYCLE</div>
+    </aside>
+    <main class="main">
+      <header class="page-head">
+        <div>
+          <h1>One platform. Modality-specific tools.</h1>
+          <p class="subtitle">Start a project in one workspace. Route each data type to its own task tools.</p>
+        </div>
+        <div class="head-actions"><div class="sample-label">LOCAL WORKSPACE</div><button class="primary" id="open-project-dialog" type="button">New project</button></div>
+      </header>
+      <section class="status-row" aria-label="Workspace overview">
+        <div class="status-cell"><span>LOCAL PROJECTS</span><strong class="flip" id="project-count">00</strong></div>
+        <div class="status-cell"><span>BUILT-IN DATA TYPES</span><strong class="flip" id="type-count">10</strong></div>
+        <div class="status-cell"><span>MODEL PROMOTION RULE</span><strong class="flip">HUMAN APPROVAL</strong></div>
+      </section>
+      <section aria-label="Browse projects">
+        <div class="toolbar">
+          <div class="filters" role="group" aria-label="Filter projects by data type">
+            <button class="filter" aria-pressed="true" data-filter="all">All data</button>
+            <button class="filter" aria-pressed="false" data-filter="visual">Image / video</button>
+            <button class="filter" aria-pressed="false" data-filter="audio">Audio / speech</button>
+            <button class="filter" aria-pressed="false" data-filter="language">Text / documents</button>
+            <button class="filter" aria-pressed="false" data-filter="structured">Tables / signals / 3D</button>
+            <button class="filter" aria-pressed="false" data-filter="custom">Custom</button>
+          </div>
+          <label class="search-label"><span class="visually-hidden">Search projects</span><input id="search" class="search" type="search" placeholder="Search projects" autocomplete="off"></label>
+        </div>
+        <div class="table-wrap">
+          <table class="desktop-table" aria-label="Projects in this local workspace">
+            <thead><tr><th scope="col">PROJECT</th><th scope="col">TYPE</th><th scope="col">TASK</th><th scope="col">LABELS</th><th scope="col">STATE</th><th scope="col">NEXT</th></tr></thead>
+            <tbody id="dataset-rows"></tbody>
+          </table>
+          <div class="mobile-list" id="mobile-rows" aria-label="Projects in this local workspace"></div>
+          <div class="no-results" id="empty-state" hidden><p id="empty-copy"></p><button class="secondary" id="empty-create" type="button">Create a project</button></div>
+        </div>
+      </section>
+      <div class="below">
+        <section class="panel" aria-labelledby="tools-heading">
+          <h2 id="tools-heading">One registry, different task tools</h2>
+          <p class="panel-intro">Image, audio, text, and signal workflows need different annotation controls. Image projects support local image import and manual bounding boxes; other task tools are still in progress.</p>
+          <div class="task-lines">
+            <div class="task-line"><strong>IMAGE</strong><span class="sample-strip" aria-hidden="true"></span><span class="format-note">boxes / masks</span></div>
+            <div class="task-line"><strong>AUDIO</strong><span class="sample-strip wave" aria-hidden="true"></span><span class="format-note">events / spans</span></div>
+            <div class="task-line"><strong>TEXT</strong><span class="sample-strip text" aria-hidden="true"></span><span class="format-note">labels / spans</span></div>
+            <div class="task-line"><strong>TIME SERIES</strong><span class="sample-strip signal" aria-hidden="true"></span><span class="format-note">signals / windows</span></div>
+          </div>
+        </section>
+        <section class="panel" aria-labelledby="plugin-heading">
+          <h2 id="plugin-heading">Bring a new data type</h2>
+          <p class="plugin-copy">Project setup accepts ten common modalities plus custom types. A plugin API is a later milestone; this screen does not load plugins.</p>
+          <div class="plugin-steps" aria-label="Plugin responsibilities"><span>PREVIEW</span><span>TASK TOOL</span><span>MODEL ADAPTER</span><span>PROVENANCE</span></div>
+          <button class="secondary" id="plugin-guide">About modality plugins</button>
+          <div class="notice" id="plugin-notice" role="status">Custom project types are metadata only. No plugin SDK, connector, or custom annotation tool is included yet.</div>
+        </section>
+      </div>
+      <section class="panel asset-panel" id="image-assets-panel" aria-labelledby="image-assets-heading" hidden>
+        <h2 id="image-assets-heading">Image files</h2>
+        <p class="panel-intro">Add JPEG, PNG, or WebP files to the selected image project. Each import is validated and SHA-256 hashed; files remain local.</p>
+        <form class="asset-upload" id="image-upload-form">
+          <label for="image-upload">Choose image files <span class="asset-help">Up to 20 images and 100 MB per batch; 20 MB and 25 megapixels per image.</span><input id="image-upload" name="images" type="file" accept="image/jpeg,image/png,image/webp" multiple></label>
+          <button class="primary" id="upload-images" type="submit">Add images</button>
+        </form>
+        <p class="asset-status" id="asset-status" role="status" aria-live="polite"></p>
+        <div class="asset-list" id="asset-list"></div>
+        <p class="asset-help">These are unreviewed local candidates. Rights evidence is not captured here; do not treat these files as cleared for export or training.</p>
+      </section>
+      <div class="notice" id="action-notice" role="status" aria-live="polite"><span id="action-message"></span><button class="delete-action" id="delete-selected-project" type="button" hidden>Delete project</button></div>
+      <div class="safety-note">Early local build: project metadata is in an unencrypted SQLite file and imported images are stored as local files. No login or access control is included. Do not add sensitive production data.</div>
+      <p class="footer-note">This slice saves project metadata, verified image files, and manual bounding boxes. Rights review, dataset export, training, and inference are not implemented yet.</p>
+    </main>
+  </div>
+  <dialog id="project-dialog" aria-labelledby="project-dialog-title">
+    <div class="dialog-head"><div><h2 id="project-dialog-title">Create a project</h2><p>Define the data type and task before adding files.</p></div><button class="dialog-close" id="close-project-dialog" type="button" aria-label="Close project form">×</button></div>
+    <form id="create-project-form" class="project-form">
+      <label for="project-name">Project name<input id="project-name" name="name" required maxlength="120" autocomplete="off" placeholder="e.g. Packaging line inspection"></label>
+      <label for="project-modality">Data type<select id="project-modality" name="modality" required>
+        <option value="image">Image</option><option value="video">Video</option><option value="audio">Audio</option><option value="speech">Speech</option><option value="text">Text / documents</option><option value="table">Tables</option><option value="time_series">Time series</option><option value="depth">Depth</option><option value="point_cloud">Point cloud</option><option value="custom">Custom modality</option>
+      </select></label>
+      <label for="custom-modality" id="custom-modality-field" hidden>Custom data type name<input id="custom-modality" name="custom_modality" maxlength="80" autocomplete="off" placeholder="e.g. thermal camera"></label>
+      <label for="project-task">Task<input id="project-task" name="task" required maxlength="120" autocomplete="off" placeholder="e.g. Object detection"></label>
+      <label for="project-labels">Label names <span class="field-help">Optional; enter names separated by commas.</span><input id="project-labels" name="labels" maxlength="3300" autocomplete="off" placeholder="e.g. normal, damaged, unknown"></label>
+      <p class="form-error" id="project-form-error" role="alert"></p>
+      <div class="form-actions"><button class="secondary" id="cancel-project" type="button">Cancel</button><button class="primary" type="submit">Save project</button></div>
+    </form>
+  </dialog>
+  <dialog id="annotation-dialog" class="annotation-dialog" aria-labelledby="annotation-title">
+    <div class="dialog-head"><div><h2 id="annotation-title">Label image</h2><p id="annotation-filename">Manual bounding-box annotation</p></div><button class="dialog-close" id="close-annotation-dialog" type="button" aria-label="Close annotation workspace">×</button></div>
+    <div class="annotation-content">
+      <p class="asset-help" id="annotation-workspace-help">Choose a class, then drag across the image to create a box. Drag inside a box to move it; drag either corner handle to resize it. Select a box and use arrow keys to nudge it 1%; Shift+arrow resizes it. Use Undo/Redo or Ctrl/Cmd+Z and Shift+Ctrl/Cmd+Z while the canvas is focused. History lasts until this dialog closes. A keyboard form is also available below.</p>
+      <div class="annotation-toolbar">
+        <label for="annotation-label">Box class<select id="annotation-label"></select></label>
+        <div class="annotation-view-tools" role="group" aria-label="Annotation edit history and image zoom controls">
+          <button class="secondary" id="annotation-undo" type="button" aria-label="Undo annotation change" disabled>Undo</button>
+          <button class="secondary" id="annotation-redo" type="button" aria-label="Redo annotation change" disabled>Redo</button>
+          <button class="zoom-control" id="annotation-zoom-out" type="button" aria-label="Zoom out" title="Zoom out">−</button>
+          <output class="zoom-level" id="annotation-zoom-level" aria-live="polite">100%</output>
+          <button class="zoom-control" id="annotation-zoom-in" type="button" aria-label="Zoom in" title="Zoom in">+</button>
+          <button class="secondary" id="annotation-zoom-reset" type="button">Reset view</button>
+          <span class="pan-hint">Scroll to pan when zoomed</span>
+        </div>
+      </div>
+      <details class="keyboard-box-entry">
+        <summary>Create a box using keyboard entry</summary>
+        <form class="keyboard-box-form" id="keyboard-box-form">
+          <p>Enter left, top, width, and height as percentages of the image. The box must stay within the image.</p>
+          <div class="keyboard-box-grid">
+            <label for="box-left">Left (%)<input id="box-left" name="x" type="number" min="0" max="99" step="1" value="10" required></label>
+            <label for="box-top">Top (%)<input id="box-top" name="y" type="number" min="0" max="99" step="1" value="10" required></label>
+            <label for="box-width">Width (%)<input id="box-width" name="width" type="number" min="1" max="100" step="1" value="20" required></label>
+            <label for="box-height">Height (%)<input id="box-height" name="height" type="number" min="1" max="100" step="1" value="20" required></label>
+          </div>
+          <div class="form-actions"><button class="secondary" type="submit">Add box</button></div>
+        </form>
+      </details>
+      <div class="annotation-workspace">
+        <div class="annotation-stage-scroll" id="annotation-stage-scroll" role="region" tabindex="0" aria-label="Zoomable image annotation workspace" aria-describedby="annotation-workspace-help"><div class="annotation-stage" id="annotation-stage"><img id="annotation-image" alt="Image being labeled"><canvas id="annotation-canvas" tabindex="0" aria-label="Annotation canvas. Select a box, then use arrow keys to move it or Shift plus arrow keys to resize it."></canvas></div></div>
+        <aside class="annotation-side" aria-labelledby="annotation-list-heading"><h3 id="annotation-list-heading">BOXES</h3><div class="annotation-list" id="annotation-list"></div></aside>
+      </div>
+      <p class="annotation-status" id="annotation-status" role="status" aria-live="polite"></p>
+      <div class="form-actions"><button class="secondary" id="done-annotation" type="button">Done</button></div>
+    </div>
+  </dialog>
+  <style>.visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}</style>
+  <script>
+    const modalityInfo = {
+      image: { label: "IMAGE", family: "visual" },
+      video: { label: "VIDEO", family: "visual" },
+      audio: { label: "AUDIO", family: "audio" },
+      speech: { label: "SPEECH", family: "audio" },
+      text: { label: "TEXT", family: "language" },
+      table: { label: "TABLE", family: "structured" },
+      time_series: { label: "TIME SERIES", family: "structured" },
+      depth: { label: "DEPTH", family: "structured" },
+      point_cloud: { label: "POINT CLOUD", family: "structured" },
+      custom: { label: "CUSTOM", family: "custom" }
+    };
+    let projects = [];
+    let currentFilter = "all";
+    let selectedId = null;
+    let lastCount = 0;
+    let loadError = "";
+    const tableBody = document.getElementById("dataset-rows");
+    const mobileRows = document.getElementById("mobile-rows");
+    const emptyState = document.getElementById("empty-state");
+    const emptyCopy = document.getElementById("empty-copy");
+    const emptyCreate = document.getElementById("empty-create");
+    const notice = document.getElementById("action-notice");
+    const noticeMessage = document.getElementById("action-message");
+    const deleteSelected = document.getElementById("delete-selected-project");
+    const projectDialog = document.getElementById("project-dialog");
+    const projectForm = document.getElementById("create-project-form");
+    const formError = document.getElementById("project-form-error");
+    const customModalityField = document.getElementById("custom-modality-field");
+    const customModalityInput = document.getElementById("custom-modality");
+    const imageAssetsPanel = document.getElementById("image-assets-panel");
+    const imageUploadForm = document.getElementById("image-upload-form");
+    const imageUploadInput = document.getElementById("image-upload");
+    const assetList = document.getElementById("asset-list");
+    const assetStatus = document.getElementById("asset-status");
+    const annotationDialog = document.getElementById("annotation-dialog");
+    const annotationImage = document.getElementById("annotation-image");
+    const annotationCanvas = document.getElementById("annotation-canvas");
+    const annotationStage = document.getElementById("annotation-stage");
+    const annotationStageScroll = document.getElementById("annotation-stage-scroll");
+    const annotationZoomIn = document.getElementById("annotation-zoom-in");
+    const annotationZoomOut = document.getElementById("annotation-zoom-out");
+    const annotationZoomReset = document.getElementById("annotation-zoom-reset");
+    const annotationZoomLevel = document.getElementById("annotation-zoom-level");
+    const annotationUndo = document.getElementById("annotation-undo");
+    const annotationRedo = document.getElementById("annotation-redo");
+    const annotationLabel = document.getElementById("annotation-label");
+    const annotationList = document.getElementById("annotation-list");
+    const annotationStatus = document.getElementById("annotation-status");
+    const annotationFilename = document.getElementById("annotation-filename");
+    const keyboardBoxForm = document.getElementById("keyboard-box-form");
+    let activeAnnotationAsset = null;
+    let boxAnnotations = [];
+    let drawingBox = null;
+    let selectedAnnotationId = null;
+    let boxEditPreview = null;
+    let annotationZoom = 1;
+    let annotationUndoStack = [];
+    let annotationRedoStack = [];
+    let annotationHistoryBusy = false;
+    let annotationMutationBusy = false;
+    const searchable = project => `${project.name} ${project.id} ${project.modality} ${project.custom_modality || ""} ${project.task} ${project.labels.join(" ")}`.toLowerCase();
+
+    function projectFamily(project) {
+      return modalityInfo[project.modality]?.family || "custom";
+    }
+
+    function visibleProjects() {
+      const term = document.getElementById("search").value.trim().toLowerCase();
+      return projects.filter(project => (currentFilter === "all" || projectFamily(project) === currentFilter) && (!term || searchable(project).includes(term)));
+    }
+
+    function announceCount(count) {
+      const tile = document.getElementById("project-count");
+      tile.textContent = String(count).padStart(2, "0");
+      if (count !== lastCount) {
+        tile.classList.remove("bump");
+        requestAnimationFrame(() => tile.classList.add("bump"));
+      }
+      lastCount = count;
+    }
+
+    function selectProject(id) {
+      selectedId = id;
+      render();
+      const selected = projects.find(project => project.id === id);
+      if (!selected) {
+        imageAssetsPanel.hidden = true;
+        assetList.replaceChildren();
+        return;
+      }
+      notice.dataset.open = "true";
+      noticeMessage.textContent = `${selected.name} is saved on this device.`;
+      deleteSelected.hidden = false;
+      void loadAssets(selected.id);
+    }
+
+    function render() {
+      const shown = visibleProjects();
+      tableBody.replaceChildren();
+      mobileRows.replaceChildren();
+      document.querySelector(".desktop-table").hidden = shown.length === 0;
+      emptyState.hidden = shown.length > 0;
+      emptyCreate.hidden = projects.length > 0;
+      emptyCopy.textContent = loadError || (projects.length === 0
+        ? "No projects yet. Create one to define its data type, task, and labels."
+        : "No projects match this filter or search. Try another view.");
+
+      shown.forEach(project => {
+        const type = modalityInfo[project.modality]?.label || "CUSTOM";
+        const displayType = project.modality === "custom" && project.custom_modality
+          ? `${type}: ${project.custom_modality}`
+          : type;
+        const labelSummary = project.labels.length ? project.labels.join(", ") : "No labels yet";
+
+        const row = document.createElement("tr");
+        row.tabIndex = 0;
+        row.setAttribute("aria-selected", String(project.id === selectedId));
+        const nameCell = document.createElement("td");
+        const name = document.createElement("div");
+        name.className = "project-name";
+        name.textContent = project.name;
+        const id = document.createElement("div");
+        id.className = "dataset-id";
+        id.textContent = `PROJECT / ${project.id.slice(0, 8).toUpperCase()}`;
+        nameCell.append(name, id);
+        const typeCell = document.createElement("td");
+        const tag = document.createElement("span");
+        tag.className = "type-tag";
+        tag.textContent = displayType;
+        typeCell.append(tag);
+        const taskCell = document.createElement("td");
+        taskCell.textContent = project.task;
+        const labelsCell = document.createElement("td");
+        labelsCell.textContent = labelSummary;
+        const stateCell = document.createElement("td");
+        const state = document.createElement("span");
+        state.className = "state";
+        state.textContent = "Setup needed";
+        stateCell.append(state);
+        const actionCell = document.createElement("td");
+        const action = document.createElement("button");
+        action.className = "row-action";
+        action.type = "button";
+        action.textContent = "View setup";
+        action.setAttribute("aria-label", `View setup: ${project.name}`);
+        action.addEventListener("click", event => { event.stopPropagation(); selectProject(project.id); });
+        actionCell.append(action);
+        row.append(nameCell, typeCell, taskCell, labelsCell, stateCell, actionCell);
+        row.addEventListener("click", () => selectProject(project.id));
+        row.addEventListener("keydown", event => {
+          if (event.key === "Enter" || event.key === " ") {
+            event.preventDefault();
+            selectProject(project.id);
+          }
+        });
+        tableBody.append(row);
+
+        const card = document.createElement("article");
+        card.className = "mobile-row";
+        card.setAttribute("aria-selected", String(project.id === selectedId));
+        const select = document.createElement("button");
+        select.className = "select";
+        select.type = "button";
+        select.setAttribute("aria-label", `Select ${project.name}`);
+        const mobileName = document.createElement("span");
+        mobileName.className = "project-name";
+        mobileName.textContent = project.name;
+        const details = document.createElement("span");
+        details.className = "details";
+        const mobileType = document.createElement("span");
+        mobileType.className = "type-tag";
+        mobileType.textContent = displayType;
+        const mobileTask = document.createElement("span");
+        mobileTask.className = "task";
+        mobileTask.textContent = project.task;
+        const mobileState = document.createElement("span");
+        mobileState.className = "state";
+        mobileState.textContent = "Setup needed";
+        details.append(mobileType, mobileTask, mobileState);
+        select.append(mobileName, details);
+        select.addEventListener("click", () => selectProject(project.id));
+        const mobileAction = document.createElement("button");
+        mobileAction.className = "row-action";
+        mobileAction.type = "button";
+        mobileAction.textContent = "View";
+        mobileAction.setAttribute("aria-label", `View setup: ${project.name}`);
+        mobileAction.addEventListener("click", () => selectProject(project.id));
+        card.append(select, mobileAction);
+        mobileRows.append(card);
+      });
+      announceCount(projects.length);
+    }
+
+    async function loadProjects() {
+      try {
+        const response = await fetch("/api/projects", { headers: { Accept: "application/json" } });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || "Could not load projects.");
+        projects = body.projects;
+        loadError = "";
+        if (!projects.some(project => project.id === selectedId)) {
+          selectedId = projects[0]?.id || null;
+        }
+      } catch (error) {
+        loadError = `Could not load the local project list. ${error.message}`;
+      }
+      render();
+      if (selectedId) selectProject(selectedId);
+    }
+
+    async function loadAssets(projectId) {
+      const project = projects.find(candidate => candidate.id === projectId);
+      imageAssetsPanel.hidden = !project || project.modality !== "image";
+      assetList.replaceChildren();
+      if (imageAssetsPanel.hidden) return;
+      assetStatus.textContent = "Loading image files…";
+      try {
+        const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/assets`, {
+          headers: { Accept: "application/json" }
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || "Could not load image files.");
+        if (selectedId !== projectId) return;
+        body.assets.forEach(asset => {
+          const row = document.createElement("article");
+          row.className = "asset-row";
+          const image = document.createElement("img");
+          image.src = asset.content_url;
+          image.alt = "";
+          image.loading = "lazy";
+          const details = document.createElement("div");
+          const name = document.createElement("div");
+          name.className = "asset-name";
+          name.textContent = asset.filename;
+          const metadata = document.createElement("div");
+          metadata.className = "asset-meta";
+          metadata.textContent = `${asset.width} × ${asset.height} · ${asset.size_bytes.toLocaleString()} bytes · SHA-256 ${asset.sha256}`;
+          details.append(name, metadata);
+          const remove = document.createElement("button");
+          remove.type = "button";
+          remove.className = "asset-remove";
+          remove.textContent = "Remove";
+          remove.setAttribute("aria-label", `Remove ${asset.filename}`);
+          remove.addEventListener("click", () => removeAsset(projectId, asset));
+          const annotate = document.createElement("button");
+          annotate.type = "button";
+          annotate.className = "asset-annotate";
+          annotate.textContent = "Label boxes";
+          annotate.setAttribute("aria-label", `Label boxes: ${asset.filename}`);
+          annotate.addEventListener("click", () => openAnnotation(projectId, asset));
+          const actions = document.createElement("div");
+          actions.className = "asset-actions";
+          actions.append(annotate, remove);
+          row.append(image, details, actions);
+          assetList.append(row);
+        });
+        assetStatus.textContent = body.assets.length
+          ? `${body.assets.length} image${body.assets.length === 1 ? "" : "s"} in this project.`
+          : "No images yet. Choose files to add the first batch.";
+      } catch (error) {
+        if (selectedId === projectId) assetStatus.textContent = error.message;
+      }
+    }
+
+    function annotationEndpoint() {
+      if (!activeAnnotationAsset) return "";
+      return `/api/projects/${encodeURIComponent(activeAnnotationAsset.projectId)}/assets/${encodeURIComponent(activeAnnotationAsset.asset.id)}/annotations`;
+    }
+
+    function updateAnnotationHistoryControls() {
+      const busy = annotationHistoryBusy || annotationMutationBusy;
+      annotationUndo.disabled = busy || annotationUndoStack.length === 0;
+      annotationRedo.disabled = busy || annotationRedoStack.length === 0;
+    }
+
+    function pushAnnotationHistory(entry) {
+      annotationUndoStack.push(entry);
+      if (annotationUndoStack.length > 100) annotationUndoStack.shift();
+      annotationRedoStack = [];
+      updateAnnotationHistoryControls();
+    }
+
+    function remapAnnotationHistoryId(previousId, nextId) {
+      [...annotationUndoStack, ...annotationRedoStack].forEach(entry => {
+        if (entry.currentId === previousId) entry.currentId = nextId;
+      });
+    }
+
+    function annotationValues(box) {
+      return {
+        label: box.label,
+        x: box.x,
+        y: box.y,
+        width: box.width,
+        height: box.height
+      };
+    }
+
+    async function mutateAnnotation(method, annotationId = null, data = null) {
+      const endpoint = annotationId
+        ? `${annotationEndpoint()}/${encodeURIComponent(annotationId)}`
+        : annotationEndpoint();
+      const headers = { Accept: "application/json", "X-CSRFToken": csrfToken() };
+      const options = { method, headers };
+      if (data) {
+        headers["Content-Type"] = "application/json";
+        options.body = JSON.stringify(data);
+      }
+      const response = await fetch(endpoint, options);
+      const body = await response.json();
+      if (!response.ok) throw new Error(body.error || "Could not update the annotation.");
+      return body;
+    }
+
+    async function runAnnotationHistory(direction) {
+      if (annotationHistoryBusy || annotationMutationBusy || drawingBox) return;
+      const source = direction === "undo" ? annotationUndoStack : annotationRedoStack;
+      const destination = direction === "undo" ? annotationRedoStack : annotationUndoStack;
+      const entry = source[source.length - 1];
+      if (!entry) return;
+      annotationHistoryBusy = true;
+      updateAnnotationHistoryControls();
+      try {
+        if (entry.type === "create") {
+          if (direction === "undo") {
+            await mutateAnnotation("DELETE", entry.currentId);
+            selectedAnnotationId = null;
+          } else {
+            const previousId = entry.currentId;
+            const body = await mutateAnnotation("POST", null, entry.data);
+            entry.currentId = body.annotation.id;
+            remapAnnotationHistoryId(previousId, entry.currentId);
+            selectedAnnotationId = entry.currentId;
+          }
+        } else if (entry.type === "delete") {
+          if (direction === "undo") {
+            const previousId = entry.currentId;
+            const body = await mutateAnnotation("POST", null, entry.data);
+            entry.currentId = body.annotation.id;
+            remapAnnotationHistoryId(previousId, entry.currentId);
+            selectedAnnotationId = entry.currentId;
+          } else {
+            await mutateAnnotation("DELETE", entry.currentId);
+            selectedAnnotationId = null;
+          }
+        } else {
+          await mutateAnnotation("PATCH", entry.currentId, direction === "undo" ? entry.before : entry.after);
+          selectedAnnotationId = entry.currentId;
+        }
+        source.pop();
+        destination.push(entry);
+        if (await loadBoxAnnotations()) {
+          annotationStatus.textContent = `${direction === "undo" ? "Undid" : "Redid"} annotation change.`;
+        }
+      } catch (error) {
+        annotationStatus.textContent = error.message;
+      } finally {
+        annotationHistoryBusy = false;
+        updateAnnotationHistoryControls();
+        renderBoxAnnotationList();
+      }
+    }
+
+    function setAnnotationZoom(nextZoom, resetScroll = false) {
+      const previousZoom = annotationZoom;
+      annotationZoom = Math.min(4, Math.max(0.5, Math.round(nextZoom * 100) / 100));
+      annotationStage.style.zoom = String(annotationZoom);
+      annotationZoomLevel.value = `${Math.round(annotationZoom * 100)}%`;
+      annotationZoomIn.disabled = annotationZoom >= 4;
+      annotationZoomOut.disabled = annotationZoom <= 0.5;
+      annotationStageScroll.classList.toggle("is-zoomed", annotationZoom > 1);
+      const ratio = previousZoom ? annotationZoom / previousZoom : 1;
+      window.requestAnimationFrame(() => {
+        if (resetScroll || annotationZoom === 1) {
+          annotationStageScroll.scrollLeft = 0;
+          annotationStageScroll.scrollTop = 0;
+        } else {
+          annotationStageScroll.scrollLeft =
+            (annotationStageScroll.scrollLeft + annotationStageScroll.clientWidth / 2) * ratio -
+            annotationStageScroll.clientWidth / 2;
+          annotationStageScroll.scrollTop =
+            (annotationStageScroll.scrollTop + annotationStageScroll.clientHeight / 2) * ratio -
+            annotationStageScroll.clientHeight / 2;
+        }
+        drawAnnotations();
+      });
+    }
+
+    async function openAnnotation(projectId, asset) {
+      const project = projects.find(candidate => candidate.id === projectId);
+      if (!project) return;
+      activeAnnotationAsset = { projectId, asset };
+      boxAnnotations = [];
+      annotationUndoStack = [];
+      annotationRedoStack = [];
+      annotationHistoryBusy = false;
+      annotationMutationBusy = false;
+      updateAnnotationHistoryControls();
+      drawingBox = null;
+      selectedAnnotationId = null;
+      boxEditPreview = null;
+      annotationList.replaceChildren();
+      annotationFilename.textContent = `${asset.filename} · ${asset.width} × ${asset.height}`;
+      annotationLabel.replaceChildren();
+      project.labels.forEach(label => {
+        const option = document.createElement("option");
+        option.value = label;
+        option.textContent = label;
+        annotationLabel.append(option);
+      });
+      annotationLabel.disabled = project.labels.length === 0;
+      annotationDialog.showModal();
+      setAnnotationZoom(1, true);
+      annotationImage.src = asset.content_url;
+      annotationStatus.textContent = project.labels.length
+        ? "Loading boxes…"
+        : "No class names are configured. Create an image project with label names before annotating.";
+      if (project.labels.length) await loadBoxAnnotations();
+      annotationLabel.focus();
+    }
+
+    async function loadBoxAnnotations() {
+      if (!activeAnnotationAsset) return;
+      const requestedAsset = activeAnnotationAsset;
+      try {
+        const response = await fetch(annotationEndpoint(), {
+          headers: { Accept: "application/json" }
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || "Could not load bounding boxes.");
+        if (activeAnnotationAsset !== requestedAsset) return;
+        boxAnnotations = body.annotations;
+        if (!boxAnnotations.some(box => box.id === selectedAnnotationId)) selectedAnnotationId = null;
+        renderBoxAnnotationList();
+        drawAnnotations();
+        annotationStatus.textContent = boxAnnotations.length
+          ? `${boxAnnotations.length} box${boxAnnotations.length === 1 ? "" : "es"}. These labels are unreviewed.`
+          : "No boxes yet. Choose a class and drag over the image to add one.";
+        updateAnnotationHistoryControls();
+        return true;
+      } catch (error) {
+        annotationStatus.textContent = error.message;
+        return false;
+      }
+    }
+
+    function renderBoxAnnotationList() {
+      annotationList.replaceChildren();
+      const project = projects.find(candidate => candidate.id === activeAnnotationAsset?.projectId);
+      if (!project) return;
+      boxAnnotations.forEach((box, index) => {
+        const entry = document.createElement("article");
+        entry.className = "annotation-entry";
+        const selectBox = document.createElement("button");
+        selectBox.type = "button";
+        selectBox.className = "annotation-select";
+        selectBox.textContent = `Select box ${index + 1}`;
+        selectBox.setAttribute("aria-pressed", String(box.id === selectedAnnotationId));
+        selectBox.addEventListener("click", () => {
+          selectedAnnotationId = box.id;
+          renderBoxAnnotationList();
+          drawAnnotations();
+          annotationCanvas.focus();
+        });
+        const label = document.createElement("label");
+        label.className = "visually-hidden";
+        label.textContent = `Class for box ${index + 1}`;
+        const select = document.createElement("select");
+        select.setAttribute("aria-label", `Class for box ${index + 1}`);
+        select.disabled = annotationHistoryBusy || annotationMutationBusy;
+        project.labels.forEach(name => {
+          const option = document.createElement("option");
+          option.value = name;
+          option.textContent = name;
+          select.append(option);
+        });
+        select.value = box.label;
+        select.addEventListener("change", () => updateBoxAnnotation(box, { label: select.value }));
+        const coords = document.createElement("div");
+        coords.className = "annotation-coordinates";
+        coords.textContent = `BOX ${String(index + 1).padStart(2, "0")} · x ${box.x.toFixed(3)} y ${box.y.toFixed(3)} · w ${box.width.toFixed(3)} h ${box.height.toFixed(3)}`;
+        const remove = document.createElement("button");
+        remove.type = "button";
+        remove.className = "annotation-remove";
+        remove.disabled = annotationHistoryBusy || annotationMutationBusy;
+        remove.textContent = "Delete box";
+        remove.setAttribute("aria-label", `Delete box ${index + 1}, ${box.label}`);
+        remove.addEventListener("click", () => deleteBoxAnnotation(box));
+        label.append(select);
+        entry.append(selectBox, label, coords, remove);
+        annotationList.append(entry);
+      });
+    }
+
+    function drawAnnotations(draft = null) {
+      const bounds = annotationCanvas.getBoundingClientRect();
+      if (!bounds.width || !bounds.height) return;
+      const ratio = window.devicePixelRatio || 1;
+      const pixelWidth = Math.round(bounds.width * ratio);
+      const pixelHeight = Math.round(bounds.height * ratio);
+      if (annotationCanvas.width !== pixelWidth || annotationCanvas.height !== pixelHeight) {
+        annotationCanvas.width = pixelWidth;
+        annotationCanvas.height = pixelHeight;
+      }
+      const context = annotationCanvas.getContext("2d");
+      context.setTransform(ratio, 0, 0, ratio, 0, 0);
+      context.clearRect(0, 0, bounds.width, bounds.height);
+      context.lineWidth = 2;
+      context.font = "12px -apple-system, BlinkMacSystemFont, sans-serif";
+      boxAnnotations.forEach((box, index) => {
+        const displayed = boxEditPreview?.id === box.id ? boxEditPreview : box;
+        const x = displayed.x * bounds.width;
+        const y = displayed.y * bounds.height;
+        const width = displayed.width * bounds.width;
+        const height = displayed.height * bounds.height;
+        const selected = box.id === selectedAnnotationId;
+        context.strokeStyle = selected ? "#65c9bd" : "#f0b642";
+        context.fillStyle = "rgba(240, 182, 66, .10)";
+        context.fillRect(x, y, width, height);
+        context.lineWidth = selected ? 3 : 2;
+        context.strokeRect(x, y, width, height);
+        const badge = `${index + 1} · ${box.label}`;
+        const badgeWidth = context.measureText(badge).width + 10;
+        context.fillStyle = "#101211";
+        context.fillRect(x, Math.max(0, y - 19), badgeWidth, 18);
+        context.fillStyle = "#fffefa";
+        context.fillText(badge, x + 5, Math.max(12, y - 6));
+        if (selected) {
+          context.fillStyle = "#65c9bd";
+          for (const [handleX, handleY] of [[x, y], [x + width, y + height]]) {
+            context.fillRect(handleX - 5, handleY - 5, 10, 10);
+          }
+        }
+      });
+      if (draft) {
+        const x = draft.x * bounds.width;
+        const y = draft.y * bounds.height;
+        context.setLineDash([6, 4]);
+        context.strokeStyle = "#ffffff";
+        context.strokeRect(x, y, draft.width * bounds.width, draft.height * bounds.height);
+        context.setLineDash([]);
+      }
+    }
+
+    function pointerCoordinates(event) {
+      const bounds = annotationCanvas.getBoundingClientRect();
+      return {
+        x: Math.min(1, Math.max(0, (event.clientX - bounds.left) / bounds.width)),
+        y: Math.min(1, Math.max(0, (event.clientY - bounds.top) / bounds.height))
+      };
+    }
+
+    function boxAt(point) {
+      return [...boxAnnotations].reverse().find(box =>
+        point.x >= box.x && point.x <= box.x + box.width &&
+        point.y >= box.y && point.y <= box.y + box.height
+      );
+    }
+
+    function resizeHandleAt(point) {
+      const box = boxAnnotations.find(candidate => candidate.id === selectedAnnotationId);
+      const bounds = annotationCanvas.getBoundingClientRect();
+      if (!box || !bounds.width || !bounds.height) return null;
+      const handles = [
+        { name: "nw", x: box.x, y: box.y },
+        { name: "se", x: box.x + box.width, y: box.y + box.height }
+      ];
+      return handles.find(handle =>
+        Math.abs((point.x - handle.x) * bounds.width) <= 12 &&
+        Math.abs((point.y - handle.y) * bounds.height) <= 12
+      )?.name || null;
+    }
+
+    function previewBoxEdit() {
+      if (!drawingBox || drawingBox.mode === "create") return null;
+      const { original, start, end, mode } = drawingBox;
+      if (mode === "move") {
+        return {
+          ...original,
+          x: Math.min(1 - original.width, Math.max(0, original.x + end.x - start.x)),
+          y: Math.min(1 - original.height, Math.max(0, original.y + end.y - start.y))
+        };
+      }
+      const minSize = 0.002;
+      if (drawingBox.handle === "nw") {
+        const right = original.x + original.width;
+        const bottom = original.y + original.height;
+        const x = Math.min(right - minSize, Math.max(0, end.x));
+        const y = Math.min(bottom - minSize, Math.max(0, end.y));
+        return { ...original, x, y, width: right - x, height: bottom - y };
+      }
+      return {
+        ...original,
+        width: Math.max(minSize, Math.min(1 - original.x, end.x - original.x)),
+        height: Math.max(minSize, Math.min(1 - original.y, end.y - original.y))
+      };
+    }
+
+    async function saveBoxAnnotation(box) {
+      if (!activeAnnotationAsset || annotationHistoryBusy || annotationMutationBusy) return false;
+      annotationMutationBusy = true;
+      updateAnnotationHistoryControls();
+      try {
+        const body = await mutateAnnotation("POST", null, { label: annotationLabel.value, ...box });
+        selectedAnnotationId = body.annotation.id;
+        pushAnnotationHistory({
+          type: "create",
+          currentId: body.annotation.id,
+          data: annotationValues(body.annotation)
+        });
+        await loadBoxAnnotations();
+        return true;
+      } catch (error) {
+        annotationStatus.textContent = error.message;
+        return false;
+      } finally {
+        annotationMutationBusy = false;
+        updateAnnotationHistoryControls();
+        renderBoxAnnotationList();
+      }
+    }
+
+    async function updateBoxAnnotation(box, changes) {
+      if (!activeAnnotationAsset || annotationHistoryBusy || annotationMutationBusy) return;
+      annotationMutationBusy = true;
+      updateAnnotationHistoryControls();
+      try {
+        const before = annotationValues(box);
+        const target = { ...before, ...changes };
+        const body = await mutateAnnotation("PATCH", box.id, target);
+        const after = annotationValues(body.annotation);
+        if (JSON.stringify(before) !== JSON.stringify(after)) {
+          pushAnnotationHistory({ type: "update", currentId: box.id, before, after });
+        }
+        await loadBoxAnnotations();
+      } catch (error) {
+        annotationStatus.textContent = error.message;
+      } finally {
+        annotationMutationBusy = false;
+        updateAnnotationHistoryControls();
+        renderBoxAnnotationList();
+      }
+    }
+
+    async function deleteBoxAnnotation(box) {
+      if (!activeAnnotationAsset || annotationHistoryBusy || annotationMutationBusy || !window.confirm(`Delete the ${box.label} bounding box?`)) return;
+      annotationMutationBusy = true;
+      updateAnnotationHistoryControls();
+      try {
+        await mutateAnnotation("DELETE", box.id);
+        pushAnnotationHistory({
+          type: "delete",
+          currentId: box.id,
+          data: annotationValues(box)
+        });
+        if (selectedAnnotationId === box.id) selectedAnnotationId = null;
+        await loadBoxAnnotations();
+      } catch (error) {
+        annotationStatus.textContent = error.message;
+      } finally {
+        annotationMutationBusy = false;
+        updateAnnotationHistoryControls();
+        renderBoxAnnotationList();
+      }
+    }
+
+    annotationCanvas.addEventListener("pointerdown", event => {
+      if (!activeAnnotationAsset || annotationLabel.disabled || annotationHistoryBusy || annotationMutationBusy || event.button !== 0) return;
+      const point = pointerCoordinates(event);
+      const handle = resizeHandleAt(point);
+      const hit = boxAt(point);
+      if (handle && selectedAnnotationId) {
+        const original = boxAnnotations.find(box => box.id === selectedAnnotationId);
+        drawingBox = { mode: "resize", handle, original, pointerId: event.pointerId, start: point, end: point };
+      } else if (hit) {
+        selectedAnnotationId = hit.id;
+        drawingBox = { mode: "move", original: hit, pointerId: event.pointerId, start: point, end: point };
+        renderBoxAnnotationList();
+      } else {
+        selectedAnnotationId = null;
+        drawingBox = { mode: "create", pointerId: event.pointerId, start: point, end: point };
+        renderBoxAnnotationList();
+      }
+      annotationCanvas.setPointerCapture(event.pointerId);
+      drawAnnotations();
+    });
+    annotationCanvas.addEventListener("pointermove", event => {
+      if (!drawingBox || drawingBox.pointerId !== event.pointerId) return;
+      drawingBox.end = pointerCoordinates(event);
+      if (drawingBox.mode === "create") {
+        const { start, end } = drawingBox;
+        drawAnnotations({
+          x: Math.min(start.x, end.x),
+          y: Math.min(start.y, end.y),
+          width: Math.abs(end.x - start.x),
+          height: Math.abs(end.y - start.y)
+        });
+        return;
+      }
+      boxEditPreview = previewBoxEdit();
+      drawAnnotations();
+    });
+    annotationCanvas.addEventListener("pointerup", async event => {
+      if (!drawingBox || drawingBox.pointerId !== event.pointerId) return;
+      drawingBox.end = pointerCoordinates(event);
+      const operation = drawingBox;
+      const updated = operation.mode === "create" ? null : previewBoxEdit();
+      drawingBox = null;
+      if (operation.mode === "create") {
+        const { start, end } = operation;
+        const box = {
+          x: Math.min(start.x, end.x),
+          y: Math.min(start.y, end.y),
+          width: Math.abs(end.x - start.x),
+          height: Math.abs(end.y - start.y)
+        };
+        if (box.width < 0.002 || box.height < 0.002) {
+          annotationStatus.textContent = "That box is too small. Drag a little farther to label an object.";
+          drawAnnotations();
+          return;
+        }
+        await saveBoxAnnotation(box);
+        return;
+      }
+      boxEditPreview = null;
+      drawAnnotations();
+      if (!updated || !operation.original) return;
+      const changed = ["x", "y", "width", "height"].some(field =>
+        Math.abs(updated[field] - operation.original[field]) > 0.00000001
+      );
+      if (changed) await updateBoxAnnotation(operation.original, updated);
+    });
+    annotationCanvas.addEventListener("pointercancel", () => {
+      drawingBox = null;
+      boxEditPreview = null;
+      drawAnnotations();
+    });
+    annotationCanvas.addEventListener("keydown", event => {
+      if (annotationHistoryBusy || annotationMutationBusy) return;
+      if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
+        event.preventDefault();
+        void runAnnotationHistory(event.shiftKey ? "redo" : "undo");
+        return;
+      }
+      if (!selectedAnnotationId || !["ArrowUp", "ArrowDown", "ArrowLeft", "ArrowRight"].includes(event.key)) return;
+      if (event.repeat) return;
+      const box = boxAnnotations.find(candidate => candidate.id === selectedAnnotationId);
+      if (!box) return;
+      event.preventDefault();
+      const step = 0.01;
+      const changes = { x: box.x, y: box.y, width: box.width, height: box.height };
+      if (event.key === "ArrowLeft") {
+        if (event.shiftKey) changes.width = Math.max(0.002, box.width - step);
+        else changes.x = Math.max(0, box.x - step);
+      } else if (event.key === "ArrowRight") {
+        if (event.shiftKey) changes.width = Math.min(1 - box.x, box.width + step);
+        else changes.x = Math.min(1 - box.width, box.x + step);
+      } else if (event.key === "ArrowUp") {
+        if (event.shiftKey) changes.height = Math.max(0.002, box.height - step);
+        else changes.y = Math.max(0, box.y - step);
+      } else if (event.shiftKey) {
+        changes.height = Math.min(1 - box.y, box.height + step);
+      } else {
+        changes.y = Math.min(1 - box.height, box.y + step);
+      }
+      void updateBoxAnnotation(box, changes);
+    });
+    keyboardBoxForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      if (annotationHistoryBusy || annotationMutationBusy) return;
+      if (!activeAnnotationAsset || annotationLabel.disabled) {
+        annotationStatus.textContent = "Choose an image project with at least one class before adding a box.";
+        return;
+      }
+      const values = new FormData(keyboardBoxForm);
+      const x = Number(values.get("x"));
+      const y = Number(values.get("y"));
+      const width = Number(values.get("width"));
+      const height = Number(values.get("height"));
+      if (x + width > 100 || y + height > 100) {
+        annotationStatus.textContent = "The box must fit within the image. Reduce its width or height, or move it toward the top-left.";
+        return;
+      }
+      const saved = await saveBoxAnnotation({
+        x: x / 100,
+        y: y / 100,
+        width: width / 100,
+        height: height / 100
+      });
+      if (saved) keyboardBoxForm.reset();
+    });
+    annotationImage.addEventListener("load", () => window.requestAnimationFrame(() => drawAnnotations()));
+    annotationImage.addEventListener("error", () => {
+      annotationStatus.textContent = "Could not load this image. It may have been removed.";
+    });
+    window.addEventListener("resize", () => drawAnnotations());
+    annotationDialog.addEventListener("close", () => {
+      activeAnnotationAsset = null;
+      boxAnnotations = [];
+      annotationUndoStack = [];
+      annotationRedoStack = [];
+      annotationHistoryBusy = false;
+      annotationMutationBusy = false;
+      updateAnnotationHistoryControls();
+      drawingBox = null;
+      selectedAnnotationId = null;
+      boxEditPreview = null;
+      annotationList.replaceChildren();
+      drawAnnotations();
+    });
+    document.getElementById("close-annotation-dialog").addEventListener("click", () => annotationDialog.close());
+    document.getElementById("done-annotation").addEventListener("click", () => annotationDialog.close());
+    annotationZoomIn.addEventListener("click", () => setAnnotationZoom(annotationZoom + 0.25));
+    annotationZoomOut.addEventListener("click", () => setAnnotationZoom(annotationZoom - 0.25));
+    annotationZoomReset.addEventListener("click", () => setAnnotationZoom(1, true));
+    annotationUndo.addEventListener("click", () => void runAnnotationHistory("undo"));
+    annotationRedo.addEventListener("click", () => void runAnnotationHistory("redo"));
+
+    async function removeAsset(projectId, asset) {
+      if (!window.confirm(`Remove “${asset.filename}” and its local file?`)) return;
+      try {
+        const response = await fetch(`/api/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(asset.id)}`, {
+          method: "DELETE",
+          headers: { "X-CSRFToken": csrfToken(), Accept: "application/json" }
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || "Could not remove the image.");
+        await loadAssets(projectId);
+      } catch (error) {
+        assetStatus.textContent = error.message;
+      }
+    }
+
+    function openProjectDialog() {
+      formError.dataset.open = "false";
+      formError.textContent = "";
+      projectDialog.showModal();
+      document.getElementById("project-name").focus();
+    }
+
+    function updateCustomModalityField() {
+      const isCustom = document.getElementById("project-modality").value === "custom";
+      customModalityField.hidden = !isCustom;
+      customModalityInput.required = isCustom;
+    }
+
+    function csrfToken() {
+      const match = document.cookie.match(/(?:^|;\s*)csrftoken=([^;]+)/);
+      return match ? decodeURIComponent(match[1]) : "";
+    }
+
+    async function deleteCurrentProject() {
+      const selected = projects.find(project => project.id === selectedId);
+      if (!selected || !window.confirm(`Delete “${selected.name}”, its project metadata, and all locally stored image files from this device?`)) return;
+      deleteSelected.disabled = true;
+      try {
+        const response = await fetch(`/api/projects/${encodeURIComponent(selected.id)}`, {
+          method: "DELETE",
+          headers: { "X-CSRFToken": csrfToken(), Accept: "application/json" }
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || "Could not delete the project.");
+        projects = projects.filter(project => project.id !== selected.id);
+        selectedId = null;
+        imageAssetsPanel.hidden = true;
+        assetList.replaceChildren();
+        render();
+        notice.dataset.open = "true";
+        noticeMessage.textContent = `${selected.name} was deleted from this device.`;
+        deleteSelected.hidden = true;
+      } catch (error) {
+        notice.dataset.open = "true";
+        noticeMessage.textContent = error.message;
+      } finally {
+        deleteSelected.disabled = false;
+      }
+    }
+
+    document.querySelectorAll(".filter").forEach(button => button.addEventListener("click", () => {
+      currentFilter = button.dataset.filter;
+      document.querySelectorAll(".filter").forEach(candidate => candidate.setAttribute("aria-pressed", String(candidate === button)));
+      render();
+    }));
+    document.getElementById("search").addEventListener("input", render);
+    document.getElementById("open-project-dialog").addEventListener("click", openProjectDialog);
+    emptyCreate.addEventListener("click", openProjectDialog);
+    document.getElementById("close-project-dialog").addEventListener("click", () => projectDialog.close());
+    document.getElementById("cancel-project").addEventListener("click", () => projectDialog.close());
+    document.getElementById("project-modality").addEventListener("change", updateCustomModalityField);
+    deleteSelected.addEventListener("click", deleteCurrentProject);
+    imageUploadForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      const selected = projects.find(project => project.id === selectedId);
+      const files = Array.from(imageUploadInput.files || []);
+      if (!selected || selected.modality !== "image") {
+        assetStatus.textContent = "Select an image project before importing files.";
+        return;
+      }
+      if (!files.length) {
+        assetStatus.textContent = "Choose one or more image files first.";
+        return;
+      }
+      const submit = document.getElementById("upload-images");
+      submit.disabled = true;
+      assetStatus.textContent = "Validating and saving images locally…";
+      try {
+        const response = await fetch(`/api/projects/${encodeURIComponent(selected.id)}/assets`, {
+          method: "POST",
+          headers: { "X-CSRFToken": csrfToken(), Accept: "application/json" },
+          body: new FormData(imageUploadForm)
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || "Could not import the images.");
+        imageUploadForm.reset();
+        await loadAssets(selected.id);
+        assetStatus.textContent = `Added ${body.assets.length} image${body.assets.length === 1 ? "" : "s"}. ${assetStatus.textContent}`;
+      } catch (error) {
+        assetStatus.textContent = error.message;
+      } finally {
+        submit.disabled = false;
+      }
+    });
+    document.getElementById("plugin-guide").addEventListener("click", event => {
+      const guide = document.getElementById("plugin-notice");
+      const open = guide.dataset.open !== "true";
+      guide.dataset.open = String(open);
+      event.currentTarget.setAttribute("aria-expanded", String(open));
+    });
+    projectForm.addEventListener("submit", async event => {
+      event.preventDefault();
+      formError.dataset.open = "false";
+      formError.textContent = "";
+      const formData = new FormData(projectForm);
+      const modality = String(formData.get("modality"));
+      const labels = String(formData.get("labels"))
+        .split(",")
+        .map(label => label.trim())
+        .filter(Boolean);
+      const payload = {
+        name: String(formData.get("name")),
+        modality,
+        task: String(formData.get("task")),
+        labels
+      };
+      if (modality === "custom") payload.custom_modality = String(formData.get("custom_modality"));
+      const submit = projectForm.querySelector('[type="submit"]');
+      submit.disabled = true;
+      try {
+        const response = await fetch("/api/projects", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json", "X-CSRFToken": csrfToken() },
+          body: JSON.stringify(payload)
+        });
+        const body = await response.json();
+        if (!response.ok) throw new Error(body.error || "Could not save the project.");
+        projects.unshift(body.project);
+        selectedId = body.project.id;
+        projectForm.reset();
+        updateCustomModalityField();
+        projectDialog.close();
+        render();
+        void loadAssets(body.project.id);
+        notice.dataset.open = "true";
+        noticeMessage.textContent = `${body.project.name} was saved to this device.`;
+        deleteSelected.hidden = false;
+      } catch (error) {
+        formError.textContent = error.message;
+        formError.dataset.open = "true";
+      } finally {
+        submit.disabled = false;
+      }
+    });
+    updateCustomModalityField();
+    loadProjects();
+  </script>
+</body>
+</html>

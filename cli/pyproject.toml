@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "athena-cli"
+version = "0.1.0"
+description = "Command-line interface for the Athena open-source SDK."
+readme = "README.md"
+license = { text = "Apache-2.0" }
+requires-python = ">=3.10"
+dependencies = [
+    "athena-sdk>=0.1.0,<0.2",
+]
+
+[project.scripts]
+athena = "athena_cli.main:main"
+
+[tool.setuptools]
+packages = [
+    "athena_cli",
+    "athena_cli.commands",
+    "examples",
+    "examples.adapters",
+    "examples.audio_pipeline",
+    "examples.domain_packs",
+    "examples.synthetic_pipeline",
+]
+
+[tool.setuptools.package-dir]
+examples = "../examples"

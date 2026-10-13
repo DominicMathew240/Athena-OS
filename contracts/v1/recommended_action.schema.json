@@ -1,0 +1,81 @@
+{
+  "$defs": {
+    "ContractVersion": {
+      "enum": [
+        "v1"
+      ],
+      "title": "ContractVersion",
+      "type": "string"
+    },
+    "Severity": {
+      "enum": [
+        "info",
+        "low",
+        "medium",
+        "high",
+        "critical",
+        "unknown"
+      ],
+      "title": "Severity",
+      "type": "string"
+    }
+  },
+  "additionalProperties": false,
+  "description": "A versioned policy output, not free-form model-generated advice.\n\nAlways traceable to the DomainPolicy and AssetStateFinding that produced it.",
+  "properties": {
+    "contract_version": {
+      "$ref": "#/$defs/ContractVersion",
+      "default": "v1",
+      "description": "Wire version of this contract. Consumers must reject unknown major versions rather than guess field meaning."
+    },
+    "action_id": {
+      "description": "Globally unique recommended-action identifier.",
+      "title": "Action Id",
+      "type": "string"
+    },
+    "finding_id": {
+      "title": "Finding Id",
+      "type": "string"
+    },
+    "policy_id": {
+      "description": "DomainPolicy that authored this action.",
+      "title": "Policy Id",
+      "type": "string"
+    },
+    "action_code": {
+      "description": "Domain-defined action identifier, e.g. 'inspect_manual'.",
+      "title": "Action Code",
+      "type": "string"
+    },
+    "description": {
+      "title": "Description",
+      "type": "string"
+    },
+    "priority": {
+      "$ref": "#/$defs/Severity",
+      "default": "unknown"
+    },
+    "created_at": {
+      "format": "date-time",
+      "title": "Created At",
+      "type": "string"
+    },
+    "metadata": {
+      "additionalProperties": true,
+      "title": "Metadata",
+      "type": "object"
+    }
+  },
+  "required": [
+    "action_id",
+    "finding_id",
+    "policy_id",
+    "action_code",
+    "description",
+    "created_at"
+  ],
+  "title": "RecommendedAction",
+  "type": "object",
+  "$id": "https://athena-forge.dev/schemas/v1/recommended_action.schema.json",
+  "$schema": "https://json-schema.org/draft/2020-12/schema"
+}

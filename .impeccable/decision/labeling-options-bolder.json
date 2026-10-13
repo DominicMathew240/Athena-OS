@@ -1,0 +1,97 @@
+{
+  "title": "Choose Athena Studio's visual direction",
+  "question": "You asked for a bolder direction. This round keeps the same image-detection workflow and operator UI task, but uses more committed visual forms. Choose one or re-roll.",
+  "options": [
+    {
+      "id": "assigned",
+      "label": "Signal Field",
+      "kicker": "THE ROLL",
+      "lineage": "Ryoji Ikeda's data-sublime black-and-white field",
+      "thesis": "A selected detection snaps into sharp focus while the rest of the signal recedes.",
+      "palette": ["#000000", "#FFFFFF"],
+      "materials": ["pixel-crisp bars", "hairline rules", "tabular monospace numerics"],
+      "viewport": "A standard project shell surrounds a high-contrast image preview, operator True/False controls, a model/source status panel, and dense sample rows; selecting a result pulls its evidence into focus and briefly inverts the preview, while all labels remain explicit.",
+      "risk": "Pure monochrome can flatten class and review states; use text, shape, weight, and clear focus—not color alone—and disable motion under reduced-motion preferences.",
+      "html": ".impeccable/mocks/decision/bolder-assigned.html"
+    },
+    {
+      "id": "challenger-botanical-folio",
+      "label": "Registered Sequence Folio",
+      "verdict": "competitive",
+      "lineage": "Japanese botanical folios and fixed-scale specimen plates",
+      "thesis": "A chosen scan stays aligned across feedback and approved model versions so changes are easy to compare.",
+      "palette": ["#F5F0E4", "#27231E", "#6D8459", "#B84B37"],
+      "materials": ["cream folio stock", "fine registration rules", "muted plant-plate hues"],
+      "viewport": "A standard application shell keeps the live operator preview primary; below it, four same-scale plates show the exact sample, recorded human True/False correction, reviewed candidate, and approved model version with dates and provenance.",
+      "case": "The registered sequence makes the feedback-to-retraining lineage visible; it loses to the leader's immediate operator-state focus for everyday inference.",
+      "risk": "The botanical reference can imply plant-domain data; use only the site's real sample and label any example as synthetic.",
+      "html": ".impeccable/mocks/decision/bolder-botanical.html"
+    },
+    {
+      "id": "challenger-monochrome-marketing",
+      "label": "Claim-and-Proof Index",
+      "verdict": "declined",
+      "lineage": "Monochrome product-marketing pages with paired evidence",
+      "thesis": "Every status or setting is paired with the screen state that proves what it means.",
+      "palette": ["#F7F8F8", "#15191E", "#315E9B"],
+      "materials": ["near-white neutral scale", "hairline rules", "one precise accent"],
+      "viewport": "The normal app shell presents a live preview beside each clearly labeled setting, pairing every configuration choice with its operator-facing result.",
+      "case": "Pairing a setting with its proof helps explain the interface, but the marketing-page sequence loses the feel of a working industrial tool.",
+      "kept": "Show the result of each consequential setting beside the control that changes it.",
+      "risk": "Can feel like a sales page and bury the operational work.",
+      "html": ".impeccable/mocks/decision/bolder-proof.html"
+    },
+    {
+      "id": "challenger-crouwel-grid",
+      "label": "Visible Construction Grid",
+      "verdict": "wins",
+      "lineage": "Wim Crouwel grid-constructed typography",
+      "thesis": "A visible grid turns safe layout editing into a tangible, understandable act.",
+      "palette": ["#F7F7F2", "#111820", "#254D88", "#E64D37"],
+      "materials": ["precise graph lines", "large modular typography", "one earned signal plane"],
+      "viewport": "The familiar shell frames a constrained canvas of named screen regions; a clear 12-column guide, snap-to-grid layout controls, and a live scanner preview let an operator reorder approved blocks without code.",
+      "case": "It directly supports the requested visual layout editor and makes customization legible; stronger product fit than the signal field's abstract data canvas.",
+      "risk": "The construction grid can overpower scanner evidence; hide it in the operator preview and keep it confined to edit mode.",
+      "html": ".impeccable/mocks/decision/bolder-crouwel.html"
+    },
+    {
+      "id": "challenger-ticket-wallet",
+      "label": "Durable Feedback Tickets",
+      "verdict": "competitive",
+      "lineage": "Jet-age ticket wallets, route maps, and baggage tags",
+      "thesis": "Each human correction becomes a durable, traceable ticket toward the next approved model.",
+      "palette": ["#F7F8F6", "#19314D", "#D44937", "#704C74"],
+      "materials": ["white stock", "carbon-copy figures", "navy and red route marks"],
+      "viewport": "A standard shell keeps the inference screen central; a compact feedback ticket records the input ID, model version, operator True/False, and review status without changing the live model.",
+      "case": "The ticket metaphor carries provenance and offline-friendly records; it does not express image detection as immediately as the leader.",
+      "risk": "A coupon-book sequence could imply automatic progression; promotion must remain explicitly operator-approved.",
+      "html": ".impeccable/mocks/decision/bolder-ticket.html"
+    },
+    {
+      "id": "challenger-star-atlas",
+      "label": "Detection Atlas",
+      "verdict": "competitive",
+      "lineage": "Japanese star atlases and coordinate-field notation",
+      "thesis": "A stable image coordinate field makes each detected region and its confidence inspectable.",
+      "palette": ["#101C36", "#F3F0E8", "#E8B85B", "#B8493B"],
+      "materials": ["deep chart ground", "fine coordinate grid", "ranked point marks"],
+      "viewport": "A normal project shell surrounds one large scanner image with readable coordinate guides, detection boxes, class names, and confidence values; a selected result is ringed and its source/model IDs remain visible.",
+      "case": "The coordinate field suits image inspection and confidence review; it is less immediately approachable than the leader for operators who just need a clear result and decision.",
+      "risk": "A star-chart treatment may obscure the actual image; keep the source image dominant and never encode model confidence only by dot size.",
+      "html": ".impeccable/mocks/decision/bolder-atlas.html"
+    }
+  ],
+  "reroll": {"registers": ["safer", "bolder"]},
+  "buildPath": {"value": "code", "toggle": false},
+  "canon": true,
+  "canonCard": {
+    "label": "The category standard",
+    "thesis": "The expected inspection dashboard, executed impeccably.",
+    "palette": ["#FFFFFF", "#172B49", "#315E9B", "#E9EDF2"],
+    "materials": ["neutral UI surfaces", "standard sans-serif type", "clear dividers"],
+    "viewport": "A conventional sidebar, project header, familiar data table, ordinary configuration form, and prominent live image preview with explicit operator controls.",
+    "risk": "Easy to recognize and scan, but less distinctive than the bolder forms.",
+    "html": ".impeccable/mocks/decision/bolder-canon.html"
+  },
+  "steer": true
+}
