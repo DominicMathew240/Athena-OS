@@ -1,0 +1,16 @@
+{
+  "_comment": "Reviewed exceptions for scripts/check_licenses.py. Every entry needs name + a non-empty reason; optional: version, license (exact string as printed by the script). Entries only downgrade non-OK findings. Engineering review, not legal advice - see docs/LICENSE_AUDIT.md.",
+  "allow": [
+    {
+      "name": "certifi",
+      "license": "MPL-2.0",
+      "reason": "MPL-2.0 is file-level copyleft; certifi is used unmodified as a separate installed package, so Athena OS source is not affected. Keep certifi's LICENSE with the image. Reviewed in docs/LICENSE_AUDIT.md.",
+      "reviewed": "2026-10-16"
+    },
+    {
+      "name": "tqdm",
+      "reason": "tqdm is 'MPL-2.0 AND MIT' (MPL covers only some files); used unmodified as a separate package. Reviewed in docs/LICENSE_AUDIT.md.",
+      "reviewed": "2026-10-16"
+    }
+  ]
+}

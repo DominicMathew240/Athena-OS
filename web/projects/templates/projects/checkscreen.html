@@ -1,0 +1,124 @@
+{% extends "projects/checkscreen_base.html" %}
+{% load static %}
+{% block title %}{{ app.name }}{% endblock %}
+{% block content %}
+<div class="cs-wrap" id="cs-root" data-project-id="{{ project.id }}" data-app-id="{{ app.id }}" data-slug="{{ app.slug }}">
+  <header class="cs-head">
+    <p class="cs-kicker">Check screen</p>
+    <h1 id="cs-title">{{ app.name }}</h1>
+  </header>
+
+  <div class="cs-alert" id="cs-blocker" role="alert" hidden>
+    <p class="cs-alert-title" id="cs-blocker-title"></p>
+    <p id="cs-blocker-text"></p>
+  </div>
+
+  <section class="cs-disclaimer" aria-labelledby="cs-disclaimer-h">
+    <h2 id="cs-disclaimer-h">Before you start</h2>
+    <p id="cs-disclaimer">{{ disclaimer }}</p>
+  </section>
+
+  <section class="cs-card" aria-labelledby="cs-pick-h" id="cs-pick-card">
+    <h2 id="cs-pick-h"><span class="cs-step" aria-hidden="true">1</span>Choose a picture</h2>
+    <div class="cs-field">
+      <label for="cs-file">Picture to check</label>
+      <input type="file" id="cs-file" accept="image/jpeg,image/png,image/webp" aria-describedby="cs-file-help cs-pick-msg">
+      <p class="cs-help" id="cs-file-help">Loading what this screen accepts…</p>
+    </div>
+    <div class="cs-actions">
+      <button type="button" class="primary cs-big" id="cs-check">Check this picture</button>
+    </div>
+    <p class="cs-inline-msg" id="cs-pick-msg" role="status"></p>
+
+    <div class="cs-progress" id="cs-progress" hidden>
+      <progress aria-label="Checking your picture"></progress>
+      <p id="cs-progress-text" class="cs-progress-text" role="status"></p>
+      <p class="cs-help" aria-hidden="true" id="cs-progress-elapsed"></p>
+      <button type="button" class="secondary" id="cs-keep-waiting" hidden>Keep waiting</button>
+    </div>
+
+    <div class="cs-alert" id="cs-error" role="alert" hidden>
+      <p class="cs-alert-title" id="cs-error-title"></p>
+      <p id="cs-error-text"></p>
+      <details class="cs-details" id="cs-error-details" hidden>
+        <summary>Details for your administrator</summary>
+        <p id="cs-error-detail-text"></p>
+      </details>
+    </div>
+  </section>
+
+  <p class="visually-hidden" id="cs-live" role="status" aria-live="polite"></p>
+
+  <section class="cs-card" id="cs-result" aria-labelledby="cs-result-h" hidden>
+    <h2 id="cs-result-h"><span class="cs-step" aria-hidden="true">2</span>What the computer saw</h2>
+    <div class="cs-status" id="cs-status" data-state="">
+      <span class="cs-status-icon" id="cs-status-icon" aria-hidden="true"></span>
+      <div>
+        <p class="cs-status-text" id="cs-status-text"></p>
+        <p class="cs-status-detail" id="cs-status-detail"></p>
+      </div>
+    </div>
+    <p class="cs-not-final"><strong>Not a final decision.</strong> This is the computer’s opinion. A person decides.</p>
+
+    <div id="cs-stage-holder" class="cs-stage-holder"></div>
+
+    <h3 id="cs-det-h">Things the computer found</h3>
+    <p class="cs-help" id="cs-det-empty" hidden></p>
+    <ol class="cs-detections" id="cs-detections" aria-labelledby="cs-det-h"></ol>
+    <p class="cs-help" id="cs-hidden-note"></p>
+
+    <details class="cs-missed" id="cs-missed">
+      <summary>The computer missed something</summary>
+      <form id="cs-missed-form" class="cs-missed-form" novalidate>
+        <p class="cs-help">Tell us what it did not find. Say what it is, then show where it is: drag on the picture, or type the position.</p>
+        <div class="cs-field">
+          <label for="cs-missed-label">What did it miss?</label>
+          <select id="cs-missed-label"></select>
+        </div>
+        <div class="cs-actions">
+          <button type="button" class="secondary" id="cs-draw" aria-pressed="false">Draw a box on the picture</button>
+          <span class="cs-help" id="cs-draw-help">Off. Turn this on, then drag across the picture.</span>
+        </div>
+        <fieldset class="cs-fieldset">
+          <legend>Or type where it is (percent of the picture)</legend>
+          <div class="cs-box-grid">
+            <div class="cs-field"><label for="cs-box-x">Left edge (%)</label><input id="cs-box-x" type="number" inputmode="decimal" min="0" max="99" step="any" placeholder="e.g. 10"></div>
+            <div class="cs-field"><label for="cs-box-y">Top edge (%)</label><input id="cs-box-y" type="number" inputmode="decimal" min="0" max="99" step="any" placeholder="e.g. 10"></div>
+            <div class="cs-field"><label for="cs-box-w">Width (%)</label><input id="cs-box-w" type="number" inputmode="decimal" min="1" max="100" step="any" placeholder="e.g. 20"></div>
+            <div class="cs-field"><label for="cs-box-h">Height (%)</label><input id="cs-box-h" type="number" inputmode="decimal" min="1" max="100" step="any" placeholder="e.g. 20"></div>
+          </div>
+          <p class="cs-help">The box must stay inside the picture. The dashed box on the picture shows what you will save.</p>
+          <div class="cs-checks"><label class="cs-check"><input type="checkbox" id="cs-box-unknown"><span><strong>I can’t show where it is</strong><span class="cs-help cs-block">Save that something was missed, without a box.</span></span></label></div>
+        </fieldset>
+        <div class="cs-field">
+          <label for="cs-missed-note">Note <span id="cs-missed-req" class="cs-req"></span></label>
+          <textarea id="cs-missed-note" rows="2" maxlength="2000" aria-describedby="cs-missed-msg"></textarea>
+        </div>
+        <div class="cs-actions"><button type="submit" class="secondary" id="cs-missed-save">Save: it missed this</button></div>
+        <p class="cs-inline-msg" id="cs-missed-msg" role="status"></p>
+        <ul class="cs-saved-list" id="cs-missed-list" aria-label="Things you said were missed"></ul>
+      </form>
+    </details>
+
+    <p class="cs-feedback-note" id="cs-feedback-note"><strong>About your right/wrong answers:</strong> they are saved so your team can review them later. They do <strong>not</strong> change the computer model, and the model does not learn from them by itself.</p>
+  </section>
+
+  <section class="cs-card" id="cs-decision" aria-labelledby="cs-decision-h" hidden>
+    <h2 id="cs-decision-h"><span class="cs-step" aria-hidden="true">3</span>Your decision</h2>
+    <p class="cs-help" id="cs-decision-help"></p>
+    <div class="cs-field">
+      <label for="cs-note">Note <span id="cs-note-req" class="cs-req"></span></label>
+      <textarea id="cs-note" rows="3" maxlength="2000" aria-describedby="cs-decision-msg"></textarea>
+    </div>
+    <div class="cs-decisions" id="cs-decision-buttons"></div>
+    <p class="cs-inline-msg" id="cs-decision-msg" role="status"></p>
+    <div class="cs-recorded" id="cs-recorded" hidden></div>
+    <div class="cs-actions"><button type="button" class="secondary cs-big" id="cs-another" hidden>Check another picture</button></div>
+  </section>
+
+  <footer class="cs-foot">
+    <p id="cs-model-line" class="cs-help"></p>
+  </footer>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{% static 'projects/checkscreen.js' %}"></script>{% endblock %}

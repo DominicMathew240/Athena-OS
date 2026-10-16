@@ -1,0 +1,66 @@
+# Production-shaped stack: web console + auto-label, training and inference workers sharing one data volume.
+# Run exactly ONE instance of each worker (SQLite, single queue consumer): do not use `--scale`.
+# TLS is terminated by a reverse proxy in front of port 8000 (see DEPLOYMENT.md).
+#   cp .env.example .env     # fill in the secret key and host name
+#   docker compose up -d --build
+#   docker compose exec web python manage.py createsuperuser
+services:
+  web:
+    build: .
+    image: athena-console
+    env_file: .env
+    environment:
+      ATHENA_BEHIND_PROXY: "1"
+      ATHENA_FORWARDED_ALLOW_IPS: "*"
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      - athena-data:/data
+    restart: unless-stopped
+  worker:
+    build: &worker-build
+      context: .
+      args:
+        WITH_AUTOLABEL: "1"   # installs torch + torchvision (CPU) from requirements-autolabel.txt
+    image: athena-console-worker
+    command: ["python", "manage.py", "autolabel_worker"]
+    env_file: .env
+    depends_on:
+      web:
+        condition: service_healthy
+    volumes:
+      - athena-data:/data
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+  # Trains models from frozen dataset versions (torchvision Faster R-CNN reference backend).
+  # Same image as `worker`, so torch==2.9.1 and torchvision==0.24.1 are available.
+  train_worker:
+    build: *worker-build
+    image: athena-console-worker
+    command: ["python", "manage.py", "train_worker"]
+    env_file: .env
+    depends_on:
+      web:
+        condition: service_healthy
+    volumes:
+      - athena-data:/data
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+  # Runs images submitted to inference apps through the approved model version.
+  inference_worker:
+    build: *worker-build
+    image: athena-console-worker
+    command: ["python", "manage.py", "inference_worker"]
+    env_file: .env
+    depends_on:
+      web:
+        condition: service_healthy
+    volumes:
+      - athena-data:/data
+    healthcheck:
+      disable: true
+    restart: unless-stopped
+volumes:
+  athena-data:

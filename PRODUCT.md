@@ -24,18 +24,18 @@ The web application uses Django 6.1.2 and Pillow 12.3.0 and is requested to run 
 
 Let industrial teams turn real-world observations into reviewed training data, train and evaluate task-specific models, and configure a web interface that uses an approved model against connected operational data. For a scanner workflow, an operator should be able to define what counts as an illegal item, label examples, train/evaluate a detector, configure the output UI, connect a scanner data source, and review true/false decisions without editing application code.
 
-The platform itself—including annotation, data management, model integration, and the configurable inference UI—is intended to be open source. The repository includes a Django project registry, validated local image imports with hashes, and basic manual bounding-box labeling with normalized coordinates and limited pointer/keyboard geometry editing; rights review, full annotation accessibility, dataset versioning/export, model workflows, and configurable inference remain unimplemented.
+The platform itself—including annotation, data management, model integration, and the configurable inference UI—is intended to be open source. The repository includes a sign-in-protected Django console with a project registry, validated image imports with hashes, manual bounding-box labeling with normalized coordinates and pointer/keyboard geometry editing, queued SAM + CLIP auto-labelling with per-box human review, and a documented self-hosted deployment (`web/DEPLOYMENT.md`). Rights review, full annotation accessibility verification, dataset versioning/export, training workflows, and configurable inference remain unimplemented.
 
 ## Core Workflow
 
 1. Create an industry project from the shared dashboard and choose a modality/task, label schema, and human review rules.
 2. Bring in observations through a file import or documented connector. The current web slice only imports JPEG, PNG, and WebP files for image projects; the intended project workspace must accommodate image, video, audio/speech, text/documents, structured/time-series, depth/point-cloud, and new community-defined modalities without forcing them into one annotation tool.
-3. Annotate manually with the task-appropriate tool. The current web slice can add, reclassify, move, resize, and delete image boxes, with keyboard coordinate entry, arrow-key editing, bounded zoom, scroll/trackpad pan, and in-memory undo/redo for the active dialog. Review and full accessibility verification are still open. The first complete vertical slice is image object detection from the scanner/illegal-item example, but the platform's project/data/connector architecture is modality-extensible from the start.
+3. Annotate with the task-appropriate tool, manually or by running the auto-labeler and reviewing its proposals. The current web slice can add, reclassify, move, resize, and delete image boxes, with keyboard coordinate entry, arrow-key editing, bounded zoom, scroll/trackpad pan, and in-memory undo/redo for the active dialog. Review and full accessibility verification are still open. The first complete vertical slice is image object detection from the scanner/illegal-item example, but the platform's project/data/connector architecture is modality-extensible from the start.
 4. Version the reviewed dataset and train/evaluate a compatible model through an explicit backend integration.
 5. Use the dashboard to configure and preview a task-specific web interface for operators, including the input source, output labels, thresholds, and human decision controls.
 6. Record operator corrections as auditable feedback and training candidates. Feedback never changes the live model automatically: a human must review the corrected examples, start retraining, evaluate the new model, and approve promotion.
 
-The trained AI is for inference in the configured real-world UI, not for generating annotation labels. No AI-generated annotation suggestions are assumed in the product scope.
+Two different models are involved. The *trained task model* is for inference in the configured real-world UI. Separately, an optional *auto-labeler* (Segment Anything for regions plus CLIP for naming them with the project's labels) proposes bounding boxes to speed up annotation. Proposals are stored as unreviewed candidates with model, job, and score, and become ground truth only when a person accepts or edits them; they are never exported or trained on while unreviewed. The auto-labeler runs in a separate worker process.
 
 ## Positioning
 
@@ -49,13 +49,13 @@ Industrial teams may work with RGB/thermal images, video, audio, point clouds, d
 
 - Existing foundation: versioned industrial observation/model/finding/evidence contracts, Python SDK interfaces, evaluation interfaces, CLI, and synthetic image/audio examples.
 - Platform requirement: one shared multimodal workspace with modality-appropriate annotation and inference tools; formats and modalities are extensible through documented plugins rather than a finite hard-coded list.
-- Available web slice: graphical project metadata management, validated local image import with SHA-256 hashes, and basic manual image bounding-box create/list/reclassify/delete. Not implemented: rights review, full dataset/media management, complete annotation/review workflow, model training orchestration, no-code inference UI configuration, scanner connectors, model feedback/retraining workflows, or production packaging.
+- Available web slice: sign-in (single role), project management, validated image import with SHA-256 hashes, manual image bounding boxes, queued auto-labelling with accept/reject/edit review of proposals, health check, hardened production settings, and Docker packaging. Not implemented: roles/per-project access, encryption at rest, rights review, dataset export, model training orchestration, no-code inference UI configuration, scanner connectors, model feedback/retraining workflows, or a benchmark of auto-label accuracy.
 - The existing `athena knowledge` command is an early standalone local document-library experiment; it is not the product's core workflow or roadmap milestone.
 - Use only real or explicitly synthetic sample data. Do not imply model accuracy, scan coverage, compliance, or legal classification is guaranteed.
 - Model outputs are indications, not final legal determinations. Provide a human review/override path and retain uncertainty, confidence, and provenance.
 - Store true/false corrections with model and input provenance. Corrections become candidates for a human-approved dataset/retraining cycle; never silently update production weights.
 - Keep the platform open-source and self-hostable without Athena Business. Third-party model packages, weights, datasets, scanner SDKs, and generated data retain their own licenses and notices.
-- Deployment target, identity/access model, retention/encryption requirements, training framework, and scanner protocols need explicit design decisions before production claims.
+- The console deploys as a single self-hosted server (SQLite, one auto-label worker) with one signed-in user role. Per-project roles, retention/encryption requirements, training framework, and scanner protocols still need explicit design decisions before claims about regulated or sensitive data.
 
 ## Brand Commitments
 

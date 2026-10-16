@@ -7,6 +7,13 @@ Athena. This adapter exists to prove `ModelAdapter` works for community
 models without any Athena-specific code inside the model itself — the
 adapter is the entire integration surface.
 
+LICENSING WARNING: `ultralytics` is licensed AGPL-3.0 (or under a separate
+paid Ultralytics Enterprise license). This file is Apache-2.0 and links
+nothing copyleft by itself, but installing and running it *with*
+`ultralytics` makes your deployment subject to AGPL-3.0, including the
+section 13 network-use clause for hosted services. Get legal advice before
+using it in a closed or commercial service. See docs/LICENSE_AUDIT.md.
+
 `ultralytics` is an optional dependency of this example, not of
 `athena-sdk`. Importing this module is safe even without it installed;
 instantiating `YOLOAdapter` raises a clear `ImportError` if it is missing.
@@ -53,7 +60,9 @@ class YOLOAdapter(ModelAdapter):
         if YOLO is None:
             raise ImportError(
                 "The 'ultralytics' package is required to use YOLOAdapter. "
-                "Install it with `pip install ultralytics`."
+                "Install it with `pip install ultralytics`. Note: ultralytics is licensed "
+                "AGPL-3.0 (or Ultralytics Enterprise); installing it makes your deployment "
+                "subject to those terms. See docs/LICENSE_AUDIT.md."
             )
         self._model = YOLO(model_spec)
         self._adapter_version = adapter_version

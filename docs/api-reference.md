@@ -87,7 +87,8 @@ semantic retrieval or AI-generated answering.
   registry, inference client, and example pipeline using synthetic data.
 - [`examples/adapters/yolo_adapter.py`](../examples/adapters/yolo_adapter.py) —
   reference third-party adapter wrapping an Ultralytics YOLO detector behind the
-  `ModelAdapter` interface (image modality).
+  `ModelAdapter` interface (image modality). **Requires `pip install ultralytics`, which is
+  AGPL-3.0** — see [`LICENSE_AUDIT.md`](LICENSE_AUDIT.md) §4 before using it in a service.
 - [`examples/adapters/audio_noise_adapter.py`](../examples/adapters/audio_noise_adapter.py) —
   from-scratch acoustic noise/SNR analysis adapter, no trained model required
   (audio/sensor-timeseries modality).

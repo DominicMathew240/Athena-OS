@@ -23,3 +23,11 @@ htmlcov/
 # Build artifacts
 dist/
 build/
+
+# Web console
+web/staticfiles/
+web/.env
+*.sqlite3
+
+# Web console
+.venv-web/

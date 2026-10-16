@@ -36,6 +36,12 @@ Rather than read this abstractly, run both bundled reference pipelines and
 read their source — each is under 200 lines and has no proprietary code in
 it:
 
+> **Licence warning — Ultralytics is AGPL-3.0.** `yolo_adapter.py` needs `pip install ultralytics`,
+> a library licensed under **AGPL-3.0**; running it as a network service can oblige you to publish
+> the combined work's source unless you hold an Ultralytics Enterprise licence. Athena's own code
+> stays Apache-2.0 and does not depend on it. Details and open questions:
+> [`../LICENSE_AUDIT.md`](../LICENSE_AUDIT.md) §4. This is not legal advice.
+
 | Data type | Command | Adapter source | What it does |
 | --- | --- | --- | --- |
 | Images (`RGB_IMAGE`) | `athena run-example` | [`examples/adapters/yolo_adapter.py`](../../examples/adapters/yolo_adapter.py) | Wraps a real, independent, pretrained-or-untrained Ultralytics YOLO model. |
@@ -75,7 +81,7 @@ whatever the standard tutorial for your data type teaches. A few honest
 starting points, none of them Athena-affiliated:
 
 - **Images:** [Ultralytics YOLO's own quickstart](https://docs.ultralytics.com/quickstart/)
-  (the same library `yolo_adapter.py` wraps) trains a detector on your own
+  (the same library `yolo_adapter.py` wraps; **AGPL-3.0**, see the licence warning above) trains a detector on your own
   labeled images in a handful of commands.
 - **Audio:** libraries like `librosa` (feature extraction) paired with
   `scikit-learn` (a plain classifier) are a common, approachable starting

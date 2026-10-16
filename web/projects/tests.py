@@ -7,12 +7,29 @@ from io import BytesIO
 from pathlib import Path
 from unittest.mock import patch
 
+from django.contrib.auth import get_user_model
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from PIL import Image
 
 
-class ProjectWorkspaceTests(TestCase):
+class SignedInMixin:
+    """Every console route requires a user; sign one in before each test."""
+
+    def sign_in(self) -> None:
+        self.user = get_user_model().objects.create_user("operator")
+        self.client.force_login(self.user)
+
+    def csrf_client(self) -> Client:
+        client = Client(enforce_csrf_checks=True)
+        client.force_login(self.user)
+        return client
+
+
+class ProjectWorkspaceTests(SignedInMixin, TestCase):
+    def setUp(self) -> None:
+        self.sign_in()
+
     def post_project(self, **overrides: object):
         payload = {
             "name": "Packaging line",
@@ -97,7 +114,7 @@ class ProjectWorkspaceTests(TestCase):
         self.assertIn("json", response.json()["error"].lower())
 
     def test_project_writes_require_csrf_token(self) -> None:
-        client = Client(enforce_csrf_checks=True)
+        client = self.csrf_client()
         payload = json.dumps(
             {"name": "CSRF check", "modality": "image", "task": "Detection"}
         )
@@ -136,8 +153,9 @@ class ProjectWorkspaceTests(TestCase):
         self.assertEqual(self.client.delete(f"/api/projects/{project_id}").status_code, 404)
 
 
-class ImageAssetTests(TestCase):
+class ImageAssetTests(SignedInMixin, TestCase):
     def setUp(self) -> None:
+        self.sign_in()
         self.media_directory = tempfile.TemporaryDirectory()
         self.media_settings = override_settings(MEDIA_ROOT=self.media_directory.name)
         self.media_settings.enable()
@@ -281,7 +299,7 @@ class ImageAssetTests(TestCase):
         self.assertEqual(self.client.get(self.upload_url()).json()["assets"], [])
 
     def test_upload_requires_csrf(self) -> None:
-        client = Client(enforce_csrf_checks=True)
+        client = self.csrf_client()
         client.get("/")
         upload, _ = self.image_file()
 
@@ -291,7 +309,7 @@ class ImageAssetTests(TestCase):
 
     def test_annotation_create_update_and_delete_require_csrf(self) -> None:
         asset = self.create_asset()
-        client = Client(enforce_csrf_checks=True)
+        client = self.csrf_client()
         client.get("/")
         token = client.cookies["csrftoken"].value
         endpoint = self.annotation_url(asset["id"])

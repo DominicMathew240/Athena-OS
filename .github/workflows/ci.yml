@@ -4,10 +4,10 @@ on:
   push:
     branches: [main, master]
     paths:
-      - "athena-oss/**"
+      - "**"
   pull_request:
     paths:
-      - "athena-oss/**"
+      - "**"
 
 jobs:
   lint:
@@ -15,7 +15,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: athena-oss
+        working-directory: .
     steps:
       - uses: actions/checkout@v4
 
@@ -35,7 +35,7 @@ jobs:
     runs-on: ubuntu-latest
     defaults:
       run:
-        working-directory: athena-oss
+        working-directory: .
     steps:
       - uses: actions/checkout@v4
 

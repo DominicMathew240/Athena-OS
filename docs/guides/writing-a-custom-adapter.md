@@ -97,6 +97,10 @@ observation ids from the input batch. See
 modality) for two complete examples, and their conformance/end-to-end tests
 in [`tests/test_interfaces_conformance.py`](../../tests/test_interfaces_conformance.py).
 
+> **Licence warning:** running the YOLO example requires `pip install ultralytics`, which is
+> **AGPL-3.0** (network use included). Athena does not depend on or install it; you take on its
+> terms if you do. See [`../LICENSE_AUDIT.md`](../LICENSE_AUDIT.md) §4.
+
 ## Step 4: register with a Runtime
 
 ```python

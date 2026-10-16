@@ -1,37 +1,71 @@
-# Django web app
+# Athena console (Django)
 
-This is Athena's first self-hosted web slice. It uses Django and SQLite, serves the Multimodal Signal Board, persists project metadata for ten built-in modality types, and imports local JPEG, PNG, and WebP files into image projects.
+The Athena console is the self-hosted web UI for projects, image import, bounding-box labelling, and
+model-assisted auto-labelling with human review, written in plain language for non-specialists. A JSON API
+can also freeze the reviewed boxes into numbered dataset versions and export them as COCO or YOLO zips (no
+screen for that yet). Sign-in is required for every page and API route.
+
+- **Deploy it:** see [DEPLOYMENT.md](DEPLOYMENT.md) (Docker Compose, environment reference, backups, model licences, known limits).
+- **Export a dataset:** see [../docs/guides/data-export.md](../docs/guides/data-export.md) (API only).
+- **Run it locally:** below.
 
 ## Run locally
 
-Use Python 3.15 for the web app. Django 6.1.2 installs and passes the project's web tests under Python 3.15, but Django's current official [Python compatibility matrix](https://docs.djangoproject.com/en/6.1/releases/6.1/#python-compatibility) lists Python 3.12–3.14 only. Treat Python 3.15 as runtime-tested but not upstream-supported until Django adds it to that matrix.
-
-From the repository root:
+Use Python 3.12–3.14 (Django 6.1's supported range). The project has also been run on 3.15, which Django does not yet list.
 
 ```bash
-python3 --version  # confirm this is 3.15.x
-python3 -m venv .venv-web
-source .venv-web/bin/activate
-python -m pip install -r web/requirements.txt
+python3.13 -m venv .venv-web && source .venv-web/bin/activate
+python -m pip install -r web/requirements.txt numpy   # numpy is only needed by the tests
+export DJANGO_DEBUG=1                                  # development mode: loopback hosts, no HTTPS redirect
 python web/manage.py migrate
+python web/manage.py createsuperuser
 python web/manage.py runserver 127.0.0.1:8000
 ```
 
-Open <http://127.0.0.1:8000/>. The development server binds to loopback by default. Project metadata is stored in `~/.athena-os/projects.sqlite3`, and image files in `~/.athena-os/media/`; set `ATHENA_DATA_HOME` to select a different data directory or `ATHENA_MEDIA_ROOT` to override image storage. Run `python web/manage.py test projects` to test the Django app.
+Open <http://127.0.0.1:8000/> and sign in. Without `DJANGO_DEBUG=1` the app runs in production mode and
+refuses to start without `DJANGO_SECRET_KEY` and `ATHENA_ALLOWED_HOSTS`.
+
+Data lives in `~/.athena-os/` (`projects.sqlite3`, `media/`); set `ATHENA_DATA_HOME` to move it.
+
+### Auto-labelling locally
+
+The web process only queues jobs. To run them, install the model packages and start the worker in a second terminal:
+
+```bash
+python -m pip install -r web/requirements-autolabel.txt
+python web/manage.py autolabel_worker          # first run downloads SAM + CLIP weights (~1 GB)
+```
+
+Then open an image project, add images, and choose **Auto-label unlabeled images**. Set
+`ATHENA_AUTOLABEL_BACKEND=disabled` to hide the feature.
+
+### Tests
+
+```bash
+python web/manage.py test projects
+```
+
+The suite covers sign-in, lockout, CSRF, CSP, deploy-time settings validation, the API, the auto-label queue and
+review rules (with a deterministic stand-in for the model), and the dataset API (review gating, validation,
+splits, immutability, COCO/YOLO round trips). The real SAM + CLIP pipeline is not run in the suite.
 
 ## Implemented
 
-- Create, list, filter, search, and delete project metadata.
-- Capture a project name, modality, task, and optional label names.
-- Built-in types: image, video, audio, speech, text, table, time series, depth, point cloud, and custom.
-- Import, list, preview, and delete image assets for image projects. JPEG, PNG, and WebP bytes are decoded and validated, capped at 20 MB and 25 megapixels per image and 100 MB per batch, and recorded with their original filename and SHA-256 hash.
-- Create and list normalized image bounding boxes, reassign their class, move/resize them, and delete them. Coordinates are validated against the image bounds and project classes; boxes can be created by pointer drag or keyboard percentage entry. The workspace includes 50–400% zoom, scroll/trackpad panning, and undo/redo for the last 100 changes while the dialog remains open (buttons or Ctrl/Cmd+Z when the canvas is focused).
-- Django CSRF protection for writes; delete requires explicit browser confirmation.
+- Sign-in with lockout after repeated failures; one role (every user can see every project).
+- Create, list, filter, search, and delete project metadata for ten modality types; only image projects have a task workspace.
+- A project checklist and short plain-language explanations on each panel (what a project, label, or suggestion is), rather than tool jargon.
+- Label editor: add, rename, reorder, and remove a project's labels without code. Renaming a label also renames it on boxes already drawn.
+- Import, preview, and delete JPEG/PNG/WebP images (validated, capped at 20 MB / 25 MP per image and 100 MB per batch, SHA-256 recorded).
+- Manual bounding boxes: pointer or keyboard creation, class reassignment, move/resize, delete, 50–400% zoom, pan, undo/redo of the last 100 changes while the dialog is open.
+- Auto-labelling: SAM proposes regions, CLIP names them with the project's labels. Jobs run per image or per project in a worker, with progress and cancel. Proposals are marked **Needs review** with model name and score, and are accepted, corrected, or rejected one by one or in bulk. A re-run replaces only unreviewed proposals.
+- Dataset versions and export, **backend JSON API only (no console screen yet)**: `GET …/datasets/readiness` previews what would be exported and what blocks it; `POST …/datasets` freezes an immutable, numbered version containing only accepted boxes (model proposals still marked **Needs review** are excluded and counted), with a deterministic 80/10/10 train/val/test split by image checksum and a `manifest.json` carrying a SHA-256; `GET …/datasets/<id>/export?format=coco|yolo` streams a zip. Geometry, label, and file-checksum problems block a version and are reported per image. See [../docs/guides/data-export.md](../docs/guides/data-export.md).
+- `/healthz`, strict CSP, HSTS, secure cookies, Docker packaging.
 
 ## Not implemented
 
-The annotation slice is deliberately limited: boxes can be moved/resized with a pointer and repositioned/resized with keyboard commands; keyboard entry can create a box from percentage coordinates. Undo/redo is in-memory and clears when the dialog closes; review queues, independent-review provenance, and full assistive-technology verification are not implemented. The app also does not provide rights evidence/review, dataset versioning/export, model training/evaluation, operational inference, scanner connections, or modality plugins. Imported images and boxes remain unreviewed local candidates and are not qualified for export or training. No user authentication, access control, encryption at rest, or production deployment settings are included. Keep it on loopback and use synthetic or non-sensitive data only.
-
-## Python / Django compatibility
-
-`requirements.txt` pins Django 6.1.2 and Pillow 12.3.0. At the time this version was checked, Django's official 6.1 compatibility notes listed Python 3.12, 3.13, and 3.14; Python 3.15 is outside that supported matrix. The app's system check and tests have been exercised with Python 3.15.0, but this is not a claim of official Django support.
+Roles and per-project access, encryption at rest, rights evidence/review, a console screen for dataset
+versions and export (only the API exists), near-duplicate (not just byte-identical) leak
+detection, re-importing an exported dataset, model training/evaluation, operational inference, scanner
+connectors, modality plugins, and any benchmark of auto-label accuracy. Undo/redo is in memory only; full
+assistive-technology verification has not been done. A dataset version reflects only which boxes a person
+accepted; it says nothing about whether you have the rights to use the images, and no training step exists yet to gate on it.

@@ -1,0 +1,95 @@
+name: Athena console CI
+
+on:
+  push:
+    branches: [main, master]
+    paths:
+      - "web/**"
+      - "scripts/check_licenses.py"
+      - "scripts/license_allowlist.json"
+      - "sdk/python/pyproject.toml"
+      - "cli/pyproject.toml"
+      - ".github/workflows/web-ci.yml"
+  pull_request:
+    paths:
+      - "web/**"
+      - "scripts/check_licenses.py"
+      - "scripts/license_allowlist.json"
+      - "sdk/python/pyproject.toml"
+      - "cli/pyproject.toml"
+      - ".github/workflows/web-ci.yml"
+
+jobs:
+  web:
+    name: Console tests and deploy checks
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: web/requirements.txt
+
+      - name: Install console dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt numpy
+
+      - name: Run tests
+        run: python manage.py test projects
+
+      - name: Migrations are in sync
+        run: DJANGO_DEBUG=1 python manage.py makemigrations --check --dry-run
+
+      - name: Deploy checks pass with production settings
+        env:
+          DJANGO_SECRET_KEY: ci-only-ci-only-ci-only-ci-only-ci-only-ci-only-ci-only
+          ATHENA_ALLOWED_HOSTS: console.example.com
+          ATHENA_BEHIND_PROXY: "1"
+          ATHENA_DATA_HOME: ${{ runner.temp }}/athena
+        run: |
+          python manage.py collectstatic --noinput
+          python manage.py check --deploy --fail-level WARNING
+
+  image:
+    name: Container image builds
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build console image
+        run: docker build -t athena-console web
+
+  licenses:
+    name: Dependency license gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python 3.13
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      # Same resolution as web/Dockerfile (WITH_AUTOLABEL=1): torch from the CPU index, so
+      # the CUDA (nvidia-*) wheels PyPI would pull on Linux are not part of what is scanned
+      # or shipped. SDK + CLI are installed so their transitive deps (pydantic ...) are scanned.
+      - name: Install every shipped dependency (console, auto-label worker, SDK, CLI)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r web/requirements.txt
+          pip install --extra-index-url https://download.pytorch.org/whl/cpu -r web/requirements-autolabel.txt
+          pip install ./sdk/python ./cli
+
+      - name: Fail on AGPL / GPL / SSPL / non-commercial licenses
+        run: python scripts/check_licenses.py --quiet
+
+      - name: Gate classification tests
+        run: |
+          pip install pytest
+          python -m pytest tests/test_license_gate.py -q

@@ -1,0 +1,337 @@
+{% load static %}{% url 'checkscreen-setup' '00000000-0000-0000-0000-000000000000' as check_setup_url %}{% url 'checkscreen-operator' 'slug-placeholder' as check_open_url %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080a0b">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>Projects · Athena console</title>
+  <link rel="stylesheet" href="{% static 'projects/console.css' %}">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <div class="app">
+    <aside class="rail" aria-label="Athena navigation">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>ATHENA<small>DATA LABELLING</small></span></div>
+      <div class="rail-heading">WORKSPACE</div>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="/" aria-current="page">Projects</a>
+      </nav>
+      <div class="rail-foot"><span class="rail-user" title="Signed in as {{ request.user.get_username }}">{{ request.user.get_username }}</span><form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="rail-signout">Sign out</button></form></div>
+    </aside>
+    <main class="main" id="main" tabindex="-1">
+      <header class="page-head">
+        <div>
+          <h1>Your projects</h1>
+          <p class="subtitle">A project is one piece of labelling work, such as “Bag scanner photos”. Open a project to add pictures and mark the items you care about.</p>
+        </div>
+        <div class="head-actions">
+          <button class="primary" id="open-project-dialog" type="button">New project</button>
+          <p class="save-state" id="save-state" role="status" aria-live="polite" data-state="idle"><span class="save-dot" aria-hidden="true"></span><span id="save-state-text">Nothing to save yet.</span></p>
+        </div>
+      </header>
+      <div class="notice" id="action-notice" role="status" aria-live="polite"><span id="action-message"></span></div>
+      <section class="status-row" aria-label="Workspace overview">
+        <div class="status-cell"><span>PROJECTS</span><strong class="flip" id="project-count">00</strong></div>
+        <div class="status-cell"><span>AUTO-SUGGEST</span><strong class="flip" id="autolabel-badge">Checking…</strong></div>
+        <div class="status-cell"><span>COMPUTER SUGGESTIONS</span><strong class="flip">Need your OK</strong></div>
+      </section>
+      <section aria-labelledby="browse-heading">
+        <h2 class="section-title" id="browse-heading">All projects</h2>
+        <div class="toolbar">
+          <div class="filters" role="group" aria-label="Show projects by kind of file">
+            <button class="filter" type="button" aria-pressed="true" data-filter="all">All</button>
+            <button class="filter" type="button" aria-pressed="false" data-filter="visual">Pictures &amp; video</button>
+            <button class="filter" type="button" aria-pressed="false" data-filter="audio">Audio &amp; speech</button>
+            <button class="filter" type="button" aria-pressed="false" data-filter="language">Text &amp; documents</button>
+            <button class="filter" type="button" aria-pressed="false" data-filter="structured">Tables, measurements &amp; 3D</button>
+            <button class="filter" type="button" aria-pressed="false" data-filter="custom">Other</button>
+          </div>
+          <label class="search-label" for="search"><span class="visually-hidden">Search projects by name, goal, or label</span><input id="search" class="search" type="search" placeholder="Search projects" autocomplete="off"></label>
+        </div>
+        <div class="table-wrap">
+          <table class="desktop-table" aria-label="Projects in this workspace">
+            <thead><tr><th scope="col">PROJECT</th><th scope="col">FILES</th><th scope="col">WHAT IT IS FOR</th><th scope="col">LABELS</th><th scope="col">WHERE YOU ARE</th><th scope="col"><span class="visually-hidden">Open</span></th></tr></thead>
+            <tbody id="dataset-rows"></tbody>
+          </table>
+          <div class="mobile-list" id="mobile-rows" role="list" aria-label="Projects in this workspace"></div>
+          <div class="no-results" id="empty-state" hidden><p id="empty-copy"></p><button class="secondary" id="empty-create" type="button">Create your first project</button></div>
+        </div>
+      </section>
+
+      <section class="workspace" id="project-workspace" aria-labelledby="workspace-title">
+        <div class="workspace-head">
+          <div>
+            <p class="eyebrow">CURRENT PROJECT</p>
+            <h2 id="workspace-title">No project open</h2>
+            <p class="workspace-sub" id="workspace-sub">Create a project, or open one from the list above.</p>
+          </div>
+          <button class="delete-action" id="delete-selected-project" type="button" hidden>Delete this project</button>
+        </div>
+
+        <section class="panel checklist-panel" id="checklist-panel" aria-labelledby="checklist-heading">
+          <div class="panel-head"><h3 id="checklist-heading">Get started</h3><span class="progress-note" id="checklist-progress"></span></div>
+          <p class="panel-intro" id="checklist-intro">Follow these steps in order. The list updates itself as you work.</p>
+          <div class="checklist-start" id="checklist-start" hidden><p>You have no project open yet. Start by creating one.</p><button class="primary" id="checklist-create" type="button">Create a project</button></div>
+          <ol class="checklist" id="checklist" data-check-url-template="{{ check_setup_url }}"></ol>
+        </section>
+
+        <section class="panel labels-panel" id="labels-panel" aria-labelledby="labels-heading" hidden>
+          <div class="panel-head"><h3 id="labels-heading">Labels</h3><span class="dirty-note" id="labels-dirty" role="status" aria-live="polite"></span></div>
+          <p class="panel-intro">A label is the name of something you want to find, such as “knife” or “laptop”. You can add, rename, reorder, or remove labels at any time. Renaming a label also renames it on boxes you have already drawn.</p>
+          <ul class="label-list" id="label-list" aria-label="Labels in this project"></ul>
+          <form class="label-add" id="label-add-form">
+            <label for="label-new">New label name<input id="label-new" maxlength="64" autocomplete="off" placeholder="e.g. scissors"></label>
+            <button class="secondary" type="submit">Add label</button>
+          </form>
+          <p class="form-error" id="label-error" role="alert"></p>
+          <div class="form-actions"><button class="secondary" id="label-discard" type="button" disabled>Discard changes</button><button class="primary" id="label-save" type="button" disabled>Save labels</button></div>
+        </section>
+
+        <section class="panel asset-panel" id="image-assets-panel" aria-labelledby="image-assets-heading" hidden>
+          <h3 id="image-assets-heading">Pictures</h3>
+          <p class="panel-intro">Add JPEG, PNG, or WebP pictures to this project. Each one is checked and then stored on this Athena server.</p>
+          <form class="asset-upload" id="image-upload-form">
+            <label for="image-upload">Choose pictures <span class="asset-help">Up to 20 pictures at a time (100 MB in total). Each picture can be up to 20 MB.</span><input id="image-upload" name="images" type="file" accept="image/jpeg,image/png,image/webp" multiple></label>
+            <button class="primary" id="upload-images" type="submit">Add pictures</button>
+            <label class="inline-check" id="autolabel-after-upload-field" for="autolabel-after-upload" hidden><input id="autolabel-after-upload" type="checkbox" checked> Suggest boxes automatically after upload</label>
+          </form>
+          <section class="autolabel" id="autolabel-panel" aria-labelledby="autolabel-heading" hidden>
+            <div class="autolabel-head"><h4 id="autolabel-heading">Auto-suggest boxes</h4><span class="autolabel-state" id="autolabel-state" role="status" aria-live="polite"></span></div>
+            <p class="asset-help" id="autolabel-help">The computer looks at pictures that have no boxes yet and suggests boxes using your label names. Every suggestion is marked “Needs your review” and does not count until a person accepts it. This works best when labels name things you can see, such as “knife” or “laptop”.</p>
+            <form class="autolabel-form" id="autolabel-form">
+              <label for="autolabel-strictness">How careful should it be?<select id="autolabel-strictness"><option value="0.6">Careful: fewer, more certain suggestions</option><option value="0.45" selected>Balanced</option><option value="0.3">Generous: more suggestions to check</option></select></label>
+              <button class="primary" id="autolabel-run" type="submit">Suggest boxes for pictures without boxes</button>
+              <button class="secondary" id="autolabel-cancel" type="button" hidden>Stop suggesting</button>
+            </form>
+            <div class="autolabel-progress" id="autolabel-progress" hidden><progress id="autolabel-bar" max="1" value="0" aria-labelledby="autolabel-progress-text"></progress><span id="autolabel-progress-text"></span></div>
+            <div class="autolabel-review" id="autolabel-review" hidden>
+              <p id="autolabel-review-text"></p>
+              <div class="autolabel-review-actions">
+                <label for="autolabel-accept-threshold">Accept suggestions the computer is at least this sure about<select id="autolabel-accept-threshold"><option value="0.9">90% sure</option><option value="0.7">70% sure</option><option value="0.5">50% sure</option><option value="0">Any suggestion</option></select></label>
+                <button class="secondary" id="autolabel-accept" type="button">Accept these suggestions</button>
+                <button class="secondary danger" id="autolabel-reject" type="button">Reject all suggestions</button>
+              </div>
+            </div>
+          </section>
+          <p class="asset-status" id="asset-status" role="status" aria-live="polite"></p>
+          <div class="asset-list" id="asset-list"></div>
+          <p class="asset-help">These pictures have not been checked for usage rights. Do not treat them as cleared for sharing or for training a model.</p>
+        </section>
+
+        <section class="panel dataset-panel" id="dataset-panel" aria-labelledby="dataset-heading" hidden>
+          <div class="panel-head"><h3 id="dataset-heading" tabindex="-1">Make a training set</h3><span class="progress-note" id="dataset-count-note"></span></div>
+          <p class="panel-intro">A training set is your labelled pictures, packaged so a training tool can learn from them. You save it as a <strong>snapshot</strong>: a frozen copy that never changes. If you add pictures or change boxes later, those changes go into your next snapshot, so you can always get back to exactly what you saved.</p>
+
+          <section class="dataset-step" aria-labelledby="dataset-check-heading">
+            <div class="panel-head"><h4 id="dataset-check-heading">Is your work ready?</h4><button class="secondary" id="dataset-recheck" type="button">Check again</button></div>
+            <p class="dataset-headline" id="dataset-headline" role="status" aria-live="polite">Checking your pictures and boxes…</p>
+            <ul class="dataset-facts" id="dataset-facts" aria-label="What is ready and what is left out"></ul>
+            <div class="dataset-problems" id="dataset-problems" hidden>
+              <h5 id="dataset-problems-heading">Fix these first</h5>
+              <ul id="dataset-problem-list" aria-labelledby="dataset-problems-heading"></ul>
+              <p class="asset-help" id="dataset-problems-more" hidden></p>
+            </div>
+            <div class="dataset-groups" id="dataset-groups" hidden>
+              <p class="asset-help" id="dataset-groups-intro"></p>
+              <ul class="dataset-facts" id="dataset-group-notes" aria-label="Notes about how pictures would be divided into groups"></ul>
+            </div>
+          </section>
+
+          <form class="dataset-step dataset-form" id="dataset-form" novalidate aria-labelledby="dataset-save-heading">
+            <h4 id="dataset-save-heading">Save a snapshot</h4>
+            <p class="asset-help">Only boxes you have accepted go in. Boxes that still say “Needs your review” are left out.</p>
+            <details class="dataset-advanced" id="dataset-advanced">
+              <summary>Advanced: choose how pictures are divided into groups</summary>
+              <p class="asset-help">Training tools learn from one group of pictures and are checked on others they have never seen. By default Athena puts about 80% of your pictures in <strong>Training</strong> (the model learns from these), 10% in <strong>Checking</strong> (used to see how it is doing while it learns; some tools call this “validation”) and 10% in <strong>Final test</strong> (kept back for an honest score). Identical copies of a picture always stay together in one group. You only need to change this if your training tool asks for something different.</p>
+              <div class="dataset-split-grid">
+                <label for="split-train">Training amount (%)<input id="split-train" type="number" inputmode="numeric" min="0" max="100" step="1" value="80"></label>
+                <label for="split-val">Checking amount (%)<input id="split-val" type="number" inputmode="numeric" min="0" max="100" step="1" value="10"></label>
+                <label for="split-test">Final test amount (%)<input id="split-test" type="number" inputmode="numeric" min="0" max="100" step="1" value="10"></label>
+                <label for="split-seed">Shuffle number<span class="field-help">Same number and same pictures give the same groups every time. Leave it as 0 unless you need a different mix.</span><input id="split-seed" type="number" inputmode="numeric" min="0" max="2147483647" step="1" value="0"></label>
+              </div>
+              <p class="dataset-total" id="split-total" role="status" aria-live="polite"></p>
+              <button class="secondary" id="split-reset" type="button">Go back to 80 / 10 / 10</button>
+            </details>
+            <p class="form-error" id="dataset-error" role="alert"></p>
+            <div class="form-actions dataset-actions"><button class="primary" id="dataset-save" type="submit" aria-describedby="dataset-save-help">Save a snapshot</button></div>
+            <p class="asset-help" id="dataset-save-help"></p>
+          </form>
+
+          <section class="dataset-step" aria-labelledby="snapshots-heading">
+            <h4 id="snapshots-heading">Your snapshots</h4>
+            <p class="asset-status" id="snapshots-status" role="status" aria-live="polite"></p>
+            <ol class="snapshot-list" id="snapshot-list" aria-labelledby="snapshots-heading"></ol>
+          </section>
+          <p class="asset-help">Athena does not check whether you have the right to use these pictures for training. Make sure you do before you share a download.</p>
+        </section>
+
+        <section class="panel train-panel" id="train-panel" aria-labelledby="train-heading" data-me="u{{ request.user.pk }}" hidden>
+          <div class="panel-head"><h3 id="train-heading" tabindex="-1">Teach the computer</h3><span class="progress-note" id="train-note"></span></div>
+          <p class="panel-intro">Here the computer learns from one of your snapshots, and then you decide whether to trust what it learned. It always goes in this order:</p>
+          <ol class="train-flow" aria-label="How teaching works">
+            <li><strong>You</strong> choose a snapshot and press “Start teaching”.</li>
+            <li>The computer <strong>learns</strong> from the pictures in the Training group. This can take a while.</li>
+            <li>It is <strong>checked</strong> on the Final test pictures it has never seen, and you get a plain report.</li>
+            <li><strong>You decide.</strong> Finishing never switches a model on by itself. A model is used only after a person approves it.</li>
+          </ol>
+
+          <section class="train-step" aria-labelledby="tr-ready-heading">
+            <div class="panel-head"><h4 id="tr-ready-heading">Is everything ready?</h4><button class="secondary" id="tr-recheck" type="button">Check again</button></div>
+            <p class="dataset-headline" id="tr-headline" role="status" aria-live="polite" data-state="blocked">Checking what is ready…</p>
+            <ul class="dataset-facts" id="tr-facts" aria-label="What is ready and what is missing"></ul>
+            <details class="train-licence" id="tr-licence" hidden>
+              <summary>Licence of the teaching tool</summary>
+              <div id="tr-licence-body"></div>
+            </details>
+          </section>
+
+          <form class="train-step" id="tr-form" novalidate aria-labelledby="tr-start-heading">
+            <h4 id="tr-start-heading">Start teaching</h4>
+            <fieldset class="train-fieldset" id="tr-fields">
+              <legend class="visually-hidden">Choices for this round of teaching</legend>
+              <div class="train-choices">
+                <label for="tr-snapshot">Which snapshot should it learn from?<select id="tr-snapshot"></select><span class="field-help" id="tr-snapshot-help"></span></label>
+                <label for="tr-tool">Which teaching tool should it use?<select id="tr-tool"></select><span class="field-help" id="tr-tool-help"></span></label>
+              </div>
+              <details class="dataset-advanced" id="tr-advanced">
+                <summary>Advanced: change how it learns</summary>
+                <p class="asset-help">The starting values are safe for most projects, so you can leave this closed. More rounds usually take longer. Once you press “Start teaching”, these values are locked for that run and shown under “Teaching progress”.</p>
+                <div class="dataset-split-grid">
+                  <label for="tr-rounds" data-setting="epochs">Rounds of learning<span class="field-help">How many times the computer goes through all the Training pictures. Whole number from 1 to 100.</span><input id="tr-rounds" type="number" inputmode="numeric" min="1" max="100" step="1" aria-describedby="tr-rounds-msg"><span class="field-msg" id="tr-rounds-msg" aria-live="polite"></span></label>
+                  <label for="tr-batch" data-setting="batch_size">Pictures looked at together<span class="field-help">Lower this if teaching fails or runs out of memory. Whole number from 1 to 16.</span><input id="tr-batch" type="number" inputmode="numeric" min="1" max="16" step="1" aria-describedby="tr-batch-msg"><span class="field-msg" id="tr-batch-msg" aria-live="polite"></span></label>
+                  <label for="tr-size" data-setting="image_size" hidden>Picture size while learning (pixels)<span class="field-help">Larger pictures can show small items better but take longer. Whole number from 32 to 2048.</span><input id="tr-size" type="number" inputmode="numeric" min="32" max="2048" step="1" aria-describedby="tr-size-msg"><span class="field-msg" id="tr-size-msg" aria-live="polite"></span></label>
+                </div>
+                <button class="secondary" id="tr-reset" type="button">Go back to the safe values</button>
+              </details>
+            </fieldset>
+            <p class="asset-help" id="tr-lock-note" hidden></p>
+            <p class="form-error" id="tr-error" role="alert"></p>
+            <div class="form-actions dataset-actions"><button class="primary" id="tr-start" type="submit" aria-describedby="tr-start-help">Start teaching</button></div>
+            <p class="asset-help" id="tr-start-help"></p>
+          </form>
+
+          <section class="train-step" id="tr-run" aria-labelledby="tr-run-heading" hidden>
+            <h4 id="tr-run-heading" tabindex="-1">Teaching progress</h4>
+            <div class="train-run-card" id="tr-run-card" data-state="">
+              <p class="train-run-title"><span class="stage-badge" id="tr-run-badge"></span><strong id="tr-run-title"></strong></p>
+              <progress id="tr-bar" max="1" value="0" aria-labelledby="tr-run-title tr-run-text"></progress>
+              <p class="train-run-text" id="tr-run-text"></p>
+              <p class="asset-help" id="tr-run-detail"></p>
+              <div class="train-next" id="tr-next" hidden></div>
+              <div class="form-actions train-run-actions"><button class="secondary" id="tr-see-results" type="button" hidden>See the results</button><button class="secondary danger" id="tr-cancel" type="button" hidden>Stop teaching</button></div>
+              <div class="train-locked"><h5 id="tr-locked-heading">Settings used for this run</h5><p class="asset-help">These cannot be changed once teaching has started.</p><dl id="tr-locked" aria-labelledby="tr-locked-heading"></dl></div>
+              <details class="train-log" id="tr-log-box"><summary>Details for your administrator</summary><pre id="tr-log" tabindex="0" aria-label="Progress notes from the teaching helper program"></pre></details>
+            </div>
+          </section>
+          <p class="visually-hidden" id="tr-announce" role="status" aria-live="polite"></p>
+
+          <section class="train-step" aria-labelledby="tr-models-heading">
+            <h4 id="tr-models-heading">Your taught models</h4>
+            <p class="asset-help">Every model starts as a <strong>Candidate</strong>. A person moves it to <strong>Ready for trial</strong> once they have read its results, and then <strong>approves</strong> it. Approving a new model <strong>retires</strong> the one before it, but that one stays saved so you can go back to it. Nothing here deletes a model.</p>
+            <p class="asset-status" id="tr-models-status" role="status" aria-live="polite"></p>
+            <ol class="model-list" id="tr-model-list" aria-labelledby="tr-models-heading"></ol>
+          </section>
+
+          <section class="train-step" aria-labelledby="tr-history-heading">
+            <h4 id="tr-history-heading">History of decisions</h4>
+            <p class="asset-help" id="tr-history-status">Every step a model goes through is written down here: who did it, when, and the note they left.</p>
+            <ol class="history-list" id="tr-history" aria-labelledby="tr-history-heading"></ol>
+          </section>
+        </section>
+
+        {% if check_setup_url %}<section class="panel apps-panel" id="apps-panel" aria-labelledby="apps-heading" data-open-url-template="{{ check_open_url }}" hidden>
+          <div class="panel-head"><h3 id="apps-heading" tabindex="-1">Check screens</h3><span class="progress-note" id="apps-note"></span></div>
+          <p class="panel-intro">A check screen is a page where people check new pictures with an approved model and mark each result right or wrong. Open a screen to use it, or edit it to change how it looks and what it says.</p>
+          <p class="asset-status" id="apps-status" role="status" aria-live="polite"></p>
+          <ul class="app-list" id="apps-list" aria-labelledby="apps-heading"></ul>
+          <div class="apps-empty" id="apps-empty" hidden><p id="apps-empty-text"></p><a class="primary link-button" id="apps-empty-link" href="#" hidden>Set up a check screen</a></div>
+        </section>{% endif %}
+      </section>
+
+      <section class="panel today-panel" aria-labelledby="tools-heading">
+        <h2 id="tools-heading">What you can do today</h2>
+        <ul class="today-list">
+          <li><span class="avail">Available</span><div><strong>Pictures</strong><p>Add pictures, draw boxes around items by hand, let the computer suggest boxes, and review every suggestion.</p></div></li>
+          <li><span class="soon">Coming soon</span><div><strong>Video, audio, speech, text, tables, measurements and 3D</strong><p>You can create a project for these to keep its name and labels, but there are no labelling tools for them yet.</p></div></li>
+          <li><span class="avail">Available</span><div><strong>Training sets</strong><p>Save a frozen snapshot of your labelled pictures and download it in a format training tools can read.</p></div></li>
+          <li><span class="avail">Available</span><div><strong>Teaching a model</strong><p>Let the computer learn from a snapshot, read a plain report of how well it did on pictures it has never seen, and decide whether to approve it. Nothing is approved automatically.</p></div></li>
+          {% if check_setup_url %}<li><span class="avail">Available</span><div><strong>Check screens</strong><p>Set up a screen where people check what an approved model finds in new pictures and mark each result right or wrong. Only an approved model can be used.</p></div></li>
+          {% else %}<li><span class="soon">Coming soon</span><div><strong>The check screen</strong><p>A screen where people check what an approved model finds is not available yet.</p></div></li>{% endif %}
+        </ul>
+      </section>
+      <p class="footer-note">Everyone who signs in can see and change every project; there are no separate roles yet. Athena does not encrypt stored pictures itself, so use an encrypted disk for sensitive images. Usage-rights checks are not available yet. A taught model is never used until a person approves it.</p>
+    </main>
+  </div>
+
+  <dialog id="project-dialog" aria-labelledby="project-dialog-title">
+    <div class="dialog-head"><div><h2 id="project-dialog-title">Create a project</h2><p>Say what kind of files you have and what you want to find in them.</p></div><button class="dialog-close" id="close-project-dialog" type="button" aria-label="Close without creating a project">×</button></div>
+    <form id="create-project-form" class="project-form">
+      <label for="project-name">Project name<input id="project-name" name="name" required maxlength="120" autocomplete="off" placeholder="e.g. Bag scanner photos"></label>
+      <label for="project-modality">What kind of files will you add?<span class="field-help">Only pictures can be labelled right now. Other kinds can be saved as a project but have no labelling tools yet.</span><select id="project-modality" name="modality" required>
+        <option value="image">Pictures (images)</option><option value="video">Video (no labelling tools yet)</option><option value="audio">Audio (no labelling tools yet)</option><option value="speech">Speech (no labelling tools yet)</option><option value="text">Text or documents (no labelling tools yet)</option><option value="table">Tables (no labelling tools yet)</option><option value="time_series">Measurements over time (no labelling tools yet)</option><option value="depth">Depth maps (no labelling tools yet)</option><option value="point_cloud">3D scans (no labelling tools yet)</option><option value="custom">Something else (no labelling tools yet)</option>
+      </select></label>
+      <label for="custom-modality" id="custom-modality-field" hidden>What kind of files?<input id="custom-modality" name="custom_modality" maxlength="80" autocomplete="off" placeholder="e.g. thermal camera"></label>
+      <label for="project-task">What is this project for?<span class="field-help">A short description of what you want to find.</span><input id="project-task" name="task" required maxlength="120" autocomplete="off" placeholder="e.g. Spot prohibited items in bag scans"></label>
+      <label for="project-labels">Labels <span class="field-help">Optional. The names of the things you want to find, separated by commas. You can change them later.</span><input id="project-labels" name="labels" maxlength="3300" autocomplete="off" placeholder="e.g. knife, laptop, bottle"></label>
+      <p class="form-error" id="project-form-error" role="alert"></p>
+      <div class="form-actions"><button class="secondary" id="cancel-project" type="button">Cancel</button><button class="primary" type="submit">Create project</button></div>
+    </form>
+  </dialog>
+
+  <dialog id="annotation-dialog" class="annotation-dialog" aria-labelledby="annotation-title">
+    <div class="dialog-head"><div><h2 id="annotation-title">Mark items in this picture</h2><p id="annotation-filename">Draw a box around each item</p></div><button class="dialog-close" id="close-annotation-dialog" type="button" aria-label="Close this picture and go back to the project">×</button></div>
+    <div class="annotation-content">
+      <details class="annotation-help" id="annotation-help-details" open><summary>How to mark items</summary><p class="asset-help" id="annotation-workspace-help">Pick a label, then drag across the picture to draw a box around an item. Drag inside a box to move it; drag a corner square to resize it. With a box selected, the arrow keys move it by 1% and Shift+arrow resizes it. Press Ctrl/Cmd+Z to undo and Shift+Ctrl/Cmd+Z to redo while the picture is focused. Undo history lasts until you close this window. You can also type a box position in the form below. Every change is saved as you make it.</p></details>
+      <div class="annotation-toolbar">
+        <label for="annotation-label">Label for the next box<select id="annotation-label"></select></label>
+        <div class="annotation-view-tools" role="group" aria-label="Undo, redo and zoom">
+          <button class="secondary" id="annotation-undo" type="button" aria-label="Undo last change" disabled>Undo</button>
+          <button class="secondary" id="annotation-redo" type="button" aria-label="Redo last undone change" disabled>Redo</button>
+          <button class="zoom-control" id="annotation-zoom-out" type="button" aria-label="Zoom out" title="Zoom out">−</button>
+          <output class="zoom-level" id="annotation-zoom-level" for="annotation-zoom-in annotation-zoom-out" aria-live="polite">100%</output>
+          <button class="zoom-control" id="annotation-zoom-in" type="button" aria-label="Zoom in" title="Zoom in">+</button>
+          <button class="secondary" id="annotation-zoom-reset" type="button">Reset zoom</button>
+          <span class="pan-hint">Scroll to move around when zoomed in</span>
+        </div>
+      </div>
+      <div class="annotation-auto" id="annotation-auto" role="group" aria-label="Automatic suggestions for this picture" hidden>
+        <button class="secondary" id="annotation-autolabel" type="button">Suggest boxes for this picture</button>
+        <button class="secondary" id="annotation-accept-all" type="button" hidden>Accept all suggestions here</button>
+        <span class="asset-help" id="annotation-auto-note"></span>
+      </div>
+      <details class="keyboard-box-entry">
+        <summary>Add a box by typing its position</summary>
+        <form class="keyboard-box-form" id="keyboard-box-form">
+          <p>Enter the left edge, top edge, width, and height as percentages of the picture. The box must stay inside the picture.</p>
+          <div class="keyboard-box-grid">
+            <label for="box-left">Left edge (%)<input id="box-left" name="x" type="number" min="0" max="99" step="1" value="10" required></label>
+            <label for="box-top">Top edge (%)<input id="box-top" name="y" type="number" min="0" max="99" step="1" value="10" required></label>
+            <label for="box-width">Width (%)<input id="box-width" name="width" type="number" min="1" max="100" step="1" value="20" required></label>
+            <label for="box-height">Height (%)<input id="box-height" name="height" type="number" min="1" max="100" step="1" value="20" required></label>
+          </div>
+          <div class="form-actions"><button class="secondary" type="submit">Add box</button></div>
+        </form>
+      </details>
+      <div class="annotation-workspace">
+        <div class="annotation-stage-scroll" id="annotation-stage-scroll" role="region" tabindex="0" aria-label="Zoomable image annotation workspace" aria-describedby="annotation-workspace-help"><div class="annotation-stage" id="annotation-stage"><img id="annotation-image" alt="The picture you are marking"><canvas id="annotation-canvas" tabindex="0" aria-label="Drawing area for boxes. Select a box, then use the arrow keys to move it, or Shift plus the arrow keys to resize it."></canvas></div></div>
+        <aside class="annotation-side" aria-labelledby="annotation-list-heading"><h3 id="annotation-list-heading">Boxes in this picture</h3><div class="annotation-list" id="annotation-list"></div></aside>
+      </div>
+      <p class="annotation-status" id="annotation-status" role="status" aria-live="polite"></p>
+      <div class="annotation-foot"><p class="save-state" id="annotation-save-state" role="status" aria-live="polite" data-state="idle"><span class="save-dot" aria-hidden="true"></span><span id="annotation-save-state-text">Nothing to save yet.</span></p><button class="primary" id="done-annotation" type="button">Done</button></div>
+    </div>
+  </dialog>
+  <dialog id="decision-dialog" aria-labelledby="decision-title" aria-describedby="decision-lead">
+    <div class="dialog-head"><div><h2 id="decision-title">Decision</h2><p id="decision-lead"></p></div><button class="dialog-close" id="decision-close" type="button" aria-label="Close without changing anything">×</button></div>
+    <form id="decision-form" class="project-form" novalidate>
+      <div class="decision-body" id="decision-body"></div>
+      <label for="decision-note"><span id="decision-note-label">Your note</span><span class="field-help" id="decision-note-help"></span><textarea id="decision-note" rows="4" maxlength="2000" aria-describedby="decision-note-help decision-count"></textarea></label>
+      <p class="field-help" id="decision-count"></p>
+      <p class="form-error" id="decision-error" role="alert"></p>
+      <div class="form-actions"><button class="secondary" id="decision-cancel" type="button">Cancel, change nothing</button><button class="primary" id="decision-confirm" type="submit">Confirm</button></div>
+    </form>
+  </dialog>
+  <script src="{% static 'projects/ui_common.js' %}"></script>
+  <script src="{% static 'projects/console.js' %}" defer></script>
+</body>
+</html>

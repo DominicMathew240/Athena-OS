@@ -1,0 +1,32 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#080a0b">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>{% block title %}Check screen{% endblock %} · Athena</title>
+  <link rel="stylesheet" href="{% static 'projects/console.css' %}">
+  <link rel="stylesheet" href="{% static 'projects/checkscreen.css' %}">
+</head>
+<body class="cs-page">
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <header class="cs-bar">
+    <div class="cs-bar-inner">
+      <span class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>ATHENA</span></span>
+      <nav class="cs-bar-nav" aria-label="Account">
+        {% block barnav %}{% endblock %}
+        <span class="cs-user" title="Signed in as {{ request.user.get_username }}">{{ request.user.get_username }}</span>
+        <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="cs-signout">Sign out</button></form>
+      </nav>
+    </div>
+  </header>
+  <main class="cs-main" id="main" tabindex="-1">
+    <noscript><p class="cs-alert" data-tone="error">This page needs JavaScript to work. Turn it on in your browser and reload.</p></noscript>
+    {% block content %}{% endblock %}
+  </main>
+  <script src="{% static 'projects/ui_common.js' %}"></script>
+  <script src="{% static 'projects/checkscreen_core.js' %}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

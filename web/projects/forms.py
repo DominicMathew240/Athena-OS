@@ -1,10 +1,54 @@
 from __future__ import annotations
 
+from typing import Any
+
 from django import forms
 
 from .models import MODALITY_CHOICES
 
 MAX_LABELS = 50
+MAX_LABEL_LENGTH = 64
+
+
+def normalize_label_names(labels: Any) -> list[str]:
+    """Trim and validate a list of label names, returning them in the given order.
+
+    Every message is written for the person using the console: it says what is wrong
+    and what to change. Raises ``forms.ValidationError`` on the first problem.
+    """
+    if labels is None:
+        return []
+    if not isinstance(labels, list):
+        raise forms.ValidationError("Labels must be sent as a list of names.")
+    if len(labels) > MAX_LABELS:
+        raise forms.ValidationError(
+            f"A project can have at most {MAX_LABELS} labels. Remove some labels and try again."
+        )
+    normalized: list[str] = []
+    seen: dict[str, str] = {}
+    for label in labels:
+        if not isinstance(label, str):
+            raise forms.ValidationError("Each label must be plain text.")
+        label = label.strip()
+        if not label:
+            raise forms.ValidationError("A label name is empty. Type a name or remove that row.")
+        if len(label) > MAX_LABEL_LENGTH:
+            raise forms.ValidationError(
+                f"“{label[:20]}…” is too long. Label names can be up to {MAX_LABEL_LENGTH} characters."
+            )
+        if not label.isprintable():
+            raise forms.ValidationError(
+                f"“{label[:20]}” has a line break or hidden character. Use letters, numbers, and spaces."
+            )
+        key = label.casefold()
+        if key in seen:
+            raise forms.ValidationError(
+                f"“{label}” appears twice (capital letters do not count as different). "
+                "Give each label its own name."
+            )
+        seen[key] = label
+        normalized.append(label)
+    return normalized
 
 
 class ProjectCreateForm(forms.Form):
@@ -21,31 +65,8 @@ class ProjectCreateForm(forms.Form):
         if cleaned.get("modality") != "custom":
             cleaned["custom_modality"] = ""
 
-        labels = cleaned.get("labels")
-        if labels is None:
-            labels = []
-        if not isinstance(labels, list):
-            self.add_error("labels", "Labels must be a list of names.")
-            return cleaned
-        if len(labels) > MAX_LABELS:
-            self.add_error("labels", f"A project can have at most {MAX_LABELS} labels.")
-            return cleaned
-
-        normalized: list[str] = []
-        seen: set[str] = set()
-        for label in labels:
-            if not isinstance(label, str):
-                self.add_error("labels", "Each label must be text.")
-                return cleaned
-            label = label.strip()
-            if not label or len(label) > 64:
-                self.add_error("labels", "Each label must contain 1 to 64 characters.")
-                return cleaned
-            key = label.casefold()
-            if key in seen:
-                self.add_error("labels", "Labels must be unique within a project.")
-                return cleaned
-            seen.add(key)
-            normalized.append(label)
-        cleaned["labels"] = normalized
+        try:
+            cleaned["labels"] = normalize_label_names(cleaned.get("labels"))
+        except forms.ValidationError as error:
+            self.add_error("labels", error)
         return cleaned

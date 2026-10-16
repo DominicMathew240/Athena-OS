@@ -5,7 +5,7 @@ contracts, and run the bundled synthetic example pipeline.
 
 ## Install
 
-From the `athena-oss/` directory:
+From the repository root:
 
 ```bash
 python -m venv .venv
@@ -13,9 +13,17 @@ source .venv/bin/activate
 pip install -e sdk/python -e cli
 ```
 
-The SDK depends only on **Pydantic v2**. The CLI depends on the SDK. Optional
+The SDK depends only on **Pydantic** (2.11 or newer, below 3; older 2.x releases
+emit slightly different JSON Schema, which the schema-drift test rejects). The CLI depends on the SDK. Optional
 example adapters (e.g. the Ultralytics YOLO adapter) require their own
 dependencies and are not installed by default.
+
+> **Licence warning — Ultralytics is AGPL-3.0.** The YOLO example adapter is Apache-2.0 and
+> does not bundle Ultralytics, but running it requires you to install `ultralytics`, which is
+> licensed under **AGPL-3.0** (network use included, §13). Using it in a closed commercial
+> service needs the AGPL obligations met or a separate Ultralytics Enterprise licence. Pre-trained
+> YOLO weights follow Ultralytics' own terms (not reviewed here). Athena does not install it for
+> you. See [`LICENSE_AUDIT.md`](LICENSE_AUDIT.md) §4 and get legal advice before deploying.
 
 ## Validate the Core contracts
 
@@ -102,7 +110,7 @@ The test suite covers:
 - Evaluation harness interface smoke tests.
 - Model adapter interface conformance and end-to-end `Runtime` dispatch
   (including the bundled third-party YOLO reference adapter, when
-  `ultralytics` is installed, and the bundled from-scratch acoustic
+  `ultralytics` is installed (AGPL-3.0, see the warning above), and the bundled from-scratch acoustic
   noise-analysis adapter, when `numpy` is installed).
 
 ## Next steps

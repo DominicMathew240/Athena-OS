@@ -1,0 +1,181 @@
+{% extends "projects/checkscreen_base.html" %}
+{% load static %}
+{% block title %}Set up your check screen{% endblock %}
+{% block barnav %}<a class="cs-link" href="/#project={{ project.id }}">All projects</a>{% endblock %}
+{% block content %}
+<div class="cs-wrap cs-wrap-wide" id="cs-root" data-project-id="{{ project.id }}" data-initial-app="{{ initial_app_id }}">
+  <header class="cs-head">
+    <p class="cs-kicker">{{ project.name }}</p>
+    <h1>Set up your check screen</h1>
+    <p class="cs-lead">A check screen is a simple page where someone uploads a picture and a computer model points out what it found. A person then decides what to do. Choose how it looks and behaves here, then try it on the right.</p>
+  </header>
+
+  <div class="cs-alert" id="cs-page-alert" role="alert" hidden>
+    <p class="cs-alert-title" id="cs-page-alert-title"></p>
+    <p id="cs-page-alert-text"></p>
+  </div>
+
+  <div class="cs-builder">
+    <form id="cs-form" class="cs-form" novalidate>
+      <section class="cs-card" aria-labelledby="cs-h-which">
+        <h2 id="cs-h-which">Which screen?</h2>
+        <div class="cs-field">
+          <label for="cs-app-select">Screen to edit</label>
+          <select id="cs-app-select"></select>
+          <p class="cs-help" id="cs-app-help">Pick a screen you already made, or start a new one.</p>
+        </div>
+        <p class="cs-help" id="cs-app-link-row" hidden>People open this screen at <a id="cs-app-link" href="#"></a></p>
+        <div class="cs-checks" id="cs-active-row" hidden>
+          <label class="cs-check"><input type="checkbox" id="cs-active" checked><span><strong>This screen is switched on</strong><span class="cs-help cs-block">Switch it off to stop people checking pictures here. Records already made are kept.</span></span></label>
+        </div>
+      </section>
+
+      <section class="cs-card" aria-labelledby="cs-h-basics">
+        <h2 id="cs-h-basics">The basics</h2>
+        <div class="cs-field">
+          <label for="cs-model">Which model should check the pictures?</label>
+          <select id="cs-model" aria-describedby="cs-model-help"></select>
+          <p class="cs-help" id="cs-model-help">Only a model that a person has already approved can be used. Approving happens in the training area, after reading how well the model did on test pictures.</p>
+        </div>
+        <div class="cs-field">
+          <label for="cs-name">Screen title</label>
+          <input id="cs-name" type="text" maxlength="120" autocomplete="off" aria-describedby="cs-name-help" required>
+          <p class="cs-help" id="cs-name-help">People see this at the top of the screen, for example “Bag check, lane 4”.</p>
+        </div>
+        <div class="cs-field" id="cs-slug-field">
+          <label for="cs-slug">Short name for the web address <span class="cs-opt">(optional)</span></label>
+          <input id="cs-slug" type="text" maxlength="80" autocomplete="off" spellcheck="false" aria-describedby="cs-slug-help">
+          <p class="cs-help" id="cs-slug-help">Lower-case letters, numbers and dashes, such as <code>lane-4</code>. Leave it empty and one is made from the title. It cannot be changed later.</p>
+        </div>
+      </section>
+
+      <section class="cs-card" aria-labelledby="cs-h-look">
+        <h2 id="cs-h-look">What to look for</h2>
+        <fieldset class="cs-fieldset" aria-describedby="cs-labels-help">
+          <legend>Show the computer’s findings for these things</legend>
+          <div class="cs-checks" id="cs-labels"></div>
+          <p class="cs-help" id="cs-labels-help">Anything you leave unticked is hidden from the screen, even if the model finds it.</p>
+        </fieldset>
+        <fieldset class="cs-fieldset" aria-describedby="cs-types-help">
+          <legend>Kinds of picture people can upload</legend>
+          <div class="cs-checks" id="cs-types"></div>
+          <p class="cs-help" id="cs-types-help">Other kinds of file are turned away with a clear message.</p>
+        </fieldset>
+      </section>
+
+      <section class="cs-card" aria-labelledby="cs-h-sure">
+        <h2 id="cs-h-sure">How sure must the computer be?</h2>
+        <div class="cs-field">
+          <label for="cs-threshold">Sureness before it points something out</label>
+          <div class="cs-slider-row">
+            <span class="cs-slider-end" aria-hidden="true">Flag more things</span>
+            <input id="cs-threshold" type="range" min="0" max="100" step="1" value="50" aria-describedby="cs-threshold-help">
+            <span class="cs-slider-end" aria-hidden="true">Flag fewer things</span>
+          </div>
+          <p class="cs-slider-value" id="cs-threshold-out"></p>
+          <p class="cs-help" id="cs-threshold-help">To the left, the screen points out more things, including some that are not really there. To the right, it points out only what it is quite sure about, and may miss real things. The number is the computer’s own guess, not a measured accuracy.</p>
+        </div>
+      </section>
+
+      <section class="cs-card" aria-labelledby="cs-h-words">
+        <h2 id="cs-h-words">What the screen says</h2>
+        <div class="cs-field">
+          <label for="cs-say-clear">When nothing was found</label>
+          <input id="cs-say-clear" type="text" maxlength="200" autocomplete="off" required>
+        </div>
+        <div class="cs-field">
+          <label for="cs-say-flagged">When something was found</label>
+          <input id="cs-say-flagged" type="text" maxlength="200" autocomplete="off" required>
+        </div>
+        <div class="cs-field">
+          <label for="cs-say-review">When a person should look closely</label>
+          <input id="cs-say-review" type="text" maxlength="200" autocomplete="off" aria-describedby="cs-say-review-help" required>
+          <p class="cs-help" id="cs-say-review-help">Shown before anyone has decided (if a person must always decide), and again after someone rejects the result or asks for a second look.</p>
+        </div>
+      </section>
+
+      <section class="cs-card" aria-labelledby="cs-h-decide">
+        <h2 id="cs-h-decide">What the person checking can do</h2>
+        <fieldset class="cs-fieldset" aria-describedby="cs-decisions-help">
+          <legend>Decision buttons they see</legend>
+          <div class="cs-checks" id="cs-decisions"></div>
+          <p class="cs-help" id="cs-decisions-help">“Confirm” means they agree with the result; “Reject” means they disagree; “Needs a second look” passes it on.</p>
+        </fieldset>
+        <div class="cs-checks">
+          <label class="cs-check"><input type="checkbox" id="cs-note-required"><span><strong>Ask for a note when they disagree</strong><span class="cs-help cs-block">They must write a short reason when they reject a result, say a finding is wrong, or say something was missed.</span></span></label>
+        </div>
+        <div class="cs-checks cs-must">
+          <label class="cs-check"><input type="checkbox" id="cs-human" checked><span><strong>A person must always decide</strong><span class="cs-help cs-block" id="cs-human-help">Recommended. A computer model can be wrong, and a wrong “nothing found” can look like permission to carry on. With this on, the screen never says “nothing found” as a final answer until a person has confirmed it.</span></span></label>
+        </div>
+      </section>
+
+      <div class="cs-save">
+        <button type="submit" class="primary cs-big" id="cs-save">Save this screen</button>
+        <p class="cs-inline-msg" id="cs-save-msg" role="status"></p>
+        <div class="cs-alert" id="cs-save-error" role="alert" hidden>
+          <p class="cs-alert-title" id="cs-save-error-title"></p>
+          <p id="cs-save-error-text"></p>
+        </div>
+      </div>
+    </form>
+
+    <aside class="cs-preview" aria-labelledby="cs-h-preview">
+      <div class="cs-card cs-sticky">
+        <h2 id="cs-h-preview">Preview</h2>
+        <p class="cs-help" id="cs-preview-source">Save the screen to see its preview.</p>
+        <p class="cs-unsaved" id="cs-unsaved" role="status" hidden>You have changes that are not saved. The preview still shows the last saved version.</p>
+        <div id="cs-preview" class="cs-preview-body" hidden>
+          <div class="cs-mock">
+            <p class="cs-kicker">Check screen</p>
+            <p class="cs-mock-title" id="cs-pv-title"></p>
+            <p class="cs-help" id="cs-pv-disclaimer"></p>
+            <dl class="cs-facts">
+              <div><dt>Looks for</dt><dd id="cs-pv-labels"></dd></div>
+              <div><dt>Accepts</dt><dd id="cs-pv-types"></dd></div>
+              <div><dt>Points something out when</dt><dd id="cs-pv-threshold"></dd></div>
+              <div><dt>Model</dt><dd id="cs-pv-model"></dd></div>
+              <div><dt>A person must decide</dt><dd id="cs-pv-human"></dd></div>
+            </dl>
+            <h3 class="cs-mini-h">What it will say</h3>
+            <ul class="cs-says" id="cs-pv-says"></ul>
+            <h3 class="cs-mini-h">Buttons the checker sees</h3>
+            <div class="cs-decisions" id="cs-pv-buttons"></div>
+            <p class="cs-help" id="cs-pv-buttons-help">These buttons only work on the real screen, after a picture has been checked.</p>
+          </div>
+
+          <div class="cs-try" aria-labelledby="cs-h-try">
+            <h3 class="cs-mini-h" id="cs-h-try">Try it with a picture</h3>
+            <p class="cs-help">This runs the real model on a picture from your computer. <strong>The picture and its result are saved</strong> on the server as a record, like any other check.</p>
+            <div class="cs-field">
+              <label for="cs-try-file">Picture to try</label>
+              <input type="file" id="cs-try-file" accept="image/jpeg,image/png,image/webp">
+            </div>
+            <div class="cs-actions"><button type="button" class="secondary cs-big" id="cs-try-run">Try this picture</button></div>
+            <p class="cs-inline-msg" id="cs-try-msg" role="status"></p>
+            <div class="cs-progress" id="cs-try-progress" hidden>
+              <progress aria-label="Checking your picture"></progress>
+              <p class="cs-progress-text" id="cs-try-progress-text"></p>
+            </div>
+            <div class="cs-alert" id="cs-try-error" role="alert" hidden>
+              <p class="cs-alert-title" id="cs-try-error-title"></p>
+              <p id="cs-try-error-text"></p>
+              <details class="cs-details" id="cs-try-error-details" hidden><summary>Details for your administrator</summary><p id="cs-try-error-detail-text"></p></details>
+            </div>
+            <div id="cs-try-result" hidden>
+              <div class="cs-status" id="cs-try-status" data-state="">
+                <span class="cs-status-icon" id="cs-try-status-icon" aria-hidden="true"></span>
+                <div><p class="cs-status-text" id="cs-try-status-text"></p><p class="cs-status-detail" id="cs-try-status-detail"></p></div>
+              </div>
+              <div id="cs-try-stage" class="cs-stage-holder"></div>
+              <ol class="cs-detections" id="cs-try-detections" aria-label="Things the computer found in your test picture"></ol>
+              <p class="cs-help" id="cs-try-note"></p>
+            </div>
+          </div>
+        </div>
+      </div>
+    </aside>
+  </div>
+
+</div>
+{% endblock %}
+{% block scripts %}<script src="{% static 'projects/checkscreen_builder.js' %}"></script>{% endblock %}
