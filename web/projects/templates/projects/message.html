@@ -1,0 +1,25 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#09090a">
+  <title>{{ title }} · Athena console</title>
+  <link rel="icon" type="image/png" href="{% static 'projects/brand/athena-mark-32.png' %}">
+  <link rel="stylesheet" href="{% static 'projects/console.css' %}">
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <div class="signin">
+    <div class="signin-aside">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"></span><span>ATHENA<small>DATA LABELLING</small></span></div>
+      <div><p class="eyebrow">{{ code }}</p></div>
+    </div>
+    <main class="signin-main" id="main" tabindex="-1">
+      <h1>{{ heading }}</h1>
+      <p class="subtitle">{{ message }}</p>
+      <p><a class="link-button primary" href="/">Back to your projects</a></p>
+    </main>
+  </div>
+</body>
+</html>

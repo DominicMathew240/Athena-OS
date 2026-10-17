@@ -3,13 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#080a0b">
+  <meta name="theme-color" content="#09090a">
   <meta name="csrf-token" content="{{ csrf_token }}">
   <title>{% block title %}Check screen{% endblock %} · Athena</title>
+  <link rel="icon" type="image/png" href="{% static 'projects/brand/athena-mark-32.png' %}">
   <link rel="stylesheet" href="{% static 'projects/console.css' %}">
   <link rel="stylesheet" href="{% static 'projects/checkscreen.css' %}">
 </head>
-<body class="cs-page">
+<body class="cs-page" {% include 'projects/_access_attrs.html' %}>
   <a class="skip-link" href="#main">Skip to main content</a>
   <header class="cs-bar">
     <div class="cs-bar-inner">
@@ -17,7 +18,7 @@
       <nav class="cs-bar-nav" aria-label="Account">
         {% block barnav %}{% endblock %}
         <span class="cs-user" title="Signed in as {{ request.user.get_username }}">{{ request.user.get_username }}</span>
-        <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button type="submit" class="cs-signout">Sign out</button></form>
+        <form method="post" action="{% url 'logout' %}" aria-label="Sign out">{% csrf_token %}<button type="submit" class="cs-signout">Sign out</button></form>
       </nav>
     </div>
   </header>

@@ -76,7 +76,20 @@ def sort_images(images: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return sorted(images, key=lambda item: (item["sha256"], item["asset_id"]))
 
 
-def summarise(images: list[dict[str, Any]], labels: list[str]) -> dict[str, Any]:
+SPLIT_TITLES = {"train": "Training", "val": "Checking", "test": "Final test"}
+EMPTY_SPLIT_ADVICE = {
+    "train": "add more pictures so the model has something to learn from.",
+    "val": "add more pictures to follow how well the model is learning.",
+    "test": "add more pictures to check how well the model does.",
+}
+
+
+def summarise(
+    images: list[dict[str, Any]],
+    labels: list[str],
+    split_notes: list[str] | None = None,
+    requested: dict[str, Any] | None = None,
+) -> dict[str, Any]:
     """Split counts, class balance, duplicate groups and plain-language warnings."""
     split_counts = {name: {"images": 0, "boxes": 0} for name in SPLIT_NAMES}
     balance = {label: {**{name: 0 for name in SPLIT_NAMES}, "total": 0} for label in labels}
@@ -109,8 +122,9 @@ def summarise(images: list[dict[str, Any]], labels: list[str]) -> dict[str, Any]
 
     warnings: list[str] = []
     for name in SPLIT_NAMES:
-        if split_counts[name]["images"] == 0:
-            warnings.append(f"The {name} split has no images.")
+        # A group the person set to 0% is empty on purpose; only warn about groups they asked for.
+        if split_counts[name]["images"] == 0 and (requested is None or (requested.get(name) or 0) > 0):
+            warnings.append(f"{SPLIT_TITLES[name]} has 0 pictures - {EMPTY_SPLIT_ADVICE[name]}")
     for label in labels:
         row = balance[label]
         if row["total"] == 0:
@@ -122,6 +136,8 @@ def summarise(images: list[dict[str, Any]], labels: list[str]) -> dict[str, Any]
         "class_balance": balance,
         "duplicates": duplicates,
         "warnings": warnings,
+        # Why a group is empty when there are too few different pictures; actual counts are split_counts.
+        "split_notes": list(split_notes or []),
     }
 
 
@@ -138,6 +154,7 @@ def build_manifest(
     split_config: dict[str, Any],
     excluded: dict[str, Any],
     images: list[dict[str, Any]],
+    split_notes: list[str] | None = None,
 ) -> dict[str, Any]:
     images = sort_images(images)
     return {
@@ -152,6 +169,6 @@ def build_manifest(
         "split_config": split_config,
         "counts": {"images": len(images), "boxes": sum(len(image["boxes"]) for image in images)},
         "excluded": excluded,
-        **summarise(images, labels),
+        **summarise(images, labels, split_notes, split_config),
         "images": images,
     }

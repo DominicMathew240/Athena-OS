@@ -77,10 +77,25 @@ class OneIconApproachTests(TestCase):
                     self.assertIsNone(self.BANNED.search(line), line.strip()[:120])
 
     def test_no_icon_font_or_image_library_is_loaded(self) -> None:
+        # a PNG favicon is allowed; an icon font or an SVG icon set is not
         for path in TEMPLATES.glob("*.html"):
             html = path.read_text()
             with self.subTest(template=path.name):
-                self.assertNotRegex(html, r"<link[^>]+(icon|font)[^>]*>|<svg|fontawesome|phosphor|<i class=\"(fa|ph|bi)")
+                self.assertNotRegex(html, r"<link(?![^>]*rel=\"icon\" type=\"image/png\")[^>]+(icon|font)[^>]*>|<svg|fontawesome|phosphor|<i class=\"(fa|ph|bi)")
+
+
+class JumpNavTests(TestCase):
+    def test_project_page_has_a_named_jump_bar_to_every_panel_it_links(self) -> None:
+        html = (TEMPLATES / "console.html").read_text()
+        self.assertIn('<nav class="jump" id="jump-nav" aria-label="Jump to a part of this project"', html)
+        targets = re.findall(r'<a href="#([a-z-]+)" data-panel="\1">', html)
+        self.assertGreaterEqual(len(targets), 5)
+        for target in targets:
+            with self.subTest(panel=target):
+                self.assertIn(f'id="{target}"', html)
+        js = source("console.js")
+        self.assertIn('getElementById("jump-nav")', js)
+        self.assertIn("event.preventDefault(); // the address keeps #project=", js)  # a link must not replace the open project's address
 
 
 class RemovePictureFlowTests(TestCase):
@@ -263,18 +278,22 @@ class OneStyleTests(TestCase):
         large = css.split("@media")[0]
         self.assertNotRegex(large, r"\.cs-page \.primary[^{]*\{[^}]*(font-size|padding)")
         self.assertNotRegex(large, r"\.cs-page \.secondary[^{]*\{[^}]*(font-size|padding)")
-        self.assertIn("font-size: 14px; font-weight: 400; /* same field as the console */", css)
+        self.assertIn("font-size: var(--field-size); font-weight: 400; /* same field as the console */", css)
 
     def test_one_field_border_colour_and_no_bold_field_text(self) -> None:
         css = source("console.css")
         self.assertNotIn("#777971", css)
-        for rule in re.findall(r"^[^{}\n]*(?:input|select)[^{}\n]*\{[^}]*font-size: 1[46]px[^}]*\}", css, re.M):
+        # element selectors only: a class such as .annotation-select is a button, not a field
+        for rule in re.findall(r"^[^{}\n]*(?<![-\w])(?:input|select)(?![-\w])[^{}\n]*\{[^}]*font-size: 1[46]px[^}]*\}", css, re.M):
             if "min-height" in rule:
                 with self.subTest(rule=rule[:60]):
                     self.assertIn("font-weight: 400", rule)
 
-    def test_phones_get_a_16px_field_font(self) -> None:
-        self.assertRegex(source("console.css"), r"@media \(max-width: 768px\) \{[^}]*font-size: 16px")
+    def test_fields_are_16px_at_every_width_not_only_on_phones(self) -> None:
+        # Tablets are wider than the phone breakpoint and iPad Safari zooms on a field under 16px (XB-2).
+        css = source("console.css")
+        self.assertRegex(css, r"--field-size: 16px")
+        self.assertNotRegex(css, r"@media \(max-width: 768px\) \{[^}]*font-size: 16px")
 
 
 class LongNamesAndBackButtonTests(TestCase):

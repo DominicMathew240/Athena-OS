@@ -1,9 +1,16 @@
 from django.urls import path
 
-from . import autolabel_views, dataset_views, inference_pages, inference_views, training_views, views
+from . import access_views, autolabel_views, dataset_views, inference_pages, inference_views, training_views, views
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
+    path("api/me", views.api_me, name="me"),
+    # Who holds which role (administrators only): the screen, the people, and the record of changes
+    path("access", access_views.access_page, name="access-page"),
+    path("api/access", access_views.access_overview, name="access-overview"),
+    path("api/access/changes", access_views.access_changes, name="access-changes"),
+    path("api/access/people/<int:user_id>/console", access_views.access_console_role, name="access-console-role"),
+    path("api/access/people/<int:user_id>/projects", access_views.access_project_role, name="access-project-role"),
     path("api/projects", views.project_collection, name="project-list-create"),
     path("api/projects/<uuid:project_id>", views.project_detail, name="project-detail"),
     path("api/projects/<uuid:project_id>/assets", views.project_assets, name="project-assets"),

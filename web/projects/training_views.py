@@ -14,6 +14,7 @@ from .api_common import HttpError, image_project, json_errors, json_payload, no_
 from .datasets.manifest import opaque_user
 from .models import DatasetVersion, InferenceApp, ModelVersion, TrainingRun
 from .training import lifecycle, report, runner
+from .permissions import access
 
 LIST_LIMIT = 100
 
@@ -84,6 +85,8 @@ def model_data(model: ModelVersion, *, detail: bool = False) -> dict[str, Any]:
             "dataset_version": run.dataset_version.version if run else None,
             "dataset_manifest_sha256": run.dataset_manifest_sha256 if run else None,
             "config_sha256": run.config_sha256 if run else None,
+            # Opaque id of whoever started the run; the console uses it when approval needs a second person.
+            "run_started_by": opaque_user(run.created_by_id) if run else None,
         },
         "staged_by": opaque_user(model.staged_by_id),
         "staged_at": model.staged_at.isoformat() if model.staged_at else None,
@@ -114,32 +117,44 @@ def _app_refs(apps) -> list[dict[str, str]]:
     return [{"id": str(app.id), "name": app.name, "slug": app.slug} for app in apps]
 
 
+@access()
 @require_http_methods(["GET"])
 def training_backends(request: HttpRequest, project_id) -> JsonResponse:
     image_project(project_id)
     worker = lifecycle.worker_status()
+    for_options = {"online": worker["online"], "downloads_allowed": worker["downloads_allowed"]}
     backends = []
     for cls in training.backend_classes().values():
-        info = training.describe_backend(cls())
+        backend = cls()
+        info = training.describe_backend(backend)
         info["worker_reports_available"] = worker["backends"].get(info["name"])
+        info["start_options"] = backend.start_options(for_options)
         backends.append(info)
+    # Whether ready-made models may be downloaded: the running helper's own answer, else the console's environment.
+    from .training.torchvision_frcnn import downloads_allowed
+
+    reported = worker["downloads_allowed"]
+    downloads = {"allowed": downloads_allowed() if reported is None else bool(reported), "reported_by": "console" if reported is None else "helper"}
     return no_store(
         JsonResponse(
             {
                 "default": training.training_settings()["DEFAULT_BACKEND"],
                 "worker": {"online": worker["online"], "loading": worker["loading"]},
+                "downloads": downloads,
                 "backends": backends,
             }
         )
     )
 
 
+@access()
 @require_http_methods(["GET"])
 def training_readiness(request: HttpRequest, project_id) -> JsonResponse:
     project = image_project(project_id)
     return no_store(JsonResponse(lifecycle.readiness(project, request.GET.get("backend") or None)))
 
 
+@access(POST="train")
 @require_http_methods(["GET", "POST"])
 @json_errors
 def training_runs(request: HttpRequest, project_id) -> JsonResponse:
@@ -149,7 +164,7 @@ def training_runs(request: HttpRequest, project_id) -> JsonResponse:
         return no_store(JsonResponse({"runs": [run_data(run) for run in runs]}))
 
     payload = json_payload(request, allow_empty=True)
-    reject_unknown(payload, {"dataset_id", "backend", "config"})
+    reject_unknown(payload, {"dataset_id", "backend", "config", "acknowledge_pretrained_terms"})
     config = payload.get("config", {})
     if not isinstance(config, dict):
         raise HttpError("config must be an object of training settings.")
@@ -166,13 +181,17 @@ def training_runs(request: HttpRequest, project_id) -> JsonResponse:
         dataset = lifecycle.latest_dataset(project)
         if dataset is None:
             raise HttpError("There is no dataset version yet. Create one from reviewed boxes, then start training.", 400)
-    run = lifecycle.create_run(project, request.user, dataset=dataset, backend_name=backend_name, config=config)
+    run = lifecycle.create_run(
+        project, request.user, dataset=dataset, backend_name=backend_name, config=config,
+        acknowledged_terms=payload.get("acknowledge_pretrained_terms", False),
+    )
     worker = lifecycle.worker_status()
     return no_store(
         JsonResponse({"run": run_data(run, detail=True), "worker_online": worker["online"]}, status=202)
     )
 
 
+@access()
 @require_http_methods(["GET"])
 def training_run_detail(request: HttpRequest, project_id, run_id) -> JsonResponse:
     project = image_project(project_id)
@@ -182,6 +201,7 @@ def training_run_detail(request: HttpRequest, project_id, run_id) -> JsonRespons
     return no_store(JsonResponse({"run": run_data(run, detail=True)}))
 
 
+@access(POST="train")
 @require_http_methods(["POST"])
 @json_errors
 def training_run_cancel(request: HttpRequest, project_id, run_id) -> JsonResponse:
@@ -193,6 +213,7 @@ def training_run_cancel(request: HttpRequest, project_id, run_id) -> JsonRespons
     return no_store(JsonResponse({"run": run_data(run, detail=True)}))
 
 
+@access()
 @require_http_methods(["GET"])
 def model_collection(request: HttpRequest, project_id) -> JsonResponse:
     project = image_project(project_id)
@@ -208,12 +229,14 @@ def model_collection(request: HttpRequest, project_id) -> JsonResponse:
     )
 
 
+@access()
 @require_http_methods(["GET"])
 def model_detail(request: HttpRequest, project_id, model_id) -> JsonResponse:
     project = image_project(project_id)
     return no_store(JsonResponse({"model": model_data(_get_model(project, model_id), detail=True)}))
 
 
+@access()
 @require_http_methods(["GET"])
 def model_evaluation(request: HttpRequest, project_id, model_id) -> JsonResponse:
     project = image_project(project_id)
@@ -236,6 +259,7 @@ def model_evaluation(request: HttpRequest, project_id, model_id) -> JsonResponse
     )
 
 
+@access(POST="train")
 @require_http_methods(["POST"])
 @json_errors
 def model_stage(request: HttpRequest, project_id, model_id) -> JsonResponse:
@@ -247,14 +271,20 @@ def model_stage(request: HttpRequest, project_id, model_id) -> JsonResponse:
     return no_store(JsonResponse({"model": model_data(_get_model(project, model.id), detail=True)}))
 
 
+@access(POST="approve")
 @require_http_methods(["POST"])
 @json_errors
 def model_approve(request: HttpRequest, project_id, model_id) -> JsonResponse:
     project = image_project(project_id)
     model = _get_model(project, model_id)
     payload = json_payload(request)
-    reject_unknown(payload, {"note"})
-    model, previous = lifecycle.approve_model(model, request.user, payload.get("note"))
+    reject_unknown(payload, {"note", "acknowledge_weak_results"})
+    acknowledged = payload.get("acknowledge_weak_results", False)
+    if not isinstance(acknowledged, bool):
+        raise HttpError("acknowledge_weak_results must be true or false.", 400)
+    model, previous = lifecycle.approve_model(
+        model, request.user, payload.get("note"), acknowledge_weak_results=acknowledged
+    )
     return no_store(
         JsonResponse(
             {
@@ -270,6 +300,7 @@ def model_approve(request: HttpRequest, project_id, model_id) -> JsonResponse:
     )
 
 
+@access(POST="approve")
 @require_http_methods(["POST"])
 @json_errors
 def model_rollback(request: HttpRequest, project_id, model_id) -> JsonResponse:

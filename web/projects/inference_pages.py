@@ -16,6 +16,7 @@ from django.views.decorators.http import require_GET
 from .api_common import image_project
 from .inference import schema
 from .models import InferenceApp
+from .permissions import access
 
 
 def _page(request: HttpRequest, template: str, context: dict) -> HttpResponse:
@@ -24,6 +25,7 @@ def _page(request: HttpRequest, template: str, context: dict) -> HttpResponse:
     return response
 
 
+@access()
 @require_GET
 @ensure_csrf_cookie
 def checkscreen_setup(request: HttpRequest, project_id) -> HttpResponse:
@@ -41,6 +43,7 @@ def checkscreen_setup(request: HttpRequest, project_id) -> HttpResponse:
     )
 
 
+@access()
 @require_GET
 @ensure_csrf_cookie
 def checkscreen_operator(request: HttpRequest, slug: str) -> HttpResponse:

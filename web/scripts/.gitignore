@@ -1,0 +1,2 @@
+# Playwright for the browser smoke test lives here if you install it with `npm install --prefix web/scripts/.smoke playwright`.
+.smoke/

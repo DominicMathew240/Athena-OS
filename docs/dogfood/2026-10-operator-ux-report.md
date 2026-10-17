@@ -22,11 +22,11 @@ This walk-through found that **the console was dead on load** (F1, Critical, lef
 |----------|-------|-------|------|
 | 🔴 Critical | 1 | 1 | 0 |
 | 🟠 High | 1 | 1 | 0 |
-| 🟡 Medium | 8 | 6 | 2 |
-| 🔵 Low | 6 | 3 | 3 |
-| **Total** | **16** | **11** | **5** |
+| 🟡 Medium | 8 | 8 | 0 |
+| 🔵 Low | 6 | 5 | 1 |
+| **Total** | **16** | **15** | **1** |
 
-**Overall assessment:** the happy path works end to end and its wording is plain; the defects found were load-time, batch-upload, consistency and long-input problems, all fixed; what remains open is a default split that leaves no Final-test picture, an approval-policy question, and small polish.
+**Overall assessment:** the happy path works end to end and its wording is plain; the defects found were load-time, batch-upload, consistency and long-input problems, all fixed; the items still open at the end of the first run (an empty Final-test group, an approval-policy question and small polish) were closed in a follow-up (W11, see "Follow-up W11" below); one Low item remains (compact desktop controls under 40 px, kept on purpose).
 
 ---
 
@@ -78,14 +78,14 @@ Screenshot: `screenshots/05-10-after-upload.png` (local test instance — protot
 |---|---|
 | **Severity** | Medium |
 | **Category** | UX / Content |
-| **Status** | Open |
+| **Status** | Fixed (W11) |
 
 - The readiness panel does warn ("No pictures would go into “Final test”…you would have no honest final score"), which is good. But the saved snapshot card says "Pictures were divided up as Training 80%, Checking 10%, Final test 10%" next to a table with Final test = 0. A first-time operator will not know to open "Advanced". Split rounding lives in `datasets/` (not in this task's ownership); suggested fix: guarantee ≥1 Final-test picture once ≥10 pictures exist, or pre-select the split in the form when the warning appears.
 
 Screenshot: `screenshots/10-17-snapshot-saved.png` (local test instance — prototype, synthetic data, toy model).
 
 ---
-**Resolution (after the dogfood run):** `projects/datasets/splits.py` `assign_splits` now moves one whole group of identical pictures from the fullest split into any requested split that the hash left empty (needs at least as many distinct pictures as splits). Regression test `SplitTests.test_a_15_picture_snapshot_has_a_final_test_group` fails if the rebalance is removed (checked by temporarily reverting it). Not re-verified in a browser; the card's "Final test 10%" text still shows the requested share, not the achieved count.
+**Resolution (after the dogfood run):** `projects/datasets/splits.py` `assign_splits` now moves one whole group of identical pictures from the fullest split into any requested split that the hash left empty (needs at least as many distinct pictures as splits). Regression test `SplitTests.test_a_15_picture_snapshot_has_a_final_test_group` fails if the rebalance is removed (checked by temporarily reverting it). That left the card text. **W11:** the snapshot card now reports what actually happened — "Pictures were divided up as 10 Training, 2 Checking and 2 Final test (you asked for 80% / 10% / 10%…)" — from the saved snapshot's real counts (`manifest.split_counts`), not the requested percentages. New versions record `split_algorithm: "hash-bucket-min1-v2"` in `split_config` (so also in the manifest); rows without the field are read as `hash-bucket-v1`, and their stored rows, manifest and `manifest_sha256` are untouched (no recomputation). With fewer than 3 different pictures a group cannot be filled; the manifest's `split_notes`, the readiness panel and the snapshot card say so in plain words instead of inventing a group. Verified in Chromium on a fresh load (14 pictures → 10 / 2 / 2; 2 pictures → 2 / 0 / 0 with the explanation).
 
 ### F6 — Buttons of one intent were four different sizes across the three screens (Medium, Visual/Consistency) — FIXED
 
@@ -150,28 +150,30 @@ Screenshot: `screenshots/24-65-long-names-workspace-1366.png` (local test instan
 Screenshot: `screenshots/40-53-builder-confirm.png` (local test instance — prototype, synthetic data, toy model).
 
 ---
-### F15 — A model that found none of the test boxes can still be approved and put on a check screen (Medium, UX/Safety) — OPEN, needs a product decision
+### F15 — A model that found none of the test boxes can still be approved and put on a check screen (Medium, UX/Safety) — FIXED (W11, owner-delegate decision: acknowledge, do not block)
 
 | Field | Value |
 |---|---|
 | **Severity** | Medium |
 | **Category** | UX / Safety |
-| **Status** | Open (decision) |
+| **Status** | Fixed (W11) |
 
 - Model 1 ("found 0 of 4 boxes") was moved to trial and approved after typing a note. The dialog does warn ("this model found none of the boxes people had drawn. Read its results before you rely on it") and the operator screen then says "Please look closely" for every picture, never "nothing found" as a final answer, so a person still decides. But nothing stops an administrator from approving a useless model. Options for the product owner: block approval below a floor, or require a second approver. Gating lives in `training/` (backend), outside this task.
+- **Decision and fix (W11):** no hard block. `POST …/models/<id>/approve` now answers **409** with a plain-language error (`needs_acknowledgement: true`) when recall at IoU 0.5 on the test split is 0, or the evaluation is not available, unless the body carries `acknowledge_weak_results: true` (a non-boolean value is a 400). The console dialog shows a required checkbox — "I understand this model found none of the check pictures’ boxes and I still want to use it" — and keeps “Approve for use” off until it and the note are filled in. The acknowledgement is written into the `approved` ModelEvent note ("[Weak results acknowledged by the approver: it found none of the check pictures’ boxes (0 of 4 at an overlap of 0.5). Approved anyway.]"). Verified in Chromium: unacknowledged request → 409 and the model stays in trial; button disabled until ticked; approval then succeeds and the event note holds the line. Still true: any signed-in user can approve; there are no roles or second-approver rule.
 
 Screenshot: `screenshots/14-28-approve-dialog.png` (local test instance — prototype, synthetic data, toy model).
 
 ---
-### F5 — "Boxes in this picture" side list is blank when a picture has no boxes (Low, UX) — OPEN
+### F5 — "Boxes in this picture" side list is blank when a picture has no boxes (Low, UX) — FIXED (W11)
 
 | Field | Value |
 |---|---|
 | **Severity** | Low |
 | **Category** | UX |
-| **Status** | Open |
+| **Status** | Fixed (W11) |
 
 - Status line under the picture explains it ("No boxes yet. Pick a label and drag…"), but the side list shows only its heading.
+- **Fix:** the list now says "No boxes in this picture yet. Pick a label, then drag across the picture to draw the first one." Verified in Chromium on a picture with no boxes.
 
 Screenshot: `screenshots/07-13-annotation-with-suggestion.png` (local test instance — prototype, synthetic data, toy model).
 
@@ -209,26 +211,28 @@ h1 36 px vs 35 px, card titles 20 px vs 17 px, card padding 16–22 px vs 14 px,
 - Annotation dialog close button 34 px, "How to mark items" / "Add a box by typing" summaries 28–34 px, per-box label selects 32 px; all 44 px at ≤ 850 px now. (Inline text links, e.g. the screen's web address, stay text-height.)
 
 ---
-### F14 — A few controls are still under 40 px (Low, Accessibility) — OPEN
+### F14 — A few controls are still under 40 px (Low, Accessibility) — FIXED on phones; compact desktop controls kept
 
 | Field | Value |
 |---|---|
 | **Severity** | Low |
 | **Category** | Accessibility |
-| **Status** | Open |
+| **Status** | Fixed on phones (W11); desktop compact controls remain by design |
 
 - At 390 px: the file chooser (38 px) and one nav pill (36 px). At 1024/1440 px: 25 compact controls (30 px list-row buttons, 32 px per-box selects). All are over WCAG 2.2's 24 px minimum; none is a blocker. Not changed: compact row buttons are a deliberate size.
+- **W11:** at ≤ 850 px the file chooser, the nav pills, the sign-out button, the upload tick-box row and the skip link are now 44 px. Measured in Chromium at 390 px on a fresh load, with the picture dialog open: no visible control under 40 px (inline text links and tick-boxes whose label is ≥ 40 px excluded). On 1024/1440 px the 30 px list-row buttons and 32 px per-box selects are unchanged, so this item stays partly open (all are above WCAG 2.2's 24 px minimum).
 
 ---
-### F16 — "Suggest boxes automatically after upload" is ticked by default and starts a ~2-minute CPU job after every upload (Low, UX) — OPEN
+### F16 — "Suggest boxes automatically after upload" is ticked by default and starts a ~2-minute CPU job after every upload (Low, UX) — FIXED (W11)
 
 | Field | Value |
 |---|---|
 | **Severity** | Low |
 | **Category** | UX |
-| **Status** | Open |
+| **Status** | Fixed (W11) |
 
 - The person only asked to add pictures. A message follows ("Auto-suggest has started; its suggestions will need your review.") and the suggestions never count until accepted, so nothing is lost, but on a shared CPU it also delays training. Consider off-by-default, or a one-line note beside the checkbox saying how long it takes.
+- **Fix:** off by default (also after a form reset), with a note under it: it starts looking right after the pictures are added, can take about 2 minutes for a few pictures, slows teaching while it runs, and nothing counts until the person accepts it. Verified in Chromium at 1366 and 390 px.
 
 Screenshot: `screenshots/05-10-after-upload.png` (local test instance — prototype, synthetic data, toy model).
 
@@ -241,19 +245,23 @@ Screenshot: `screenshots/05-10-after-upload.png` (local test instance — protot
 | 1 | Console script dies on load: `Cannot access 'trDialog' before initialization` | Critical | Functional / Console | Fixed |
 | 2 | One wrong file in a batch rejected all 17 pictures, and the message did not say which one | High | UX / Functional | Fixed |
 | 3 | Picture list order changed on every load | Medium | UX | Fixed |
-| 4 | Default 80/10/10 split on 15 pictures leaves 0 pictures in "Final test", and the snapshot card still says "Final test 10%" | Medium | UX / Content | Fixed |
+| 4 | Default 80/10/10 split on 15 pictures leaves 0 pictures in "Final test", and the snapshot card still says "Final test 10%" | Medium | UX / Content | Fixed (W11: actual counts shown) |
 | 6 | Buttons of one intent were four different sizes across the three screens | Medium | Visual / Consistency | Fixed |
 | 7 | Text fields were seven different recipes; one was bold; borders and size differed across screens | Medium | Visual | Fixed |
 | 10 | A very long project name, task or label widened the whole page | Medium | Visual | Fixed |
 | 11 | Back button / "All projects" opened a different project than the one just left | Medium | UX | Fixed |
 | 12 | Check-screen builder lost unsaved edits silently when leaving the page | Medium | UX | Fixed |
-| 15 | A model that found none of the test boxes can still be approved and put on a check screen | Medium | UX / Safety | Open (decision) |
-| 5 | "Boxes in this picture" side list is blank when a picture has no boxes | Low | UX | Open |
+| 15 | A model that found none of the test boxes can still be approved and put on a check screen | Medium | UX / Safety | Fixed (W11: acknowledgement required) |
+| 5 | "Boxes in this picture" side list is blank when a picture has no boxes | Low | UX | Fixed (W11) |
 | 8 | Check-screen builder/operator headings and cards were a different scale from the console | Low | Visual | Fixed |
 | 9 | Small content slips | Low | Content | Fixed |
 | 13 | Small dialog controls were 28–34 px high on phones | Low | Accessibility | Fixed |
-| 14 | A few controls are still under 40 px | Low | Accessibility | Open |
-| 16 | "Suggest boxes automatically after upload" is ticked by default and starts a ~2-minute CPU job after every upload | Low | UX | Open |
+| 14 | A few controls are still under 40 px | Low | Accessibility | Open: fixed on phones, compact desktop controls kept |
+| 16 | "Suggest boxes automatically after upload" is ticked by default and starts a ~2-minute CPU job after every upload | Low | UX | Fixed (W11) |
+
+## Follow-up W11 (2026-10-17)
+
+Fixes for F4, F5, F14, F15 and F16, each tested first (unit tests) and then re-verified in real Chromium on a fresh load against a disposable local instance (port 8812, synthetic data, a hand-made "found 0 of 4" model row — no real training was run). Main venv: 448 tests OK (2 skipped); ML venv: 448 tests OK (1 skipped); root `python3.13 -m pytest -q` 85 passed; `ruff check sdk/python cli examples tests scripts` clean. Axe (wcag2a/2aa/21aa/22aa + best-practice) reported 0 violations on the dashboard, the picture dialog and the approval dialog at 1440 and 390 px, fresh loads. Also in this pass: an empty group is now stated with its real count in plain words everywhere ("Final test has 0 pictures - add more pictures to check how well the model does." in the manifest `warnings`, the readiness panel and the snapshot card; groups set to 0% are not warned about); the tick-box reads "I understand this model found none of the test boxes and I still want to use it"; the auto-suggest help text now says the first use may need to load helper models; `web/.env.example` lists `ATHENA_TRAINING_BACKEND` and `ATHENA_TRAINING_RUN_TIMEOUT`. **Not shown:** anything about real operators, real scanners or accuracy; the Chromium run used one browser engine only.
 
 ## Testing coverage
 
@@ -359,4 +367,4 @@ All taken from the local test instance — **prototype, synthetic data, toy mode
 - **Method.** One Playwright script per step; each opened a fresh page load, used real clicks/keys, and logged console errors, page errors and every 4xx/5xx. Expected 4xx are listed where they occur (two 409 on picture removal, one 409 on a stale download, five 401 after the session was deleted, one 400 for an over-long label, one 400 for a stale label save). No uncaught page error remains. Static assets were fetched with `Cache-Control: no-cache` so measurements never used a stale stylesheet (a stale cache hid the first re-measure).
 - **Consistency rule adopted** (one scale for all three screens): standard buttons 13 px / 700 / 40 px (44 px ≤ 768 px); compact row buttons 12 px / 30 px; fields 14 px / 400 / 40 px with a `#5e605b` border (16 px / 44 px ≤ 768 px); card padding 14 px; section titles 17 px, page title from one shared `h1` rule; one icon approach (typed characters from `ICONS` in `ui_common.js`, no emoji, no icon font); remove = "Remove", only whole projects are "Deleted". Intentional differences: top bar instead of rail on the builder/operator pages; two-line decision buttons are taller.
 - **Side effects.** Disposable data directory `…/scratch/w10-data` (not committed); servers, workers and Chromium were stopped at the end. No weights were downloaded (`ATHENA_AUTOLABEL_ALLOW_DOWNLOAD=0`, `HF_HUB_OFFLINE=1`); the autolabel worker ran with the system Python 3.13 that already had `transformers` + `torch`, because the ML venv for training lacks `transformers`.
-- **Recommendation.** F1 shows that source-text tests cannot detect load-time failures. A CI smoke step that loads `/`, `/projects/<id>/check-screen/setup` and `/check/<slug>` in headless Chromium and fails on any page error would have caught it.
+- **Recommendation.** F1 shows that source-text tests cannot detect load-time failures. A CI smoke step that loads `/`, `/projects/<id>/check-screen/setup` and `/check/<slug>` in headless Chromium and fails on any page error would have caught it. **Status (2026-10-17, W15): built** as `web/scripts/browser_smoke.mjs` + `run_browser_smoke.sh` and an optional CI job; it has been run locally in Chromium and WebKit and shown to fail on an injected `ReferenceError` (see `docs/dogfood/2026-10-cross-browser.md`).

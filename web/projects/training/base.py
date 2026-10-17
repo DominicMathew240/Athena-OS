@@ -93,6 +93,23 @@ class TrainingBackend:
             raise ValueError("This backend takes no settings.")
         return {}
 
+    def start_options(self, worker: dict[str, Any]) -> list[dict[str, Any]]:
+        """Optional "how should it start?" choices the Teach panel can offer, in plain words.
+
+        ``worker`` is ``{"online": bool, "downloads_allowed": bool | None}`` (what the running helper reported).
+        Each choice is a dict with ``value`` (the config value), ``title``, ``summary``, ``licence_plain``,
+        ``available``, ``ready``, ``needs_acknowledgement``, ``unavailable_reason``, ``how_to_enable`` and
+        ``size_note``. The default is no choices, so the panel shows nothing extra."""
+        return []
+
+    def start_check(self, config: dict[str, Any], worker: dict[str, Any]) -> dict[str, Any]:
+        """Server-side check before a run is queued (the page's tick-box is only a convenience).
+
+        Returns ``{"needs_acknowledgement": bool, "blocked": str}``: ``blocked`` is a plain-language reason the
+        run cannot start (empty when it can), ``needs_acknowledgement`` says the person must have ticked the
+        box about the terms of what is being used."""
+        return {"needs_acknowledgement": False, "blocked": ""}
+
     def runtime_info(self) -> dict[str, Any]:
         """Framework versions and device, captured when a run starts. No paths, no host names."""
         return {}

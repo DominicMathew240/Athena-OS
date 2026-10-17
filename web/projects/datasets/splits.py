@@ -13,6 +13,10 @@ from dataclasses import dataclass
 from typing import Any
 
 SPLIT_NAMES = ("train", "val", "test")
+# Recorded in the split_config of every new version. Versions saved before this field existed
+# carry no name; they are read as LEGACY_ALGORITHM and their stored rows are never recomputed.
+ALGORITHM = "hash-bucket-min1-v2"
+LEGACY_ALGORITHM = "hash-bucket-v1"
 MAX_SEED = 2**31 - 1
 SUM_TOLERANCE = 1e-6
 
@@ -59,6 +63,24 @@ class SplitConfig:
         return {"seed": self.seed, "train": self.train, "val": self.val, "test": self.test}
 
 
+def algorithm_of(split_config: dict[str, Any] | None) -> str:
+    """Name of the split algorithm a stored version used (old versions have no field)."""
+    name = (split_config or {}).get("split_algorithm")
+    return name if isinstance(name, str) and name else LEGACY_ALGORITHM
+
+
+def shortfall_notes(distinct_pictures: int, config: SplitConfig) -> list[str]:
+    """Plain-language notice when too few different pictures exist to fill every requested group."""
+    wanted = sum(1 for name in SPLIT_NAMES if getattr(config, name) > 0)
+    if distinct_pictures >= wanted:
+        return []
+    return [
+        f"Only {distinct_pictures} different {'picture has' if distinct_pictures == 1 else 'pictures have'} "
+        f"accepted boxes, and the {wanted} groups you asked for (Training, Checking, Final test) need at least "
+        f"{wanted}, so at least one group is empty. Add more pictures with boxes."
+    ]
+
+
 def bucket(sha256: str, seed: int) -> float:
     digest = hashlib.sha256(f"{seed}:{sha256}".encode("ascii", "replace")).digest()
     return int.from_bytes(digest[:8], "big") / 2**64
@@ -76,7 +98,12 @@ def assign_split(sha256: str, config: SplitConfig) -> str:
 
 
 def assign_splits(shas: Iterable[str], config: SplitConfig) -> dict[str, str]:
-    """Assign every distinct image hash to a split, never leaving a requested split empty.
+    """Assign every distinct image hash to a split (algorithm ``ALGORITHM``).
+
+    Guarantee: with at least as many distinct hashes as requested splits (3 for the default
+    80/10/10) every requested split gets at least one picture, so there is always a Checking and
+    a Final-test group from 3 different pictures on. Below that nothing is invented: some split
+    stays empty and :func:`shortfall_notes` says so.
 
     Starts from the per-image hash assignment (:func:`assign_split`). With few pictures the
     hash can leave a split that the operator asked for (fraction > 0) with nothing in it, e.g.

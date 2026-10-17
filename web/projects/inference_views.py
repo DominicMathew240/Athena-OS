@@ -15,6 +15,7 @@ from .api_common import HttpError, image_project, json_errors, json_payload, no_
 from .inference import service
 from .models import InferenceApp, ModelVersion, ObservationRecord
 from .training.lifecycle import LifecycleError
+from .permissions import access
 
 LIST_LIMIT = 100
 
@@ -58,6 +59,7 @@ def _model(project, value) -> ModelVersion:
     return get_object_or_404(ModelVersion, id=model_id, project=project)
 
 
+@access(POST="train")
 @require_http_methods(["GET", "POST"])
 @json_errors
 def inference_apps(request: HttpRequest, project_id) -> JsonResponse:
@@ -79,6 +81,7 @@ def inference_apps(request: HttpRequest, project_id) -> JsonResponse:
     return no_store(JsonResponse({"app": app_data(app), "preview": service.render_preview(app)}, status=201))
 
 
+@access(PATCH="train", DELETE="train")
 @require_http_methods(["GET", "PATCH", "DELETE"])
 @json_errors
 def inference_app_detail(request: HttpRequest, project_id, app_id) -> JsonResponse:
@@ -105,12 +108,14 @@ def inference_app_detail(request: HttpRequest, project_id, app_id) -> JsonRespon
     return no_store(JsonResponse({"app": app_data(app), "preview": service.render_preview(app)}))
 
 
+@access()
 @require_http_methods(["GET"])
 def inference_app_preview(request: HttpRequest, project_id, app_id) -> JsonResponse:
     app = _app(image_project(project_id), app_id)
     return no_store(JsonResponse({"preview": service.render_preview(app)}))
 
 
+@access(POST="label")
 @require_http_methods(["POST"])
 @json_errors
 def inference_app_run(request: HttpRequest, project_id, app_id) -> JsonResponse:
@@ -134,6 +139,7 @@ def inference_app_run(request: HttpRequest, project_id, app_id) -> JsonResponse:
     )
 
 
+@access()
 @require_http_methods(["GET"])
 def inference_observations(request: HttpRequest, project_id, app_id) -> JsonResponse:
     app = _app(image_project(project_id), app_id)
@@ -141,12 +147,14 @@ def inference_observations(request: HttpRequest, project_id, app_id) -> JsonResp
     return no_store(JsonResponse({"observations": [service.render_observation(o) for o in rows]}))
 
 
+@access()
 @require_http_methods(["GET"])
 def inference_observation_detail(request: HttpRequest, project_id, app_id, observation_id) -> JsonResponse:
     app = _app(image_project(project_id), app_id)
     return no_store(JsonResponse({"render": service.render_observation(_observation(app, observation_id))}))
 
 
+@access()
 @require_http_methods(["GET"])
 def inference_observation_image(request: HttpRequest, project_id, app_id, observation_id):
     app = _app(image_project(project_id), app_id)
@@ -157,6 +165,7 @@ def inference_observation_image(request: HttpRequest, project_id, app_id, observ
     return no_store(response)
 
 
+@access(POST="label")
 @require_http_methods(["POST"])
 @json_errors
 def inference_observation_feedback(request: HttpRequest, project_id, app_id, observation_id) -> JsonResponse:
@@ -174,6 +183,7 @@ def inference_observation_feedback(request: HttpRequest, project_id, app_id, obs
     )
 
 
+@access(POST="label")
 @require_http_methods(["POST"])
 @json_errors
 def inference_observation_decision(request: HttpRequest, project_id, app_id, observation_id) -> JsonResponse:
@@ -185,6 +195,7 @@ def inference_observation_decision(request: HttpRequest, project_id, app_id, obs
     return no_store(JsonResponse({"render": service.render_observation(_observation(app, observation_id))}, status=201))
 
 
+@access()
 @require_http_methods(["GET"])
 def inference_feedback_export(request: HttpRequest, project_id, app_id) -> HttpResponse:
     app = _app(image_project(project_id), app_id)

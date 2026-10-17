@@ -12,6 +12,7 @@ from django.views.decorators.http import require_http_methods
 
 from .datasets import FORMATS, export_max_bytes, manifest as manifest_lib, service, splits, writers
 from .models import DatasetVersion, ExportEvent, Project
+from .permissions import access
 
 MAX_REQUEST_BYTES = 16_384
 EXPORT_LOG_LIMIT = 200
@@ -88,6 +89,7 @@ def dataset_data(version: DatasetVersion, *, include_manifest: bool) -> dict[str
             "reason": manifest_lib.EXCLUDED_REASON,
         },
         "split_config": version.split_config,
+        "split_algorithm": splits.algorithm_of(version.split_config),
         "manifest_sha256": version.manifest_sha256,
         "export_formats": list(FORMATS),
         "is_incomplete": version.is_incomplete,
@@ -100,6 +102,7 @@ def dataset_data(version: DatasetVersion, *, include_manifest: bool) -> dict[str
     return data
 
 
+@access(POST="label")
 @require_http_methods(["GET", "POST"])
 def project_datasets(request: HttpRequest, project_id) -> JsonResponse:
     project = _image_project(project_id)
@@ -138,6 +141,7 @@ def project_datasets(request: HttpRequest, project_id) -> JsonResponse:
     return _no_store(JsonResponse({"dataset": dataset_data(version, include_manifest=True)}, status=201))
 
 
+@access()
 @require_http_methods(["GET"])
 def project_dataset_readiness(request: HttpRequest, project_id) -> JsonResponse:
     """Explain what would be exported and what blocks it. Creates nothing."""
@@ -160,7 +164,7 @@ def project_dataset_readiness(request: HttpRequest, project_id) -> JsonResponse:
                     "suggested_boxes": analysis.suggested_boxes,
                 },
                 "excluded": analysis.excluded,
-                "split_config": config.as_dict(),
+                "split_config": {**config.as_dict(), "split_algorithm": splits.ALGORITHM},
                 "label_names": project.labels,
                 "preview": service.preview(analysis),
                 **_problems(analysis.problems),
@@ -169,6 +173,7 @@ def project_dataset_readiness(request: HttpRequest, project_id) -> JsonResponse:
     )
 
 
+@access()
 @require_http_methods(["GET"])
 def project_dataset_detail(request: HttpRequest, project_id, dataset_id) -> JsonResponse:
     version = get_object_or_404(DatasetVersion, id=dataset_id, project_id=project_id, project__modality="image")
@@ -207,6 +212,7 @@ def _audited(chunks, request, version, fmt):
     _record_export(request, version, fmt, success=True, status=200, sent=sent)
 
 
+@access(GET="label")
 @require_http_methods(["GET"])
 def project_dataset_export(request: HttpRequest, project_id, dataset_id):
     version = get_object_or_404(
@@ -227,6 +233,7 @@ def project_dataset_export(request: HttpRequest, project_id, dataset_id):
     return response
 
 
+@access()
 @require_http_methods(["GET"])
 def project_dataset_exports(request: HttpRequest, project_id, dataset_id) -> JsonResponse:
     """Audit trail of export attempts for one version, newest first (append-only)."""

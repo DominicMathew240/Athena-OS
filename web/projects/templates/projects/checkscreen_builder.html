@@ -10,13 +10,14 @@
     <p class="cs-lead">A check screen is a simple page where someone uploads a picture and a computer model points out what it found. A person then decides what to do. Choose how it looks and behaves here, then try it on the right.</p>
   </header>
 
+  <p class="gate-note" data-gate-note="train" hidden></p>
   <div class="cs-alert" id="cs-page-alert" role="alert" hidden>
     <p class="cs-alert-title" id="cs-page-alert-title"></p>
     <p id="cs-page-alert-text"></p>
   </div>
 
   <div class="cs-builder">
-    <form id="cs-form" class="cs-form" novalidate>
+    <form id="cs-form" class="cs-form" novalidate aria-label="Check screen settings">
       <section class="cs-card" aria-labelledby="cs-h-which">
         <h2 id="cs-h-which">Which screen?</h2>
         <div class="cs-field">
@@ -25,12 +26,12 @@
           <p class="cs-help" id="cs-app-help">Pick a screen you already made, or start a new one.</p>
         </div>
         <p class="cs-help" id="cs-app-link-row" hidden>People open this screen at <a id="cs-app-link" href="#"></a></p>
-        <div class="cs-checks" id="cs-active-row" hidden>
+        <div class="cs-checks" id="cs-active-row" data-needs="train" hidden>
           <label class="cs-check"><input type="checkbox" id="cs-active" checked><span><strong>This screen is switched on</strong><span class="cs-help cs-block">Switch it off to stop people checking pictures here. Records already made are kept.</span></span></label>
         </div>
       </section>
 
-      <section class="cs-card" aria-labelledby="cs-h-basics">
+      <section class="cs-card" aria-labelledby="cs-h-basics" data-needs="train">
         <h2 id="cs-h-basics">The basics</h2>
         <div class="cs-field">
           <label for="cs-model">Which model should check the pictures?</label>
@@ -49,7 +50,7 @@
         </div>
       </section>
 
-      <section class="cs-card" aria-labelledby="cs-h-look">
+      <section class="cs-card" aria-labelledby="cs-h-look" data-needs="train">
         <h2 id="cs-h-look">What to look for</h2>
         <fieldset class="cs-fieldset" aria-describedby="cs-labels-help">
           <legend>Show the computer’s findings for these things</legend>
@@ -63,7 +64,7 @@
         </fieldset>
       </section>
 
-      <section class="cs-card" aria-labelledby="cs-h-sure">
+      <section class="cs-card" aria-labelledby="cs-h-sure" data-needs="train">
         <h2 id="cs-h-sure">How sure must the computer be?</h2>
         <div class="cs-field">
           <label for="cs-threshold">Sureness before it points something out</label>
@@ -77,7 +78,7 @@
         </div>
       </section>
 
-      <section class="cs-card" aria-labelledby="cs-h-words">
+      <section class="cs-card" aria-labelledby="cs-h-words" data-needs="train">
         <h2 id="cs-h-words">What the screen says</h2>
         <div class="cs-field">
           <label for="cs-say-clear">When nothing was found</label>
@@ -94,7 +95,7 @@
         </div>
       </section>
 
-      <section class="cs-card" aria-labelledby="cs-h-decide">
+      <section class="cs-card" aria-labelledby="cs-h-decide" data-needs="train">
         <h2 id="cs-h-decide">What the person checking can do</h2>
         <fieldset class="cs-fieldset" aria-describedby="cs-decisions-help">
           <legend>Decision buttons they see</legend>
@@ -109,7 +110,7 @@
         </div>
       </section>
 
-      <div class="cs-save">
+      <div class="cs-save" data-needs="train">
         <button type="submit" class="primary cs-big" id="cs-save">Save this screen</button>
         <p class="cs-inline-msg" id="cs-save-msg" role="status"></p>
         <div class="cs-alert" id="cs-save-error" role="alert" hidden>
@@ -126,7 +127,6 @@
         <p class="cs-unsaved" id="cs-unsaved" role="status" hidden>You have changes that are not saved. The preview still shows the last saved version.</p>
         <div id="cs-preview" class="cs-preview-body" hidden>
           <div class="cs-mock">
-            <p class="cs-kicker">Check screen</p>
             <p class="cs-mock-title" id="cs-pv-title"></p>
             <p class="cs-help" id="cs-pv-disclaimer"></p>
             <dl class="cs-facts">
@@ -143,7 +143,7 @@
             <p class="cs-help" id="cs-pv-buttons-help">These buttons only work on the real screen, after a picture has been checked.</p>
           </div>
 
-          <div class="cs-try" aria-labelledby="cs-h-try">
+          <div class="cs-try" aria-labelledby="cs-h-try" data-needs="label">
             <h3 class="cs-mini-h" id="cs-h-try">Try it with a picture</h3>
             <p class="cs-help">This runs the real model on a picture from your computer. <strong>The picture and its result are saved</strong> on the server as a record, like any other check.</p>
             <div class="cs-field">

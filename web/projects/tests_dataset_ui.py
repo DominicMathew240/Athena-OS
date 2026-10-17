@@ -84,6 +84,43 @@ class DatasetPanelMarkupTests(TestCase):
             with self.subTest(field=field):
                 self.assertRegex(self.html, rf'id="{field}"[^>]*value="{value}"')
 
+    def test_auto_suggest_after_upload_is_off_by_default_and_explained(self) -> None:
+        box = re.search(r'<input id="autolabel-after-upload" type="checkbox"([^>]*)>', self.html)
+        self.assertIsNotNone(box)
+        self.assertNotIn("checked", box.group(1))
+        self.assertIn('aria-describedby="autolabel-after-upload-help"', box.group(1))
+        help_text = re.search(r'id="autolabel-after-upload-help">([^<]*)<', self.html).group(1)
+        self.assertIn("2 minutes", help_text)
+        self.assertIn("first time", help_text)
+        self.assertIn("helper models", help_text)
+        self.assertIn("review", help_text)
+
+    def test_empty_box_list_has_a_sentence(self) -> None:
+        script = (STATIC / "console.js").read_text()
+        render = script[script.index("function renderBoxAnnotationList") : script.index("function drawAnnotations")]
+        self.assertIn("if (!boxAnnotations.length)", render)
+        self.assertIn("No boxes in this picture yet.", render)
+
+    def test_empty_groups_use_the_same_plain_sentence_in_preview_and_snapshot_card(self) -> None:
+        script = (STATIC / "console.js").read_text()
+        self.assertIn("${SPLIT_TITLES[name]} has 0 pictures - ${EMPTY_GROUP_ADVICE[name]}", script)
+        self.assertIn("add more pictures to check how well the model does.", script)
+        self.assertGreaterEqual(script.count("emptyGroupSentence(name)"), 2)
+
+    def test_phone_layout_lifts_small_controls_to_44px(self) -> None:
+        css = (STATIC / "console.css").read_text()
+        phone = css[css.index("@media (max-width: 850px)") :]
+        self.assertRegex(phone, r"\.nav a \{[^}]*min-height: 44px")
+        self.assertIn(".asset-upload input, .asset-upload .inline-check, .inline-check { min-height: 44px; }", phone)
+
+    def test_snapshot_card_shows_actual_counts_not_only_the_requested_percentages(self) -> None:
+        script = (STATIC / "console.js").read_text()
+        card = script[script.index("async function fillSnapshotDetails") : script.index("function filenameFrom")]
+        self.assertIn("detail.manifest?.split_counts", card)
+        self.assertRegex(card, r"\$\{got\(\"train\"\)\} Training, \$\{got\(\"val\"\)\} Checking and \$\{got\(\"test\"\)\} Final test")
+        self.assertIn("you asked for", card)
+        self.assertIn("split_notes", card)
+
     def test_inputs_are_labelled_and_status_regions_are_live(self) -> None:
         for field in ("split-train", "split-val", "split-test", "split-seed"):
             with self.subTest(field=field):

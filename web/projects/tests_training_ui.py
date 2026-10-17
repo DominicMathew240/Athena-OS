@@ -173,6 +173,28 @@ class TeachScriptWordingTests(TrainingBase):
         self.assertIn(r"/^Only \d+ test image/", section)
 
 
+class WeakApprovalDialogTests(TrainingBase):
+    def test_dialog_has_a_required_acknowledgement_checkbox_that_sends_the_flag(self) -> None:
+        html = self.client.get("/").content.decode()
+        dialog = html[html.index('<dialog id="decision-dialog"') :]
+        self.assertRegex(dialog, r'<input id="decision-ack" type="checkbox">')
+        self.assertRegex(dialog, r'id="decision-ack-row"[^>]*\shidden>')  # only shown when the model is weak
+        section = script_section()
+        self.assertIn("I understand this model found none of the test boxes and I still want to use it", section)
+        self.assertIn("acknowledge_weak_results: true", section)
+        # the confirm button stays off until the box is ticked
+        self.assertIn("needsTick", section)
+
+    def test_the_server_names_the_rule_in_plain_words(self) -> None:
+        from .training import lifecycle
+
+        self.assertIsNone(lifecycle.weak_results_reason({"available": True, "overall": {"recall": 0.5}, "data": {"boxes": 4}}))
+        self.assertIn("found none", lifecycle.weak_results_reason(
+            {"available": True, "overall": {"recall": 0.0, "true_positives": 0}, "data": {"boxes": 4}}))
+        self.assertIn("no results", lifecycle.weak_results_reason({"available": False}))
+        self.assertIn("no results", lifecycle.weak_results_reason(None))
+
+
 class ChecklistStepSixTests(TrainingBase):
     def project_row(self) -> dict:
         rows = self.client.get("/api/projects").json()["projects"]

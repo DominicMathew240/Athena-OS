@@ -1,6 +1,7 @@
 name: Athena console CI
 
 on:
+  workflow_dispatch:
   push:
     branches: [main, master]
     paths:
@@ -56,6 +57,71 @@ jobs:
         run: |
           python manage.py collectstatic --noinput
           python manage.py check --deploy --fail-level WARNING
+
+  # Optional: opens the real pages in a real browser and fails on a script error, a CSP violation, an unnamed
+  # control, a dialog that leaks focus and similar. The Django tests read the JavaScript as text, so they cannot
+  # see a page that is dead on load (docs/blog/2026-10-tests-green-console-dead.md). It runs on a manual dispatch,
+  # or on a pull request that changes the console's scripts, styles or templates; a failure fails the check.
+  browser-smoke:
+    name: Browser smoke test (manual, or pull requests touching web/projects/static or templates)
+    if: github.event_name == 'workflow_dispatch' || github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    continue-on-error: false
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Decide whether the smoke test is needed
+        id: changes
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          changed="$(git diff --name-only "origin/${{ github.base_ref }}...HEAD")"
+          if echo "$changed" | grep -Eq '^web/(projects/static/|projects/templates/|scripts/(browser_smoke\.mjs|run_browser_smoke\.sh|seed_browser_smoke\.py))'; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "No console script, style or template changed: skipping the browser smoke test."
+          fi
+
+      - name: Set up Python 3.13
+        if: steps.changes.outputs.run == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+          cache: pip
+          cache-dependency-path: web/requirements.txt
+
+      - name: Install console dependencies
+        if: steps.changes.outputs.run == 'true'
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r web/requirements.txt numpy
+
+      - name: Set up Node
+        if: steps.changes.outputs.run == 'true'
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      # Playwright is a development tool for this job only. It is installed outside the repository and is not a
+      # dependency of the product (web/requirements.txt is unchanged).
+      - name: Install Playwright and Chromium
+        if: steps.changes.outputs.run == 'true'
+        run: |
+          npm install --no-save --prefix "$RUNNER_TEMP/pw" playwright@1
+          "$RUNNER_TEMP/pw/node_modules/.bin/playwright" install --with-deps chromium
+
+      - name: Run the browser smoke test
+        if: steps.changes.outputs.run == 'true'
+        env:
+          PLAYWRIGHT_NODE_MODULES: ${{ runner.temp }}/pw/node_modules
+          ATHENA_SMOKE_PYTHON: python
+        run: bash web/scripts/run_browser_smoke.sh chromium
 
   image:
     name: Container image builds

@@ -4,9 +4,9 @@
 {% block content %}
 <div class="cs-wrap" id="cs-root" data-project-id="{{ project.id }}" data-app-id="{{ app.id }}" data-slug="{{ app.slug }}">
   <header class="cs-head">
-    <p class="cs-kicker">Check screen</p>
     <h1 id="cs-title">{{ app.name }}</h1>
   </header>
+  <p class="gate-note" data-gate-note="label" hidden></p>
 
   <div class="cs-alert" id="cs-blocker" role="alert" hidden>
     <p class="cs-alert-title" id="cs-blocker-title"></p>
@@ -18,7 +18,7 @@
     <p id="cs-disclaimer">{{ disclaimer }}</p>
   </section>
 
-  <section class="cs-card" aria-labelledby="cs-pick-h" id="cs-pick-card">
+  <section class="cs-card" aria-labelledby="cs-pick-h" id="cs-pick-card" data-needs="label">
     <h2 id="cs-pick-h"><span class="cs-step" aria-hidden="true">1</span>Choose a picture</h2>
     <div class="cs-field">
       <label for="cs-file">Picture to check</label>
@@ -49,7 +49,7 @@
 
   <p class="visually-hidden" id="cs-live" role="status" aria-live="polite"></p>
 
-  <section class="cs-card" id="cs-result" aria-labelledby="cs-result-h" hidden>
+  <section class="cs-card" id="cs-result" aria-labelledby="cs-result-h" data-needs="label" hidden>
     <h2 id="cs-result-h"><span class="cs-step" aria-hidden="true">2</span>What the computer saw</h2>
     <div class="cs-status" id="cs-status" data-state="">
       <span class="cs-status-icon" id="cs-status-icon" aria-hidden="true"></span>
@@ -69,7 +69,7 @@
 
     <details class="cs-missed" id="cs-missed">
       <summary>The computer missed something</summary>
-      <form id="cs-missed-form" class="cs-missed-form" novalidate>
+      <form id="cs-missed-form" class="cs-missed-form" novalidate aria-label="Tell us what the computer missed">
         <p class="cs-help">Tell us what it did not find. Say what it is, then show where it is: drag on the picture, or type the position.</p>
         <div class="cs-field">
           <label for="cs-missed-label">What did it miss?</label>
@@ -103,7 +103,7 @@
     <p class="cs-feedback-note" id="cs-feedback-note"><strong>About your right/wrong answers:</strong> they are saved so your team can review them later. They do <strong>not</strong> change the computer model, and the model does not learn from them by itself.</p>
   </section>
 
-  <section class="cs-card" id="cs-decision" aria-labelledby="cs-decision-h" hidden>
+  <section class="cs-card" id="cs-decision" aria-labelledby="cs-decision-h" data-needs="label" hidden>
     <h2 id="cs-decision-h"><span class="cs-step" aria-hidden="true">3</span>Your decision</h2>
     <p class="cs-help" id="cs-decision-help"></p>
     <div class="cs-field">

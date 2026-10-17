@@ -38,8 +38,8 @@ console.example.com {
 
 The first auto-label job downloads the SAM (`facebook/sam-vit-base`, ~360 MB) and CLIP
 (`openai/clip-vit-base-patch32`, ~600 MB) weights into `/data/models`. Their licences are
-separate from Athena's (see [Licences and model terms](#licences-and-model-terms) before enabling the
-worker). Once cached, set `ATHENA_AUTOLABEL_ALLOW_DOWNLOAD=0` to forbid further downloads.
+separate from Athena's, and **CLIP ships enabled by default with an unresolved licence caveat** (see
+[Licences and model terms](#licences-and-model-terms) before enabling the worker). Once cached, set `ATHENA_AUTOLABEL_ALLOW_DOWNLOAD=0` to forbid further downloads.
 
 ## Without Docker
 
@@ -151,17 +151,33 @@ read its §5 for the sources.
 | Model | What the audit verified | Practical reading |
 | --- | --- | --- |
 | SAM `facebook/sam-vit-base` | Hugging Face tag and model card declare **Apache-2.0**; the upstream repository's LICENSE is Apache-2.0. | Commercial use is permitted; keep the Apache-2.0 notice. The SA-1B *training dataset* has its own research licence that governs downloading the dataset, not using the weights; its text could not be fetched, so its terms are unverified. |
-| CLIP `openai/clip-vit-base-patch32` | The Hugging Face repo **declares no licence**. The upstream code repo is MIT, but no statement explicitly licensing the *weights* was found. The model card says: "**Any** deployed use case of the model - whether commercial or not - is currently out of scope." The training data is undisclosed web-scraped image-caption data. | This is an intended-use statement, not a licence term, but a customer or regulator can point to it, and running the auto-labeller on your server is a deployed use. Athena's design (CLIP only proposes labels, a person must accept each one) reduces the exposure; it does not remove it. |
+| CLIP `openai/clip-vit-base-patch32` | The Hugging Face repo **declares no licence** (no `license:` tag, no LICENSE file; rechecked 2026-10-17). The upstream code repo `openai/CLIP` is MIT, but that licence covers "the Software" in that repo, and no statement explicitly licensing the *weights* was found. The model card says: "**Any** deployed use case of the model - whether commercial or not - is currently out of scope." It also lists "surveillance and facial recognition" use as always out of scope, and says the training data (web-crawled image-caption data) will not be released. | This is an intended-use statement, not a licence term, but a customer or regulator can point to it, and running the auto-labeller on your server is a deployed use. Athena's design (CLIP only proposes labels, a person must accept each one) reduces the exposure; it does not remove it. **Do not describe these weights as MIT-licensed or cleared for commercial use.** |
 
-Before you enable the worker, an operator should:
+### CLIP: what ships by default, and what you must decide yourself
 
-1. **Evaluate** whether your use is acceptable under the CLIP model card and your own legal advice, especially if
-   you offer auto-labelling to customers as a hosted or paid feature.
-2. **Opt out** if it is not: leave the worker off, or set `ATHENA_AUTOLABEL_BACKEND=disabled`. Manual labelling,
-   review, and dataset export do not use these models.
-3. **Or swap the classifier.** `ATHENA_CLIP_MODEL` takes a Hugging Face model id that loads through
-   `transformers`' `CLIPModel`. Athena has not tested any alternative, and a different model needs its own
-   licence and quality review. Prefer one that states an explicit weights licence.
+**The default configuration ships with CLIP enabled.** `ATHENA_AUTOLABEL_BACKEND` defaults to `sam` and `ATHENA_CLIP_MODEL`
+defaults to `openai/clip-vit-base-patch32` (`athena_web/settings.py`, `.env.example`). On 2026-10-17 the project owner decided to keep
+CLIP as the default for auto-suggested labels. That is the **owner's own risk acceptance for the project's default setup. It is not a
+legal clearance, and it does not transfer to you.** When you deploy, you run the worker, you download the weights, and you carry the
+exposure. **Take your own legal advice before any commercial deployment**, in particular if you offer auto-labelling to customers, sell
+a service around it, or use it on security, screening or other surveillance-adjacent data. The reasoning and the exact text read are in
+[`docs/LICENSE_AUDIT.md`](../docs/LICENSE_AUDIT.md) ("Owner decision: CLIP stays enabled").
+
+The caveat in one line: the Hugging Face repo states no licence for the weights, the model card calls any deployed use out of scope,
+and the training data is undisclosed.
+
+Your options:
+
+1. **Keep CLIP** (the default) once you have evaluated the model card and taken advice. Athena has not measured auto-label accuracy on
+   real items; treat every proposal as a starting point for a person to check.
+2. **Switch auto-labelling off.** Set `ATHENA_AUTOLABEL_BACKEND=disabled` in `.env` (`off` or an empty value also disable it) and restart the
+   `web` and `worker` services. The console hides the feature and `manage.py autolabel_worker` exits with
+   "Auto-labelling is disabled". You can also simply never start the worker, but the console would still offer the button and queue jobs.
+   Manual labelling, review, snapshots, teaching and check screens do not use SAM or CLIP.
+3. **Swap the classifier.** Set `ATHENA_CLIP_MODEL` to a Hugging Face model id that loads through `transformers`' `CLIPModel` and
+   `CLIPProcessor` (the worker calls exactly those two classes). Athena has not tested any alternative, and a different model needs its
+   own licence and quality review. Prefer one that states an explicit weights licence. `ATHENA_SAM_MODEL` works the same way for
+   the segmenter. Weights already cached under `/data/models` are not removed by changing the id.
 4. Keep `ATHENA_AUTOLABEL_ALLOW_DOWNLOAD=0` after the first download so the weights you reviewed are the ones in use.
 
 Other terms to know (details in the audit): Python dependencies are permissive (certifi and tqdm are MPL-2.0, fine
@@ -169,11 +185,21 @@ unmodified; attributions are in [`THIRD_PARTY_NOTICES.md`](../THIRD_PARTY_NOTICE
 Docker image you take on Debian's GPL/LGPL source-availability obligations for the base layer; and Hugging Face's own
 terms apply to the downloads (not reviewed).
 
+### Ready-made starting models in the Teach panel
+
+The Teach panel has a collapsed "Advanced: start from a ready-made model" control. "Start from scratch" always works. The two
+ready-made choices (a general picture model trained on ImageNet, a general object model trained on COCO) are fetched once
+from download.pytorch.org and kept under `<data home>/models/pretrained`, and they carry their own training-data terms (the
+panel shows the backend's licence note and asks the person to tick a box and to ask a lawyer before commercial use; see
+[`docs/guides/model-quality.md`](../docs/guides/model-quality.md)). They are **switched off by default**: the panel greys them
+out and tells people to ask an administrator unless the weights are already in that folder. To allow the download, set
+`ATHENA_TRAINING_ALLOW_DOWNLOAD=1` in the environment of the **`train_worker`** (not only the web process; the worker is the one
+that downloads, and it reports its own setting to the console) and restart it. Set it back to `0` afterwards if you want
+only the files you reviewed to be used.
+
 ## Known limits
 
-- One role: every signed-in user can read and change every project. **There are no roles yet, so any signed-in user
-  can approve a model for inference** (`POST .../models/<id>/approve`); approval needs a note and is recorded with the
-  user, but nothing restricts who may do it. Give accounts only to people you trust with that decision.
+- Access roles (Viewer, Labeler, Trainer, Approver; see [`docs/guides/access-roles.md`](../docs/guides/access-roles.md)): every signed-in user can **see** every project, but changing things needs a role. Roles are Django groups, optionally overridden per project, assigned by a superuser on the console's **Access** screen or with `manage.py athena_roles`; every change is recorded. People in no role group count as Labelers (`ATHENA_UNASSIGNED_ROLE`) and can never approve a model. Give the Approver role only to people you trust with that decision, and give superuser rights sparingly: a superuser can do everything and is the only kind of account that can change roles.
 - Audit trail is partial: model/training transitions (`ModelEvent`) and dataset export attempts (`ExportEvent`,
   `GET .../datasets/<id>/exports`) are append-only. Project, label and feedback-export changes are not audited.
 - Deleting a picture that belongs to a frozen dataset version is refused (HTTP 409) unless the caller passes

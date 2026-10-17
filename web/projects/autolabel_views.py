@@ -14,6 +14,7 @@ from django.views.decorators.http import require_http_methods
 from . import autolabel
 from .autolabel import runner
 from .models import Asset, AutoLabelJob, BoxAnnotation, Project
+from .permissions import access
 
 MAX_REQUEST_BYTES = 16_384
 MIN_CONFIDENCE_FLOOR = 0.05
@@ -73,11 +74,13 @@ def _no_store(response: JsonResponse) -> JsonResponse:
     return response
 
 
+@access()
 @require_http_methods(["GET"])
 def autolabel_status(request: HttpRequest) -> JsonResponse:
     return _no_store(JsonResponse({**autolabel.describe(), "worker_online": runner.worker_online(), "worker_loading": runner.worker_loading()}))
 
 
+@access(POST="label")
 @require_http_methods(["GET", "POST"])
 def project_autolabel(request: HttpRequest, project_id) -> JsonResponse:
     project = get_object_or_404(Project, id=project_id, modality="image")
@@ -143,6 +146,7 @@ def project_autolabel(request: HttpRequest, project_id) -> JsonResponse:
     return JsonResponse({"job": job_data(job), "worker_online": runner.worker_online(), "worker_loading": runner.worker_loading()}, status=202)
 
 
+@access(POST="label")
 @require_http_methods(["POST"])
 def project_autolabel_cancel(request: HttpRequest, project_id, job_id) -> JsonResponse:
     job = get_object_or_404(AutoLabelJob, id=job_id, project_id=project_id)
@@ -159,6 +163,7 @@ def project_autolabel_cancel(request: HttpRequest, project_id, job_id) -> JsonRe
     return JsonResponse({"job": job_data(job)})
 
 
+@access(POST="label")
 @require_http_methods(["POST"])
 def project_annotation_review(request: HttpRequest, project_id) -> JsonResponse:
     """Accept or reject model proposals in bulk. Only ever touches ``suggested`` boxes."""

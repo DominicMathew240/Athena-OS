@@ -1,0 +1,17 @@
+{
+  "connector": {
+    "type": "http_push",
+    "spool_dir": "./spool",
+    "secret_env": "ATHENA_CONNECTOR_PUSH_SECRET",
+    "host": "127.0.0.1",
+    "port": 8820,
+    "max_pending": 64
+  },
+  "sink": {
+    "type": "athena_console",
+    "base_url": "https://console.example.org",
+    "project_id": "00000000-0000-0000-0000-000000000000",
+    "app": "your-check-screen-slug"
+  },
+  "pipeline": {"ledger_path": "./connector-ledger.sqlite"}
+}

@@ -21,6 +21,7 @@ from django.db import IntegrityError, transaction
 from django.db.models import Max
 from django.utils import timezone
 
+from .. import permissions
 from ..models import DatasetVersion, InferenceApp, ModelEvent, ModelVersion, Project, TrainingRun
 from . import data_home, get_backend, models_root, training_settings
 
@@ -68,20 +69,37 @@ def clean_note(note: Any, *, required: bool, what: str = "A note") -> str:
 
 
 # -- worker presence -------------------------------------------------------------------------
-def record_worker_heartbeat(key: str, state: str = "ready", backends: dict[str, bool] | None = None) -> None:
-    cache.set(key, {"state": state, "backends": backends or {}}, HEARTBEAT_TTL_SECONDS)
+def record_worker_heartbeat(
+    key: str, state: str = "ready", backends: dict[str, bool] | None = None, extras: dict[str, Any] | None = None
+) -> None:
+    """``extras`` are facts about the helper's own environment (for example whether it may download weights)."""
+    cache.set(key, {"state": state, "backends": backends or {}, **(extras or {})}, HEARTBEAT_TTL_SECONDS)
 
 
 def worker_status(key: str = WORKER_KEY) -> dict[str, Any]:
     beat = cache.get(key)
     if not isinstance(beat, dict):
-        return {"online": False, "loading": False, "backends": {}}
-    return {"online": True, "loading": beat.get("state") == "loading", "backends": beat.get("backends", {})}
+        return {"online": False, "loading": False, "backends": {}, "downloads_allowed": None}
+    return {
+        "online": True,
+        "loading": beat.get("state") == "loading",
+        "backends": beat.get("backends", {}),
+        "downloads_allowed": beat.get("downloads_allowed"),  # None: an older helper that does not say
+    }
 
 
 def backend_runnable(backend_name: str, worker_key: str = WORKER_KEY) -> tuple[bool, dict[str, Any]]:
     """True when the web process *or* a live worker says the backend can run."""
-    backend = get_backend(backend_name)
+    try:
+        backend = get_backend(backend_name)
+    except ValueError as error:  # nothing with that name is installed here (for example a plug-in was removed)
+        return False, {
+            "available_in_web_process": False,
+            "worker_online": worker_status(worker_key)["online"],
+            "worker_reports_available": None,
+            "message": str(error),
+            "how_to_enable": "It is not installed: install the package that provides it, then try again.",
+        }
     local = backend.check_available()
     worker = worker_status(worker_key)
     reported = worker["backends"].get(backend_name)
@@ -188,7 +206,10 @@ def readiness(project: Project, backend_name: str | None = None) -> dict[str, An
     }
 
 
-def create_run(project: Project, user, *, dataset: DatasetVersion, backend_name: str, config: dict[str, Any]) -> TrainingRun:
+def create_run(
+    project: Project, user, *, dataset: DatasetVersion, backend_name: str, config: dict[str, Any],
+    acknowledged_terms: bool = False,
+) -> TrainingRun:
     if dataset.project_id != project.id:
         raise LifecycleError("That dataset version does not belong to this project.", 404)
     if split_counts(dataset).get("train", {}).get("images", 0) == 0:
@@ -210,6 +231,22 @@ def create_run(project: Project, user, *, dataset: DatasetVersion, backend_name:
         normalized = backend.validate_config(config)
     except ValueError as error:
         raise LifecycleError(str(error), 400) from None
+    # The backend knows whether this start needs the person's tick about licence terms, and whether it can run at
+    # all (for example a download that is switched off). The page's tick-box is only a convenience: this is the rule.
+    check = backend.start_check(normalized, worker_status())
+    if check.get("blocked"):
+        raise LifecycleError(check["blocked"], 409)
+    if check.get("needs_acknowledgement") and acknowledged_terms is not True:
+        raise LifecycleError(
+            "Tick the box to confirm you have read the licence note for the ready-made model, then start again.", 400
+        )
+    note = f"Dataset version {dataset.version}, backend {backend_name}."
+    if check.get("needs_acknowledgement"):
+        mode = normalized.get("pretrained", "a ready-made model")
+        note += (
+            f" Started from a ready-made model ({mode}). The person who started it confirmed they had read its licence "
+            "note and that they will ask a lawyer before any commercial use."
+        )
     try:
         with transaction.atomic():
             run = TrainingRun.objects.create(
@@ -222,8 +259,7 @@ def create_run(project: Project, user, *, dataset: DatasetVersion, backend_name:
                 created_by=user if getattr(user, "is_authenticated", False) else None,
             )
             add_event(
-                project, "run_created", user=user, run=run, to_state=TrainingRun.QUEUED,
-                note=f"Dataset version {dataset.version}, backend {backend_name}.",
+                project, "run_created", user=user, run=run, to_state=TrainingRun.QUEUED, note=note,
             )
     except IntegrityError:
         raise LifecycleError(
@@ -314,7 +350,26 @@ def stage_model(model: ModelVersion, user, note: str = "") -> ModelVersion:
     return model
 
 
-def approve_model(model: ModelVersion, user, note: str) -> tuple[ModelVersion, ModelVersion | None]:
+def weak_results_reason(evaluation: dict[str, Any] | None) -> str | None:
+    """Why a model's held-out results are too weak to approve without a deliberate acknowledgement.
+
+    ``None`` means the results do not trigger the rule. Otherwise a plain sentence (without the
+    ``acknowledge_weak_results`` instruction) that is also written to the audit trail.
+    """
+    evaluation = evaluation or {}
+    if not evaluation.get("available"):
+        return "it has no results: nothing was held back to check it on, so nobody can say how well it works"
+    overall = evaluation.get("overall") or {}
+    if not overall.get("recall"):  # 0.0 (or missing): none of the people-drawn boxes were found at IoU 0.5
+        found = overall.get("true_positives", 0)
+        total = (evaluation.get("data") or {}).get("boxes", found + overall.get("false_negatives", 0))
+        return f"it found none of the test boxes ({found} of {total} at an overlap of 0.5)"
+    return None
+
+
+def approve_model(
+    model: ModelVersion, user, note: str, *, acknowledge_weak_results: bool = False
+) -> tuple[ModelVersion, ModelVersion | None]:
     if not getattr(user, "is_authenticated", False):
         raise LifecycleError("Sign in to approve a model.", 401)
     note = clean_note(note, required=True, what="An approval note")
@@ -325,6 +380,23 @@ def approve_model(model: ModelVersion, user, note: str) -> tuple[ModelVersion, M
                 f"Only a staged model can be approved; this model is {model.stage}. Stage it after reading its "
                 "evaluation report. Nothing was changed.",
                 409,
+            )
+        if permissions.requires_second_person():
+            run = model.training_run
+            if run is not None and run.created_by_id is not None and run.created_by_id == user.pk:
+                raise LifecycleError(
+                    "You started the teaching run for this model, and this console is set so that someone else has "
+                    "to approve it. Ask another Approver. Nothing was changed.",
+                    403,
+                )
+        weak = weak_results_reason(model.evaluation)
+        if weak and not acknowledge_weak_results:
+            raise LifecycleError(
+                f"This model cannot be approved yet: {weak}. If you still want to use it, tick the box that says you "
+                "understand this and try again (API clients: send acknowledge_weak_results: true). Nothing was changed.",
+                409,
+                needs_acknowledgement=True,
+                weak_results=weak,
             )
         verify_artifact(model)
         previous = (
@@ -349,9 +421,13 @@ def approve_model(model: ModelVersion, user, note: str) -> tuple[ModelVersion, M
         model.approval_note = note
         model.previous_approved = previous
         model.save(update_fields=["stage", "approved_by", "approved_at", "approval_note", "previous_approved"])
+        audit = note
+        if weak:  # the person was told and chose to go on: keep that in the audit trail
+            audit = f"{note}\n[Weak results acknowledged by the approver: {weak}. Approved anyway.]"
+        audit = f"{audit}\n{permissions.audit_tag(user, model.project)}"  # role and opaque user id, never a name
         add_event(
             model.project, "approved", user=user, model=model,
-            from_state=ModelVersion.STAGED, to_state=ModelVersion.APPROVED, note=note,
+            from_state=ModelVersion.STAGED, to_state=ModelVersion.APPROVED, note=audit,
         )
     return model, previous
 
@@ -361,6 +437,7 @@ def rollback_model(model: ModelVersion, user, note: str) -> tuple[ModelVersion, 
     if not getattr(user, "is_authenticated", False):
         raise LifecycleError("Sign in to roll back a model.", 401)
     note = clean_note(note, required=True, what="A rollback note")
+    audit_tag = permissions.audit_tag(user, model.project_id)
     with transaction.atomic():
         model = _locked(model.pk)
         if model.stage != ModelVersion.APPROVED:
@@ -383,7 +460,7 @@ def rollback_model(model: ModelVersion, user, note: str) -> tuple[ModelVersion, 
         model.save(update_fields=["stage", "retired_at"])
         add_event(
             model.project, "rollback_retired", user=user, model=model,
-            from_state=ModelVersion.APPROVED, to_state=ModelVersion.RETIRED, note=note,
+            from_state=ModelVersion.APPROVED, to_state=ModelVersion.RETIRED, note=f"{note}\n{audit_tag}",
         )
         target.stage = ModelVersion.APPROVED
         target.retired_at = None
@@ -391,7 +468,7 @@ def rollback_model(model: ModelVersion, user, note: str) -> tuple[ModelVersion, 
         add_event(
             model.project, "rollback_restored", user=user, model=target,
             from_state=ModelVersion.RETIRED, to_state=ModelVersion.APPROVED,
-            note=f"Restored in place of model v{model.version}. {note}",
+            note=f"Restored in place of model v{model.version}. {note}\n{audit_tag}",
         )
     return model, target
 

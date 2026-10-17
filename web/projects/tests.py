@@ -8,16 +8,31 @@ from pathlib import Path
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
+from django.contrib.auth.models import Group
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.test import Client, TestCase, override_settings
 from PIL import Image
 
 
+def grant(user, role: str) -> None:
+    """Put ``user`` in the Athena group for ``role`` (replacing any other Athena role)."""
+    from .permissions import GROUP_NAMES
+
+    user.groups.remove(*Group.objects.filter(name__in=list(GROUP_NAMES.values())))
+    group, _ = Group.objects.get_or_create(name=GROUP_NAMES[role])
+    user.groups.add(group)
+
+
 class SignedInMixin:
     """Every console route requires a user; sign one in before each test."""
 
-    def sign_in(self) -> None:
+    def sign_in(self, role: str | None = "approver") -> None:
+        """Sign in as ``operator``. Most tests exercise features, not access rules, so the default account
+        holds every role (the Approver group); ``tests_roles`` covers each role and the unassigned default.
+        Pass ``role=None`` for a user who is in none of the Athena groups."""
         self.user = get_user_model().objects.create_user("operator")
+        if role:
+            grant(self.user, role)
         self.client.force_login(self.user)
 
     def csrf_client(self) -> Client:

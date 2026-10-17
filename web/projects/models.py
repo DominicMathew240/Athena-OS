@@ -640,3 +640,79 @@ class ExportEvent(_AppendOnlyModel):
 
     def __str__(self) -> str:
         return f"{self.version_id} {self.format} {'ok' if self.success else 'failed'}"
+
+
+# --- Access roles: per-project assignments and the record of every change -------------------
+
+ROLE_CHOICES = [
+    ("viewer", "Viewer"),
+    ("labeler", "Labeler"),
+    ("trainer", "Trainer"),
+    ("approver", "Approver"),
+]
+
+
+class ProjectRole(models.Model):
+    """A role given to one person on one project. It replaces their console-wide role *for that project*."""
+
+    id = models.BigAutoField(primary_key=True)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="role_assignments")
+    user = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="athena_project_roles")
+    role = models.CharField(max_length=16, choices=ROLE_CHOICES)
+    assigned_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+    updated_at = models.DateTimeField(default=timezone.now)
+
+    class Meta:
+        ordering = ("project_id", "user_id")
+        constraints = (
+            models.UniqueConstraint(fields=("project", "user"), name="projectrole_one_per_person_and_project"),
+        )
+
+    def __str__(self) -> str:
+        return f"{self.user_id}:{self.project_id}:{self.role}"
+
+
+class RoleChange(_AppendOnlyModel):
+    """One row for every change of who holds which role. Never edited or deleted.
+
+    Names are not stored: people are kept as an opaque id (``u3``) and a link that is cleared if the
+    account is deleted, projects as an id and the name they had at the time.
+    """
+
+    CONSOLE, PROJECT = "console", "project"
+    SCOPE_CHOICES = [(CONSOLE, "Whole console"), (PROJECT, "One project")]
+    VIA_SCREEN, VIA_COMMAND, VIA_OTHER = "screen", "command", "other"
+    VIA_CHOICES = [
+        (VIA_SCREEN, "Access screen"),
+        (VIA_COMMAND, "athena_roles command"),
+        (VIA_OTHER, "Another tool"),
+    ]
+
+    id = models.BigAutoField(primary_key=True)
+    created_at = models.DateTimeField(default=timezone.now, editable=False, db_index=True)
+    scope = models.CharField(max_length=8, choices=SCOPE_CHOICES)
+    via = models.CharField(max_length=8, choices=VIA_CHOICES)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    actor_ref = models.CharField(max_length=24, blank=True)  # "u3", or "" when no signed-in person did it
+    user = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    user_ref = models.CharField(max_length=24)
+    project = models.ForeignKey(Project, null=True, blank=True, on_delete=models.SET_NULL, related_name="+")
+    project_ref = models.CharField(max_length=36, blank=True)
+    project_name = models.CharField(max_length=120, blank=True)
+    before = models.CharField(max_length=16, blank=True)  # "" = no role of this kind
+    after = models.CharField(max_length=16, blank=True)
+    note = models.CharField(max_length=300, blank=True)
+
+    class Meta:
+        ordering = ("-id",)
+        indexes = (models.Index(fields=("project_ref", "-id")), models.Index(fields=("user_ref", "-id")))
+
+    def __str__(self) -> str:
+        return f"{self.user_ref} {self.scope} {self.before or '-'} -> {self.after or '-'}"

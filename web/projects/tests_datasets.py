@@ -405,6 +405,99 @@ class SplitTests(DatasetBase):
         for name in ("train", "val", "test"):
             self.assertGreaterEqual(counts[name]["images"], 1, name)
 
+    def test_three_or_more_distinct_pictures_always_fill_every_requested_group(self) -> None:
+        config = splits.SplitConfig.default()
+        for size in range(3, 41):
+            for seed in range(8):
+                cfg = splits.SplitConfig(seed, config.train, config.val, config.test)
+                shas = [hashlib.sha256(f"g{size}-{i}".encode()).hexdigest() for i in range(size)]
+                result = splits.assign_splits(shas + shas[:2], cfg)  # two exact copies in the input
+                counts = {name: list(result.values()).count(name) for name in splits.SPLIT_NAMES}
+                self.assertTrue(all(counts.values()), (size, seed, counts))
+                self.assertEqual(result, splits.assign_splits(reversed(shas), cfg), (size, seed))
+
+    def test_fewer_than_three_pictures_say_so_instead_of_inventing_a_group(self) -> None:
+        for size in (1, 2):
+            shas = [hashlib.sha256(f"s{size}-{i}".encode()).hexdigest() for i in range(size)]
+            result = splits.assign_splits(shas, splits.SplitConfig.default())
+            self.assertLess(len(set(result.values())), 3)
+            notes = splits.shortfall_notes(len(shas), splits.SplitConfig.default())
+            self.assertEqual(len(notes), 1)
+            self.assertIn("at least 3", notes[0])
+            self.assertIn(f"{size} different", notes[0])
+        self.assertEqual(splits.shortfall_notes(3, splits.SplitConfig.default()), [])
+        # a split the person set to 0% is not a shortfall
+        self.assertEqual(splits.shortfall_notes(2, splits.SplitConfig(0, 0.5, 0.5, 0.0)), [])
+
+    def test_new_versions_record_the_algorithm_and_the_actual_counts(self) -> None:
+        for _ in range(15):
+            self.labelled_asset()
+        dataset = self.create_version().json()["dataset"]
+        self.assertEqual(dataset["split_config"]["split_algorithm"], splits.ALGORITHM)
+        self.assertEqual(dataset["manifest"]["split_config"]["split_algorithm"], splits.ALGORITHM)
+        self.assertEqual(dataset["split_algorithm"], splits.ALGORITHM)
+        counts = dataset["manifest"]["split_counts"]
+        self.assertTrue(all(counts[name]["images"] >= 1 for name in splits.SPLIT_NAMES), counts)
+        self.assertEqual(sum(counts[name]["images"] for name in splits.SPLIT_NAMES), 15)
+        self.assertEqual(dataset["manifest"]["split_notes"], [])
+
+    def test_a_two_picture_snapshot_explains_why_a_group_is_empty(self) -> None:
+        for _ in range(2):
+            self.labelled_asset()
+        manifest = self.create_version().json()["dataset"]["manifest"]
+        self.assertEqual(sum(manifest["split_counts"][n]["images"] for n in splits.SPLIT_NAMES), 2)
+        self.assertEqual(len(manifest["split_notes"]), 1)
+        self.assertIn("at least 3", manifest["split_notes"][0])
+        readiness = self.client.get(self.url("/readiness")).json()
+        self.assertEqual(readiness["preview"]["split_notes"], manifest["split_notes"])
+
+    def test_empty_groups_get_a_plain_warning_with_the_real_count(self) -> None:
+        for _ in range(2):
+            self.labelled_asset()
+        manifest = self.create_version().json()["dataset"]["manifest"]
+        empty = [n for n in splits.SPLIT_NAMES if manifest["split_counts"][n]["images"] == 0]
+        self.assertTrue(empty)
+        titles = {"train": "Training", "val": "Checking", "test": "Final test"}
+        for name in empty:
+            self.assertTrue(
+                any(w.startswith(f"{titles[name]} has 0 pictures - ") for w in manifest["warnings"]),
+                manifest["warnings"],
+            )
+        if "test" in empty:
+            self.assertIn(
+                "Final test has 0 pictures - add more pictures to check how well the model does.",
+                manifest["warnings"],
+            )
+
+    def test_a_split_set_to_zero_percent_is_not_warned_about(self) -> None:
+        from .datasets import manifest as manifest_lib
+
+        image = {"asset_id": "a", "sha256": "0" * 64, "split": "train", "boxes": []}
+        out = manifest_lib.summarise([image], [], requested={"train": 1.0, "val": 0.0, "test": 0.0})
+        self.assertFalse([w for w in out["warnings"] if "0 pictures" in w], out["warnings"])
+
+    def test_versions_made_before_the_algorithm_field_stay_valid(self) -> None:
+        from .datasets import manifest as manifest_lib
+
+        # A version row as it was saved before the algorithm field and split_notes existed.
+        config = {"seed": 0, "train": 0.8, "val": 0.1, "test": 0.1}
+        version = DatasetVersion(project=self.project, version=1, label_names=["damaged"], split_config=config)
+        document = manifest_lib.build_manifest(
+            dataset_id=version.id, version=1, created_at=version.created_at.isoformat(), created_by=None,
+            athena_version="old", project_id=self.project.id, project_name="Line 4", labels=["damaged"],
+            split_config=config, excluded={}, images=[],
+        )
+        document.pop("split_notes")
+        version.manifest = document
+        version.manifest_sha256 = manifest_lib.sha256_hex(document)
+        version.save()
+        version.refresh_from_db()
+        self.assertEqual(splits.algorithm_of(version.split_config), splits.LEGACY_ALGORITHM)
+        self.assertEqual(dataset_service.verify_integrity(version), [])  # checksum semantics unchanged
+        shown = self.client.get(self.url(f"/{version.id}")).json()["dataset"]
+        self.assertEqual(shown["split_algorithm"], splits.LEGACY_ALGORITHM)
+        self.assertNotIn("split_algorithm", shown["split_config"])
+
     def test_config_validation(self) -> None:
         for bad in (
             {"train": 0.5, "val": 0.1, "test": 0.1},
@@ -475,7 +568,7 @@ class SplitTests(DatasetBase):
         self.assertEqual(response.status_code, 201)
         self.assertEqual(
             response.json()["dataset"]["split_config"],
-            {"seed": 5, "train": 0.6, "val": 0.2, "test": 0.2},
+            {"seed": 5, "train": 0.6, "val": 0.2, "test": 0.2, "split_algorithm": splits.ALGORITHM},
         )
 
     def test_bad_split_config_is_a_400(self) -> None:

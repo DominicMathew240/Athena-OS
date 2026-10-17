@@ -308,6 +308,8 @@
     if (result.status !== "succeeded") return "";
     const n = result.detections.length;
     const threshold = CS.percent(render.confidence_threshold);
+    // At a sureness of 0 "at least 0% sure" is meaningless: say what happened without a number.
+    if (threshold === "0%") return n === 0 ? "The computer found nothing at all." : `The computer found ${n === 1 ? "1 thing" : `${n} things`}.`;
     if (n === 0) return `The computer found nothing it is at least ${threshold} sure about.`;
     return `The computer found ${n === 1 ? "1 thing" : `${n} things`} it is at least ${threshold} sure about.`;
   };

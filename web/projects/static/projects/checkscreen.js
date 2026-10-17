@@ -97,6 +97,7 @@
   }
 
   async function onCheck() {
+    if (!Athena.can("label")) { setMsg(ui.pickMsg, Athena.reasonFor("label"), "error"); return; }
     if (blocked) return;
     setMsg(ui.pickMsg, "");
     CS.hideAlert(errorIds);
@@ -257,7 +258,10 @@
     const cancel = el("button", "secondary", "Cancel");
     cancel.type = "button";
     panelActions.append(save, cancel);
-    panel.append(noteLabel, note, panelActions);
+    const noteHelp = el("p", "cs-help", "Say what you can see that the computer got wrong, for example: \"that is a shadow, not damage\". A short sentence is enough.");
+    noteHelp.id = `${labelId}-help`;
+    note.setAttribute("aria-describedby", noteHelp.id);
+    panel.append(noteLabel, noteHelp, note, panelActions);
 
     const send = async (verdict, noteText, buttons) => {
       buttons.forEach((b) => { b.disabled = true; });
@@ -414,7 +418,7 @@
 
   /* -- decisions -------------------------------------------------------------------------- */
   async function onDecide(key, button) {
-    if (!current) return;
+    if (!current || !Athena.can("label")) return;
     const noteNeeded = key === "reject" && current.decision_controls.required_note_on_override;
     if (noteNeeded && !ui.note.value.trim()) {
       setMsg(ui.decisionMsg, "Please write a short note saying why you disagree, then press Reject again.", "error");

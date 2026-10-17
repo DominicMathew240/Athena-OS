@@ -90,6 +90,7 @@ TEMPLATES = [
                 "django.template.context_processors.request",
                 "django.contrib.auth.context_processors.auth",
                 "django.contrib.messages.context_processors.messages",
+                "projects.permissions.context",
             ],
         },
     }
@@ -138,6 +139,14 @@ CSRF_COOKIE_HTTPONLY = True
 LOGIN_MAX_FAILURES = int(os.environ.get("ATHENA_LOGIN_MAX_FAILURES", "8"))
 LOGIN_LOCKOUT_SECONDS = int(os.environ.get("ATHENA_LOGIN_LOCKOUT_SECONDS", "900"))
 TRUST_FORWARDED_FOR = _flag("ATHENA_TRUST_FORWARDED_FOR", False)
+
+# Access roles (docs/guides/access-roles.md). A signed-in user who is in none of the four "Athena ..." groups
+# gets this role: "labeler" (default) or "viewer". They can never approve or roll back a model.
+ATHENA_UNASSIGNED_ROLE = os.environ.get("ATHENA_UNASSIGNED_ROLE", "labeler").strip().lower() or "labeler"
+if ATHENA_UNASSIGNED_ROLE not in {"labeler", "viewer"}:
+    raise ImproperlyConfigured("ATHENA_UNASSIGNED_ROLE must be 'labeler' or 'viewer'.")
+# When on, the person who started the training run for a model cannot approve that model.
+ATHENA_APPROVAL_REQUIRES_SECOND_PERSON = _flag("ATHENA_APPROVAL_REQUIRES_SECOND_PERSON", False)
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"

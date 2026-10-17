@@ -173,11 +173,15 @@ def _images_for(analysis: Analysis) -> list[dict[str, Any]]:
     ]
 
 
+def _split_notes(analysis: Analysis) -> list[str]:
+    return splits.shortfall_notes(len({asset.sha256 for asset in analysis.assets.values()}), analysis.config)
+
+
 def preview(analysis: Analysis) -> dict[str, Any]:
     """Split / balance / duplicate summary for readiness, built exactly like the manifest's."""
     if not analysis.accepted:
         return {}
-    return manifest.summarise(_images_for(analysis), analysis.project.labels)
+    return manifest.summarise(_images_for(analysis), analysis.project.labels, _split_notes(analysis), analysis.config.as_dict())
 
 
 def create_version(analysis: Analysis, user) -> DatasetVersion:
@@ -199,7 +203,7 @@ def create_version(analysis: Analysis, user) -> DatasetVersion:
                 box_count=len(analysis.accepted),
                 excluded_suggested_count=analysis.suggested_boxes,
                 excluded_image_count=analysis.images_without_accepted,
-                split_config=analysis.config.as_dict(),
+                split_config={**analysis.config.as_dict(), "split_algorithm": splits.ALGORITHM},
             )
             document = manifest.build_manifest(
                 dataset_id=version.id,
@@ -213,6 +217,7 @@ def create_version(analysis: Analysis, user) -> DatasetVersion:
                 split_config=version.split_config,
                 excluded=analysis.excluded,
                 images=images,
+                split_notes=_split_notes(analysis),
             )
             version.manifest = document
             version.manifest_sha256 = manifest.sha256_hex(document)

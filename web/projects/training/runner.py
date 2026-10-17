@@ -297,4 +297,7 @@ def register_candidate(
 
 
 def heartbeat(state: str, backend_names: dict[str, bool] | None = None) -> None:
-    record_worker_heartbeat(WORKER_KEY, state, backend_names)
+    # The helper is the process that downloads ready-made models, so it says whether it is allowed to.
+    from .torchvision_frcnn import downloads_allowed
+
+    record_worker_heartbeat(WORKER_KEY, state, backend_names, {"downloads_allowed": downloads_allowed()})

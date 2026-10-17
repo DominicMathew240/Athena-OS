@@ -106,6 +106,7 @@ function displayType(project) {
 async function refreshProjectCounts() {
   try {
     const body = await api("/api/projects");
+    if (!Array.isArray(body.projects)) return; // an interrupted or empty answer: keep what the table already shows
     projects = body.projects;
     render();
   } catch (error) {
@@ -132,6 +133,12 @@ function announceCount(count) {
   lastCount = count;
 }
 
+// The address remembers which project is open, so Back, a reload or "All projects" in the builder return to it.
+// Every way of opening a project (clicking one, creating one) goes through this.
+function rememberProjectInAddress(id) {
+  if (id) history.replaceState(null, "", `#project=${id}`);
+}
+
 async function selectProject(id, { reveal = false } = {}) {
   if (id !== selectedId && labelsAreDirty() && !(await Athena.askConfirm({
     title: "Open another project without saving your labels?",
@@ -140,8 +147,8 @@ async function selectProject(id, { reveal = false } = {}) {
     confirmLabel: "Open it anyway"
   }))) return;
   selectedId = id;
-  // The address remembers which project is open, so Back, a reload or "All projects" in the builder return to it.
-  if (id) history.replaceState(null, "", `#project=${id}`);
+  Athena.useProject(id); // a role given for this project replaces the console-wide one while it is open
+  rememberProjectInAddress(id);
   render();
   const selected = projects.find(project => project.id === id);
   if (!selected) {
@@ -252,9 +259,38 @@ function render() {
   renderWorkspace();
 }
 
+/* The line at the top says which role applies. While a project with a role of its own is open it names that
+   role (and the console-wide one that applies everywhere else); otherwise it is the sentence the server wrote. */
+const roleStrip = document.getElementById("role-strip");
+const roleStripAtLoad = roleStrip ? { role: roleStrip.dataset.role, nodes: Array.from(roleStrip.childNodes, node => node.cloneNode(true)) } : null;
+const ROLE_ON_PROJECT = {
+  viewer: "Your account can look but not change things on this project. Ask an administrator for the Labeler role.",
+  labeler: "You can add pictures, draw boxes and save snapshots here. Teaching a model needs the Trainer role, and approving one needs the Approver role.",
+  trainer: "You can label, teach models and move them to trial here. Approving a model for use needs the Approver role.",
+  approver: "You can label, teach, and approve models for use here."
+};
+
+function showRole() {
+  if (!roleStrip || !roleStripAtLoad) return;
+  const access = Athena.access;
+  const project = access.scope === "project" ? projects.find(candidate => candidate.id === access.projectId) : null;
+  if (!project) {
+    roleStrip.dataset.role = roleStripAtLoad.role;
+    roleStrip.replaceChildren(...roleStripAtLoad.nodes.map(node => node.cloneNode(true)));
+    return;
+  }
+  const lead = document.createElement("strong");
+  lead.textContent = `Your role on “${project.name}”: ${Athena.roleTitle(access.role)}.`;
+  const elsewhere = Athena.roleTitle(roleStripAtLoad.role);
+  roleStrip.dataset.role = access.role;
+  roleStrip.replaceChildren(lead, ` ${ROLE_ON_PROJECT[access.role] || ""} On other projects your role is ${elsewhere}.`);
+}
+document.addEventListener("athena:rolechange", showRole);
+
 async function loadProjects() {
   try {
     const body = await api("/api/projects");
+    if (!Array.isArray(body.projects)) throw new Error("The answer was incomplete.");
     projects = body.projects;
     loadError = "";
     const remembered = (/^#project=([0-9a-f-]{36})$/i.exec(location.hash) || [])[1];
@@ -262,6 +298,7 @@ async function loadProjects() {
     if (!projects.some(project => project.id === selectedId)) {
       selectedId = projects[0]?.id || null;
     }
+    Athena.useProject(selectedId);
   } catch (error) {
     loadError = `Could not load your projects. ${error.message} Reload the page to try again.`;
   }
@@ -318,11 +355,13 @@ async function loadAssets(projectId) {
       remove.className = "asset-remove";
       remove.textContent = "Remove picture";
       remove.setAttribute("aria-label", `Remove picture ${asset.filename}`);
+      remove.dataset.needs = "label";
       remove.addEventListener("click", () => removeAsset(projectId, asset));
       const annotate = document.createElement("button");
       annotate.type = "button";
       annotate.className = "asset-annotate";
-      const annotateText = asset.pending_boxes ? "Review suggestions" : "Mark items";
+      // Someone who cannot change boxes can still open the picture to look at them.
+      const annotateText = !Athena.can("label") ? "See boxes" : asset.pending_boxes ? "Review suggestions" : "Mark items";
       annotate.textContent = annotateText;
       annotate.setAttribute("aria-label", `${annotateText} in ${asset.filename}`);
       annotate.addEventListener("click", () => openAnnotation(projectId, asset));
@@ -536,6 +575,12 @@ function renderBoxAnnotationList() {
   annotationList.replaceChildren();
   const project = projects.find(candidate => candidate.id === activeAnnotationAsset?.projectId);
   if (!project) return;
+  if (!boxAnnotations.length) {
+    const empty = document.createElement("p");
+    empty.className = "annotation-empty";
+    empty.textContent = "No boxes in this picture yet. Pick a label, then drag across the picture to draw the first one.";
+    annotationList.append(empty);
+  }
   boxAnnotations.forEach((box, index) => {
     const entry = document.createElement("article");
     entry.className = "annotation-entry";
@@ -559,6 +604,7 @@ const proposal = isProposal(box);
     const select = document.createElement("select");
     select.setAttribute("aria-label", `Label for box ${index + 1}`);
     select.disabled = annotationHistoryBusy || annotationMutationBusy;
+    select.dataset.needs = "label";
     project.labels.forEach(name => {
       const option = document.createElement("option");
       option.value = name;
@@ -575,6 +621,7 @@ const proposal = isProposal(box);
     remove.type = "button";
     remove.className = "annotation-remove";
     remove.disabled = annotationHistoryBusy || annotationMutationBusy;
+    remove.dataset.needs = "label";
     remove.textContent = proposal ? "Reject" : "Remove box";
     remove.setAttribute("aria-label", `${proposal ? "Reject suggested" : "Remove"} box ${index + 1}, ${box.label}`);
     remove.addEventListener("click", () => deleteBoxAnnotation(box));
@@ -586,6 +633,7 @@ if (proposal) {
   accept.type = "button";
   accept.className = "annotation-accept";
   accept.disabled = annotationHistoryBusy || annotationMutationBusy;
+  accept.dataset.needs = "label";
   accept.textContent = "Accept";
   accept.setAttribute("aria-label", `Accept proposed box ${index + 1}, ${box.label}`);
   accept.addEventListener("click", () => updateBoxAnnotation(box, { status: "accepted" }));
@@ -794,6 +842,7 @@ async function deleteBoxAnnotation(box) {
 }
 
 annotationCanvas.addEventListener("pointerdown", event => {
+  if (!Athena.can("label")) return; // looking is allowed; drawing, moving and resizing boxes are not
   if (!activeAnnotationAsset || annotationLabel.disabled || annotationHistoryBusy || annotationMutationBusy || event.button !== 0) return;
   const point = pointerCoordinates(event);
   const handle = resizeHandleAt(point);
@@ -865,6 +914,7 @@ annotationCanvas.addEventListener("pointercancel", () => {
   drawAnnotations();
 });
 annotationCanvas.addEventListener("keydown", event => {
+  if (!Athena.can("label")) return;
   if (annotationHistoryBusy || annotationMutationBusy) return;
   if ((event.metaKey || event.ctrlKey) && event.key.toLowerCase() === "z") {
     event.preventDefault();
@@ -896,6 +946,7 @@ annotationCanvas.addEventListener("keydown", event => {
 });
 keyboardBoxForm.addEventListener("submit", async event => {
   event.preventDefault();
+  if (!Athena.can("label")) return;
   if (annotationHistoryBusy || annotationMutationBusy) return;
   if (!activeAnnotationAsset || annotationLabel.disabled) {
     annotationStatus.textContent = "Add at least one label to this project before adding a box.";
@@ -1151,6 +1202,7 @@ async function deleteCurrentProject() {
     stopAutolabelPolling();
     projects = projects.filter(project => project.id !== selected.id);
     selectedId = null;
+    Athena.useProject(null);
     history.replaceState(null, "", location.pathname);
     imageAssetsPanel.hidden = true;
     autolabelPanel.hidden = true;
@@ -1263,6 +1315,9 @@ projectForm.addEventListener("submit", async event => {
     });
     projects.unshift(body.project);
     selectedId = body.project.id;
+    Athena.useProject(selectedId);
+    // Same as selectProject(): the address must name the open project, or a reload/Back reopens another one.
+    rememberProjectInAddress(selectedId);
     projectForm.reset();
     updateCustomModalityField();
     projectDialog.close();
@@ -1286,7 +1341,7 @@ const plural = (count, one, many) => `${count.toLocaleString()} ${count === 1 ? 
 
 function renderAutolabelBadge() {
   const badge = document.getElementById("autolabel-badge");
-  badge.textContent = !autolabelInfo.checked ? "Checking…" : !autolabelInfo.enabled ? "Off" : autolabelInfo.worker_online ? "Ready" : "Not running";
+  badge.textContent = !autolabelInfo.checked ? "Checking…" : !autolabelInfo.enabled ? "Off" : autolabelInfo.worker_online ? "Ready" : "Unavailable";
   badge.title = !autolabelInfo.enabled
     ? "Auto-suggest is turned off for this console."
     : autolabelInfo.worker_online
@@ -1365,7 +1420,7 @@ async function refreshAutolabel(projectId) {
     autolabelCancel.textContent = job?.cancel_requested ? "Stopping…" : "Stop suggesting";
     autolabelState.textContent = active
       ? (job.status === "queued" ? "Waiting to start" : "Working")
-      : info.worker_online ? "Helper program is running" : "Helper program is not running";
+      : info.worker_online ? "Helper program is running" : "Suggesting is switched off: the helper program is not running. Ask your administrator.";
     autolabelState.dataset.tone = !active && !info.worker_online ? "warn" : "";
     const showJob = job && (active || Date.now() - Date.parse(job.finished_at || job.created_at) < 10 * 60 * 1000);
     autolabelProgress.hidden = !showJob;
@@ -1766,7 +1821,7 @@ async function saveLabels() {
     const body = await api(`/api/projects/${encodeURIComponent(project.id)}`, {
       method: "PATCH",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(checked.payload)
+      body: JSON.stringify({ ...checked.payload, based_on: project.labels }) // the list this page last saw: the server refuses if someone else changed it
     });
     projects = projects.map(candidate => (candidate.id === project.id ? body.project : candidate));
     resetLabelDraft(body.project);
@@ -1845,6 +1900,15 @@ const snapshotsStatus = document.getElementById("snapshots-status");
 
 const SPLIT_NAMES = ["train", "val", "test"];
 const SPLIT_TITLES = { train: "Training", val: "Checking", test: "Final test" };
+const EMPTY_GROUP_ADVICE = {
+  train: "add more pictures so the model has something to learn from.",
+  val: "add more pictures to follow how well the model is learning.",
+  test: "add more pictures to check how well the model does."
+};
+// Same wording as the server's manifest warning, so a saved snapshot and the preview agree.
+function emptyGroupSentence(name) {
+  return `${SPLIT_TITLES[name]} has 0 pictures - ${EMPTY_GROUP_ADVICE[name]}`;
+}
 const SPLIT_DEFAULTS = { train: 80, val: 10, test: 10 };
 const MAX_SPLIT_SEED = 2147483647;
 const DOWNLOAD_FORMATS = [
@@ -1913,7 +1977,8 @@ function setDatasetError(message = "") {
 function updateSaveControls() {
   const parsed = readSplitForm();
   let reason = "";
-  if (dsState.saving) reason = "Saving your snapshot…";
+  if (!Athena.can("label")) reason = Athena.reasonFor("label");
+  else if (dsState.saving) reason = "Saving your snapshot…";
   else if (!dsState.readiness) reason = "Checking your work…";
   else if (!dsState.readiness.counts.accepted_boxes) reason = "You need at least one accepted box before you can save a snapshot.";
   else if (!dsState.ready) reason = "Fix the problems listed above first, then press “Check again”.";
@@ -2062,8 +2127,9 @@ function renderGroupNotes(data) {
   datasetGroupsIntro.textContent = `If you save now, pictures would be divided into groups like this: ${SPLIT_NAMES.map(name => `${SPLIT_TITLES[name]} ${plural(counts[name].images, "picture", "pictures")}`).join(", ")}.`;
   const notes = [];
   SPLIT_NAMES.forEach(name => {
-    if (counts[name].images === 0) notes.push(`No pictures would go into “${SPLIT_TITLES[name]}”. You can still save, but you would have no ${name === "test" ? "honest final score" : name === "val" ? "way to check progress while learning" : "pictures to learn from"}. Add more pictures, or change the amounts under “Advanced”.`);
+    if (counts[name].images === 0 && (data.split_config?.[name] ?? 1) > 0) notes.push(emptyGroupSentence(name) + (name === "test" ? " You can still save, but you would have no honest final score." : " You can still save."));
   });
+  notes.push(...(preview.split_notes || []));
   Object.entries(preview.class_balance || {}).forEach(([label, row]) => {
     if (row.total === 0) notes.push(`The label “${label}” has no accepted boxes yet, so a model cannot learn to find it.`);
     else if (row.train === 0) notes.push(`The label “${label}” has no examples in “Training”, so a model cannot learn to find it.`);
@@ -2193,7 +2259,13 @@ async function fillSnapshotDetails(projectId, dataset, container) {
   if (duplicates && duplicates.groups) container.append(dsNode("p", "dataset-note", duplicateWarning(duplicates)));
   const config = detail.split_config || dataset.split_config || {};
   const percent = value => `${Math.round((value || 0) * 1000) / 10}%`;
-  container.append(dsNode("p", "asset-help", `Pictures were divided up as Training ${percent(config.train)}, Checking ${percent(config.val)}, Final test ${percent(config.test)} (shuffle number ${config.seed ?? 0}).`));
+  // Show what actually happened (counts from the saved snapshot), then what was asked for.
+  const actual = detail.manifest?.split_counts || {};
+  const got = name => actual[name]?.images || 0;
+  container.append(dsNode("p", "asset-help", `Pictures were divided up as ${got("train")} Training, ${got("val")} Checking and ${got("test")} Final test (you asked for ${percent(config.train)} / ${percent(config.val)} / ${percent(config.test)}; shuffle number ${config.seed ?? 0}). With few pictures the real numbers can differ from the percentages.`));
+  SPLIT_NAMES.filter(name => (config[name] || 0) > 0 && !got(name))
+    .forEach(name => container.append(dsNode("p", "dataset-note", emptyGroupSentence(name))));
+  (detail.manifest?.split_notes || []).forEach(note => container.append(dsNode("p", "dataset-note", note)));
   container.append(buildCountsTable(dataset, detail));
 }
 
@@ -2306,6 +2378,7 @@ function buildSnapshotItem(projectId, dataset, open) {
 
   const download = dsNode("form", "snapshot-download");
   download.noValidate = true;
+  download.setAttribute("aria-label", `Download snapshot ${dataset.version}`);
   const fieldset = dsNode("fieldset", "snapshot-format");
   fieldset.append(dsNode("legend", "", `Download snapshot ${dataset.version} as`));
   DOWNLOAD_FORMATS.forEach((choice, index) => {
@@ -2325,6 +2398,7 @@ function buildSnapshotItem(projectId, dataset, open) {
   });
   const button = dsNode("button", "primary", "Download for training");
   button.type = "submit";
+  download.dataset.needs = "label"; // a download is recorded in the export log and takes the Labeler role
   button.setAttribute("aria-label", `Download snapshot ${dataset.version} for training`);
   if (incomplete) {
     // A disabled button cannot be focused, so the reason is also written next to it and linked to it.
@@ -2482,6 +2556,13 @@ const trSnapshotHelp = document.getElementById("tr-snapshot-help");
 const trTool = document.getElementById("tr-tool");
 const trToolHelp = document.getElementById("tr-tool-help");
 const trAdvanced = document.getElementById("tr-advanced");
+const trStartFrom = document.getElementById("tr-start-from");
+const trStartFromWhy = document.getElementById("tr-start-from-why");
+const trStartFromOptions = document.getElementById("tr-start-from-options");
+const trPreLicence = document.getElementById("tr-pre-licence");
+const trPreLicencePlain = document.getElementById("tr-pre-licence-plain");
+const trPreLicenceRaw = document.getElementById("tr-pre-licence-raw");
+const trPreAck = document.getElementById("tr-pre-ack");
 const trReset = document.getElementById("tr-reset");
 const trLockNote = document.getElementById("tr-lock-note");
 const trError = document.getElementById("tr-error");
@@ -2517,6 +2598,9 @@ const trDialogNoteHelp = document.getElementById("decision-note-help");
 const trDialogCount = document.getElementById("decision-count");
 const trDialogError = document.getElementById("decision-error");
 const trDialogConfirm = document.getElementById("decision-confirm");
+const trDialogAckRow = document.getElementById("decision-ack-row");
+const trDialogAck = document.getElementById("decision-ack");
+const trDialogAckText = document.getElementById("decision-ack-text");
 
 const TR_POLL_MS = 2000;
 const TR_HISTORY_MODELS = 15;
@@ -2539,7 +2623,7 @@ const TR_RUN_BADGES = {
 const TR_TOOLS = {
   "torchvision-fasterrcnn": {
     label: "Built-in teaching tool (torchvision)",
-    licence: "This tool is free, open-source software (BSD-3-Clause licence) that you may use at work. It starts from nothing: no ready-made model is downloaded, so there is no second licence to check. The models you teach with it belong to you. You are still responsible for having the right to use your own pictures.",
+    licence: "This tool is free, open-source software (BSD-3-Clause licence) that you may use at work. Unless you choose a ready-made start under “Advanced: start from a ready-made model”, it starts from nothing: nothing is downloaded, so there is no second licence to check. A ready-made start comes with its own terms, which are explained when you choose one. You are still responsible for having the right to use your own pictures.",
     speed: "It uses this computer’s processor only, so teaching can take from minutes to hours. With few pictures it learns little, so read the results carefully."
   }
 };
@@ -2549,6 +2633,13 @@ const TR_SETTINGS = [
   { keys: ["batch_size"], input: "tr-batch", message: "tr-batch-msg", min: 1, max: 16, name: "Pictures looked at together" },
   { keys: ["imgsz", "image_size", "img_size"], input: "tr-size", message: "tr-size-msg", min: 32, max: 2048, name: "Picture size while learning" }
 ].map(spec => ({ ...spec, field: document.getElementById(spec.input), msg: document.getElementById(spec.message), activeKey: null, defaultValue: null }));
+
+// How a run started, as shown in "Settings used for this run". The words come from the choice the person made.
+const TR_START_NAMES = {
+  none: "From scratch",
+  imagenet_backbone: "A general picture model (ImageNet)",
+  coco: "A general object model (COCO)"
+};
 
 const trState = {
   projectId: null, backends: null, readiness: null, runs: [], run: null, models: [], approvedId: null,
@@ -2609,6 +2700,7 @@ function trPlainMessage(text) {
     .replace(/\bbackend\b/gi, "teaching tool")
     .replace(/\bdataset version\b/gi, "snapshot")
     .replace(/\bdataset\b/gi, "snapshot")
+    .replace(/\s*\(API clients:[^)]*\)/g, "")
     .replace(/\bStage it\b/g, "Move it to trial")
     .replace(/\bstaged\b/gi, "ready for trial");
 }
@@ -2832,6 +2924,7 @@ function trRenderTools() {
   const tool = trSelectedTool();
   trToolHelp.textContent = tool ? (TR_TOOLS[tool.name]?.speed || "") : "";
   trConfigureSettings(tool);
+  trRenderStartFrom();
 }
 
 // Show only the settings this tool offers, filled with its safe starting values.
@@ -2874,6 +2967,59 @@ function trValidateSettings() {
   return { ok: !bad, config, bad };
 }
 
+// --- Advanced: start from a ready-made model ----------------------------------------------
+// The server decides what is offered and whether it can be used (trained tools that offer nothing show nothing).
+// Nothing is downloaded by choosing here; the helper downloads when teaching starts, and only if an administrator
+// has allowed it. Accuracy figures are never repeated in this panel: they are in docs/guides/model-quality.md.
+function trStartOptions() {
+  return trSelectedTool()?.start_options || [];
+}
+
+function trSelectedStart() {
+  const options = trStartOptions();
+  const picked = trStartFromOptions.querySelector("input[type=radio]:checked");
+  return options.find(option => option.value === picked?.value) || null;
+}
+
+function trRenderStartFrom() {
+  const options = trStartOptions();
+  trStartFrom.hidden = options.length === 0;
+  if (!options.length) { trPreAck.checked = false; trPreLicence.hidden = true; return; }
+  const radios = [...trStartFromOptions.querySelectorAll("input[type=radio]")];
+  let blockedReason = "";
+  let blockedSteps = "";
+  radios.forEach(radio => {
+    const option = options.find(candidate => candidate.value === radio.value);
+    const box = radio.closest(".start-choice");
+    box.hidden = !option;
+    if (!option) { radio.disabled = true; return; }
+    box.querySelector("[data-field=title]").textContent = option.title;
+    box.querySelector("[data-field=summary]").textContent = option.summary;
+    const state = box.querySelector("[data-field=state]");
+    state.textContent = option.available ? option.size_note : option.unavailable_reason;
+    state.dataset.tone = option.available ? "" : "off";
+    radio.disabled = !option.available;
+    box.dataset.off = option.available ? "false" : "true";
+    if (!option.available && !blockedReason) { blockedReason = option.unavailable_reason; blockedSteps = option.how_to_enable; }
+  });
+  if (radios.find(radio => radio.checked)?.disabled) radios.find(radio => radio.value === "none").checked = true;
+  trStartFromWhy.hidden = !blockedSteps;
+  trStartFromWhy.textContent = blockedSteps ? `Why some choices are greyed out: they would need a download, and downloading is not allowed on this computer. ${blockedSteps}` : "";
+  trRenderPreLicence();
+}
+
+// The licence box and the tick-box appear only for a ready-made start, and the tick starts unticked every time.
+function trRenderPreLicence(resetTick = false) {
+  const option = trSelectedStart();
+  const needs = Boolean(option?.needs_acknowledgement);
+  trPreLicence.hidden = !needs;
+  if (!needs || resetTick) trPreAck.checked = false;
+  if (!needs) return;
+  // The bold "Ask a lawyer" line below is the one warning shown here, so drop the same sentence from the end of the text.
+  trPreLicencePlain.textContent = option.licence_plain.replace(/\s*Ask a lawyer before commercial use\.\s*$/, "");
+  trPreLicenceRaw.textContent = trSelectedTool()?.license_note || "No licence note was provided. Ask your administrator.";
+}
+
 function trUpdateStart(problems = null) {
   const active = trIsActive(trState.run);
   trFields.disabled = active || trState.busy;
@@ -2884,11 +3030,13 @@ function trUpdateStart(problems = null) {
   const groups = trGroups(snapshot);
   const settings = TR_SETTINGS.every(spec => !spec.activeKey || trValidateFieldQuiet(spec));
   let why = "";
-  if (active) why = "Something is already being taught. Wait for it to finish or stop it first.";
+  if (!Athena.can("train")) why = Athena.reasonFor("train");
+  else if (active) why = "Something is already being taught. Wait for it to finish or stop it first.";
   else if (!dsState.snapshots.length) why = "Save a snapshot first.";
   else if (!tool || !trToolRunnable(tool)) why = "The teaching tool is not available here yet. See “Is everything ready?”.";
   else if (groups && !groups.train.images) why = `Snapshot ${snapshot.version} has no Training pictures. Choose another snapshot.`;
   else if (!settings) why = "Fix the highlighted advanced setting first.";
+  else if (trSelectedStart()?.needs_acknowledgement && !trPreAck.checked) why = "Tick the box under “Advanced: start from a ready-made model” to confirm you have read its licence note.";
   else if (trState.busy) why = "Starting…";
   trStartButton.disabled = Boolean(why) && why !== "Starting…" ? true : trState.busy;
   trStartHelp.textContent = why
@@ -2943,6 +3091,11 @@ function resetTraining(projectId) {
   trFacts.replaceChildren();
   trSnapshot.replaceChildren();
   trTool.replaceChildren();
+  trStartFromOptions.querySelector("#tr-pre-none").checked = true;
+  trStartFrom.open = false;
+  trStartFrom.hidden = true;
+  trPreAck.checked = false;
+  trPreLicence.hidden = true;
   trModelList.replaceChildren();
   trHistory.replaceChildren();
   trRunSection.hidden = true;
@@ -3025,16 +3178,31 @@ async function trStart() {
   const snapshot = trSelectedSnapshot();
   const tool = trSelectedTool();
   if (!snapshot || !tool) return;
+  const start = trSelectedStart();
+  const payload = { dataset_id: snapshot.id, backend: tool.name, config: { ...settings.config } };
+  if (start) {
+    payload.config.pretrained = start.value;
+    if (start.needs_acknowledgement) {
+      if (!trPreAck.checked) {
+        trStartFrom.open = true;
+        trSetError("Tick the box to confirm you have read the licence note for the ready-made model.");
+        trPreAck.focus();
+        return;
+      }
+      payload.acknowledge_pretrained_terms = true; // the server checks this again; the box is only a convenience
+    }
+  }
   trState.busy = true;
   trUpdateStart();
   try {
     const body = await api(`/api/projects/${encodeURIComponent(projectId)}/training/runs`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ dataset_id: snapshot.id, backend: tool.name, config: settings.config })
+      body: JSON.stringify(payload)
     });
     if (trState.projectId !== projectId) return;
     trState.run = body.run;
+    trPreAck.checked = false; // the next run needs its own deliberate tick
     trState.runs.unshift(body.run);
     trState.workerOnline = body.worker_online;
     trState.lastQuarter = -1;
@@ -3250,6 +3418,7 @@ function trRenderRun() {
   };
   addSetting("Snapshot", `Snapshot ${run.dataset.version}`);
   addSetting("Teaching tool", trToolLabel(run.backend));
+  if (run.config && "pretrained" in run.config) addSetting("How it started", TR_START_NAMES[run.config.pretrained] || "A ready-made model");
   TR_SETTINGS.forEach(spec => {
     const key = spec.keys.find(candidate => candidate in run.config);
     if (key) addSetting(spec.name, String(run.config[key]));
@@ -3294,12 +3463,21 @@ function trStateText(model) {
   return `Retired${model.retired_at ? ` on ${formatWhen(model.retired_at)}` : ""}. It is kept saved but is not in use.${replacer ? ` You can bring it back with “Go back to previous model” on ${trModelName(replacer)}.` : " A retired model cannot be approved again; teach again to get a fresh Candidate."}`;
 }
 
-function trActionButton(label, enabled, run, primary = false) {
+// `need` is the role the action takes ("train" or "approve"). Without it the button is switched off and says why;
+// the server refuses the call as well, so this only saves the person a pointless click.
+function trActionButton(label, enabled, run, primary = false, need = null) {
   const button = dsNode("button", primary ? "primary" : "secondary", label);
   button.type = "button";
-  button.disabled = !enabled;
-  if (enabled) button.addEventListener("click", () => run(button));
+  const allowed = !need || Athena.can(need);
+  if (need) button.dataset.needs = need;
+  button.disabled = !(enabled && allowed);
+  if (enabled && allowed) button.addEventListener("click", () => run(button));
   return button;
+}
+
+// Approval can also be limited to "someone other than the person who started the teaching".
+function trApprovalBlockedBySecondPerson(model) {
+  return Athena.access.secondPerson && Boolean(Athena.access.me) && model.lineage?.run_started_by === Athena.access.me;
 }
 
 function trBuildModel(model) {
@@ -3346,26 +3524,31 @@ function trBuildModel(model) {
   let why = "";
   if (model.stage === "candidate") {
     const canStage = Boolean(model.evaluation?.available);
-    const trial = trActionButton("Move to trial", canStage, button => trOpenDecision("trial", model, button));
+    const trial = trActionButton("Move to trial", canStage, button => trOpenDecision("trial", model, button), false, "train");
     trial.setAttribute("aria-label", `Move ${trModelName(model)} to trial`);
-    const approve = trActionButton("Approve for use", false, () => {}, true);
+    const approve = trActionButton("Approve for use", false, () => {}, true, "approve");
     approve.setAttribute("aria-label", `Approve ${trModelName(model)} for use`);
     actions.append(trial, approve);
     why = canStage
       ? "“Approve for use” unlocks after you move the model to trial."
       : "“Move to trial” is switched off because there are no results to read. Teach again from a snapshot that has Final test pictures. “Approve for use” needs a trial first.";
   } else if (model.stage === "staged") {
-    const approve = trActionButton("Approve for use", true, button => trOpenDecision("approve", model, button), true);
+    const sameStarter = trApprovalBlockedBySecondPerson(model);
+    const approve = trActionButton("Approve for use", !sameStarter, button => trOpenDecision("approve", model, button), true, "approve");
+    if (sameStarter) why = "“Approve for use” is switched off because you started the teaching run for this model, and this console needs someone else to approve it.";
     approve.setAttribute("aria-label", `Approve ${trModelName(model)} for use`);
     actions.append(approve);
   } else if (model.stage === "approved") {
     const previous = trState.models.find(candidate => candidate.id === model.previous_approved_id && candidate.stage === "retired");
-    const back = trActionButton("Go back to previous model", Boolean(previous), button => trOpenDecision("rollback", model, button));
+    const back = trActionButton("Go back to previous model", Boolean(previous), button => trOpenDecision("rollback", model, button), false, "approve");
     back.setAttribute("aria-label", `Go back to the previous model instead of ${trModelName(model)}`);
     actions.append(back);
     if (!previous) why = "“Go back to previous model” is switched off because no earlier model was ever approved.";
   }
   item.append(actions);
+  // Say which role is missing, once, ahead of the other reasons.
+  const missing = ["train", "approve"].filter(need => actions.querySelector(`[data-needs="${need}"]`) && !Athena.can(need));
+  if (missing.length) why = [...new Set(missing.map(Athena.reasonFor)), why].filter(Boolean).join(" ");
   if (why) {
     const reason = dsNode("p", "model-why", why);
     reason.id = whyId;
@@ -3570,8 +3753,14 @@ function trDecisionConfig(kind, model) {
   }
   if (kind === "approve") {
     const body = [trText(trResultSummary(model))];
-    if (model.evaluation?.available && !model.evaluation.recall) {
+    // The server enforces the same rule: no results, or none of the held-back boxes found, needs a ticked box.
+    const noResults = !model.evaluation?.available;
+    const foundNone = Boolean(model.evaluation?.available && !model.evaluation.recall);
+    if (foundNone) {
       body.push(dsNode("p", "dataset-note", "Take care: on the Final test pictures this model found none of the boxes people had drawn. Read its results before you rely on it."));
+    }
+    if (noResults) {
+      body.push(dsNode("p", "dataset-note", "Take care: this model has no results, so nobody can say how well it works. Read its page before you rely on it."));
     }
     if (model.evaluation?.available && model.evaluation.test_images < 30) {
       const warning = dsNode("p", "dataset-note", `Take care: this was checked on only ${plural(model.evaluation.test_images, "picture", "pictures")}. That is a small sample, and the scores are not a guarantee about real-world use.`);
@@ -3593,6 +3782,11 @@ function trDecisionConfig(kind, model) {
       noteHelp: "One sentence is enough, for example “Found 9 of 10 test boxes; checked with the shift lead.”",
       required: true,
       confirm: "Approve for use",
+      acknowledge: foundNone || noResults
+        ? (noResults
+          ? "I understand this model has no results and I still want to use it"
+          : "I understand this model found none of the test boxes and I still want to use it")
+        : "",
       path: `/models/${model.id}/approve`,
       done: `${name} is now Approved.`
     };
@@ -3631,7 +3825,10 @@ function trOpenDecision(kind, model, trigger) {
   trDialogError.textContent = "";
   trDialogError.dataset.open = "false";
   trDialogConfirm.textContent = config.confirm;
-  trDialogConfirm.disabled = config.required;
+  trDialogConfirm.disabled = config.required || Boolean(config.acknowledge);
+  trDialogAck.checked = false;
+  trDialogAckText.textContent = config.acknowledge || "";
+  trDialogAckRow.hidden = !config.acknowledge;
   trUpdateNoteCount();
   trDialog.showModal();
   trDialogNote.focus();
@@ -3640,7 +3837,10 @@ function trOpenDecision(kind, model, trigger) {
 function trUpdateNoteCount() {
   const length = trDialogNote.value.length;
   trDialogCount.textContent = `${length} of ${TR_NOTE_LIMIT} characters.`;
-  if (trDecision.config) trDialogConfirm.disabled = trState.decisionBusy || (trDecision.config.required && !trDialogNote.value.trim());
+  if (trDecision.config) {
+    const needsTick = Boolean(trDecision.config.acknowledge) && !trDialogAck.checked;
+    trDialogConfirm.disabled = trState.decisionBusy || needsTick || (trDecision.config.required && !trDialogNote.value.trim());
+  }
 }
 
 async function trSubmitDecision() {
@@ -3653,6 +3853,12 @@ async function trSubmitDecision() {
     trDialogNote.focus();
     return;
   }
+  if (config.acknowledge && !trDialogAck.checked) {
+    trDialogError.textContent = "Tick the box to say you understand, or cancel.";
+    trDialogError.dataset.open = "true";
+    trDialogAck.focus();
+    return;
+  }
   trState.decisionBusy = true;
   trDialogConfirm.disabled = true;
   trDialogError.textContent = "";
@@ -3662,7 +3868,7 @@ async function trSubmitDecision() {
     const body = await api(`/api/projects/${encodeURIComponent(projectId)}${config.path}`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ note })
+      body: JSON.stringify(config.acknowledge ? { note, acknowledge_weak_results: true } : { note })
     });
     trDecision.succeeded = true;
     trDialog.close();
@@ -3742,11 +3948,14 @@ async function trLoadHistory(projectId) {
 trForm.addEventListener("submit", event => { event.preventDefault(); if (!trStartButton.disabled) void trStart(); });
 trRecheck.addEventListener("click", () => { if (trState.projectId) { void trLoadReadiness(trState.projectId); void trLoadModels(trState.projectId); } });
 trReset.addEventListener("click", trResetSettings);
+trStartFromOptions.addEventListener("change", () => { trRenderPreLicence(true); trUpdateStart(); trSetError(); });
+trPreAck.addEventListener("change", () => { trUpdateStart(); trSetError(); });
 trCancel.addEventListener("click", () => void trCancelRun());
 trSnapshot.addEventListener("change", async () => { trSetError(); trRenderReadiness(); await trLoadGroups(trSelectedSnapshot()); trRenderReadiness(); trUpdateSnapshotHelp(); });
 trTool.addEventListener("change", () => { trSetError(); trConfigureSettings(trSelectedTool()); trToolHelp.textContent = TR_TOOLS[trTool.value]?.speed || ""; void trLoadReadiness(trState.projectId); });
 TR_SETTINGS.forEach(spec => spec.field.addEventListener("input", () => { trSetError(); trValidateSettings(); }));
 trDialogNote.addEventListener("input", trUpdateNoteCount);
+trDialogAck.addEventListener("change", trUpdateNoteCount);
 trDialogForm.addEventListener("submit", event => { event.preventDefault(); void trSubmitDecision(); });
 document.getElementById("decision-cancel").addEventListener("click", () => trDialog.close());
 document.getElementById("decision-close").addEventListener("click", () => trDialog.close());
@@ -3824,6 +4033,7 @@ function renderCheckScreens(project, apps) {
       const edit = dsNode("a", "secondary link-button", "Edit");
       edit.href = `${setupBase}?app=${encodeURIComponent(app.id)}`;
       edit.setAttribute("aria-label", `Edit the screen ${app.name}`);
+      Athena.gate(edit, "train");
       actions.append(edit);
     }
     item.append(actions);
@@ -3998,6 +4208,7 @@ function renderChecklist(project) {
         link.className = `${step.state === "next" ? "primary" : "secondary"} link-button`;
         link.textContent = step.action.label;
         link.setAttribute("aria-label", `${step.action.label} (step ${number}: ${step.title})`);
+        Athena.gate(link, "train"); // the only link here opens the check-screen setup page
         item.append(link);
       } else {
         button.addEventListener("click", step.action.run);
@@ -4061,3 +4272,34 @@ function renderWorkspace() {
 updateCustomModalityField();
 void loadAutolabelStatus();
 loadProjects();
+
+/* ---- jump links: the project page is long, so a bar of links goes to each part. A link shows only while its panel is on the page. */
+(() => {
+  const nav = document.getElementById("jump-nav");
+  if (!nav) return;
+  const links = [...nav.querySelectorAll("a[data-panel]")];
+  const sync = () => {
+    let shown = 0;
+    links.forEach(link => {
+      const panel = document.getElementById(link.dataset.panel);
+      const on = Boolean(panel) && !panel.hidden;
+      link.hidden = !on;
+      if (on) shown += 1;
+    });
+    nav.hidden = shown < 2;
+  };
+  const observer = new MutationObserver(sync);
+  links.forEach(link => {
+    const panel = document.getElementById(link.dataset.panel);
+    if (panel) observer.observe(panel, { attributes: true, attributeFilter: ["hidden"] });
+    link.addEventListener("click", event => {
+      const target = document.getElementById(link.dataset.panel);
+      if (!target) return;
+      event.preventDefault(); // the address keeps #project=..., which the console uses to remember the open project
+      target.scrollIntoView({ behavior: matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "start" });
+      const heading = target.querySelector("h3");
+      if (heading) { heading.setAttribute("tabindex", "-1"); heading.focus({ preventScroll: true }); }
+    });
+  });
+  sync();
+})();

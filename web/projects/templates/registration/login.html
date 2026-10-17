@@ -3,11 +3,13 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#080a0b">
+  <meta name="theme-color" content="#09090a">
   <title>Sign in · Athena console</title>
+  <link rel="icon" type="image/png" href="{% static 'projects/brand/athena-mark-32.png' %}">
   <link rel="stylesheet" href="{% static 'projects/console.css' %}">
 </head>
 <body>
+  <a class="skip-link" href="#main">Skip to main content</a>
   <div class="signin">
     <header class="signin-aside">
       <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>ATHENA<small>DATA LABELLING</small></span></div>
@@ -16,9 +18,9 @@
         <p>Add pictures, mark the items you care about, and let the computer suggest boxes. Nothing it suggests counts until a person checks it.</p>
       </div>
     </header>
-    <main class="signin-main">
+    <main class="signin-main" id="main" tabindex="-1">
       <h2>Sign in</h2>
-      <form class="signin-form" method="post" action="{% url 'login' %}">
+      <form class="signin-form" method="post" action="{% url 'login' %}" aria-label="Sign in">
         {% csrf_token %}
         {% if form.errors %}<p class="form-error" data-open="true" role="alert">{% if form.non_field_errors %}{{ form.non_field_errors.0 }} If you keep having trouble, ask your administrator.{% else %}Type both your username and your password, then press Sign in.{% endif %}</p>{% endif %}
         <label for="id_username">Username<input id="id_username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus value="{{ form.username.value|default:'' }}"></label>

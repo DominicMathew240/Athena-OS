@@ -76,7 +76,7 @@ These contracts describe inference and evaluation records. They are not yet a da
 | Project/dataset/annotation schemas | Human labeling and versioned data | Planned; contracts not yet frozen |
 | Training integration | Reproducible training and evaluation run | Planned |
 | Custom inference UI | Operator-configurable real-world frontend | Planned |
-| Scanner/data-source connector API | Input and feedback integration | Planned |
+| `athena_sdk.connectors` | Vendor-neutral data-source connector contract, folder-watch and HTTP-push reference connectors, console sink ([guide](guides/writing-a-connector.md)) | Implemented in source; **no real scanner or vendor protocol selected or tested**; feedback integration not included |
 
 ## Interface boundary
 

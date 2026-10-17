@@ -1,0 +1,49 @@
+/* The access screen (access.html). Builds on console.css. */
+.access-status { margin: 12px 0 0; padding: 9px 12px; border: 1px solid var(--rule-2); background: var(--panel); font-size: 15px; line-height: 1.45; }
+.access-status:empty { display: none; }
+.access-status[data-tone="error"] { border-color: var(--bad-line); color: var(--bad); background: var(--bad-tint); }
+.access-status[data-tone="ok"] { border-color: var(--ok); }
+.access-panel { margin-top: 16px; }
+.role-key { display: grid; gap: 6px; margin: 0 0 8px; }
+.role-key-row { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; align-items: baseline; }
+.role-key dt { font-weight: 750; font-size: 15px; }
+.role-key dd { margin: 0; color: var(--fg-2); font-size: 15px; }
+.access-find { display: flex; flex-wrap: wrap; align-items: end; gap: 12px 18px; margin: 0 0 12px; }
+.access-find label { display: grid; gap: 5px; font-size: 15px; font-weight: 700; min-width: min(100%, 260px); }
+.access-find input, .access-find select, .person select, .project-add select {
+  min-height: 40px; padding: 7px 10px; border: 1px solid var(--field-line); border-radius: 0; background: var(--field); color: var(--fg);
+  font-size: var(--field-size); font-weight: 400; max-width: 100%;
+}
+.access-find .field-help { margin: 0; }
+.people { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
+.person { padding: 12px 14px; border: 1px solid var(--rule-2); background: var(--panel-2); }
+.person-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 8px; }
+.person-name { margin: 0; font-size: 16px; overflow-wrap: anywhere; }
+.person-ref { color: var(--fg-3); font: 14px/1.2 var(--f-mono); }
+.person-row, .project-role, .project-add { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
+.person-row label, .project-role label, .project-add label { font-size: 15px; font-weight: 700; }
+.project-role label { min-width: 160px; overflow-wrap: anywhere; }
+.person-warn { flex-basis: 100%; margin: 0; color: var(--fg); }
+.person-projects { margin-top: 12px; padding-top: 10px; border-top: 1px solid var(--rule); }
+.person-projects h4 { margin: 0 0 6px; font-size: 15px; }
+.project-roles { display: grid; gap: 8px; margin: 0 0 10px; padding: 0; list-style: none; }
+.project-add { margin-top: 6px; }
+.person .secondary { min-height: 40px; }
+.record-table td { overflow-wrap: anywhere; }
+.access-panel tbody tr { cursor: default; }
+.access-panel tbody tr:hover { background: transparent; }
+.access-more { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
+.access-more .field-help { margin: 0; }
+.access-panel code { font: 14px var(--f-mono); }
+@media (max-width: 850px) {
+  .person .secondary, .access-find input, .access-find select, .person select, .project-add select { min-height: 44px; }
+  .role-key-row { grid-template-columns: 1fr; gap: 2px; }
+  .project-role label { min-width: 100%; }
+  .person select, .project-add select { flex: 1 1 180px; }
+}
+@media (max-width: 580px) {
+  .record-table thead { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
+  .record-table, .record-table tbody, .record-table tr, .record-table td { display: block; width: 100%; }
+  .record-table tr { padding: 8px 4px; border-bottom: 1px solid var(--rule); }
+  .record-table td { padding: 2px 6px; border: 0; }
+}

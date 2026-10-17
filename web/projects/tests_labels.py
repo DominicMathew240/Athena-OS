@@ -9,6 +9,7 @@ from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 
 from .models import Asset, AutoLabelJob, BoxAnnotation, Project
+from .tests import grant
 
 
 class LabelEditorTestCase(TestCase):
@@ -63,6 +64,29 @@ class LabelEditorTestCase(TestCase):
         return sorted(
             (asset or self.asset).annotations.values_list("label", flat=True)
         )
+
+
+class StaleEditTests(LabelEditorTestCase):
+    """Two tabs on one project: the second save must not silently erase what the first one added."""
+
+    def test_a_save_based_on_an_out_of_date_list_is_refused_and_changes_nothing(self) -> None:
+        seen = ["knife", "laptop", "bottle"]
+        first = self.patch_labels({"labels": [*seen, "from-tab-a"], "based_on": seen})
+        self.assertEqual(first.status_code, 200, first.content)
+        second = self.patch_labels({"labels": [*seen, "from-tab-b"], "based_on": seen})
+        self.assertEqual(second.status_code, 409, second.content)
+        self.assertIn("Reload the page", second.json()["error"])
+        self.assertEqual(self.labels(), [*seen, "from-tab-a"])
+
+    def test_a_save_based_on_the_current_list_works_and_based_on_is_optional(self) -> None:
+        ok = self.patch_labels({"labels": ["knife", "laptop", "bottle", "x"], "based_on": ["knife", "laptop", "bottle"]})
+        self.assertEqual(ok.status_code, 200, ok.content)
+        without = self.patch_labels({"labels": ["knife", "laptop", "bottle", "x", "y"]})
+        self.assertEqual(without.status_code, 200, without.content)
+
+    def test_based_on_must_be_a_list_of_names(self) -> None:
+        bad = self.patch_labels({"labels": ["knife"], "based_on": "knife"})
+        self.assertEqual(bad.status_code, 400, bad.content)
 
 
 class AddRenameReorderTests(LabelEditorTestCase):
@@ -398,5 +422,8 @@ class SafetyTests(LabelEditorTestCase):
     def test_other_methods_still_behave(self) -> None:
         self.assertEqual(self.client.get(self.url()).status_code, 405)
         self.assertEqual(self.client.put(self.url()).status_code, 405)
+        # Deleting a whole project (with its snapshots and models) takes the Trainer role.
+        self.assertEqual(self.client.delete(self.url()).status_code, 403)
+        grant(self.user, "trainer")
         self.assertEqual(self.client.delete(self.url()).status_code, 200)
         self.assertFalse(Project.objects.filter(id=self.project.id).exists())

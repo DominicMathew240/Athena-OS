@@ -20,6 +20,8 @@ from PIL import Image, UnidentifiedImageError
 
 from .forms import ProjectCreateForm, normalize_label_names
 from .models import Asset, AutoLabelJob, BoxAnnotation, Project
+from . import permissions
+from .permissions import access
 
 MAX_REQUEST_BYTES = 1_048_576
 MAX_IMAGE_UPLOADS = 20
@@ -35,9 +37,21 @@ BOX_COORDINATE_FIELDS = ("x", "y", "width", "height")
 BOX_COORDINATE_QUANTUM = Decimal("0.00000001")
 
 
+@access()
+@require_http_methods(["GET", "HEAD"])
 @ensure_csrf_cookie
 def dashboard(request: HttpRequest):
     return render(request, "projects/console.html")
+
+
+@access()
+@require_http_methods(["GET"])
+def api_me(request: HttpRequest) -> JsonResponse:
+    """What the signed-in person may do. The console reads this to switch off buttons they cannot use;
+    the server still refuses the call itself. No username or e-mail address is included."""
+    response = JsonResponse(permissions.describe(request.user))
+    response["Cache-Control"] = "no-store"
+    return response
 
 
 def _project_data(project: Project) -> dict[str, Any]:
@@ -251,6 +265,7 @@ def _validate_uploaded_image(upload) -> dict[str, Any]:
     }
 
 
+@access(POST="label")
 @require_http_methods(["GET", "POST"])
 def project_collection(request: HttpRequest) -> JsonResponse:
     if request.method == "GET":
@@ -313,7 +328,7 @@ def _read_label_edit(request: HttpRequest) -> dict[str, Any]:
         raise LabelEditError("The label changes were not valid JSON. Reload the page and try again.")
     if not isinstance(payload, dict):
         raise LabelEditError("The label changes must be a JSON object with a \"labels\" list.")
-    unsupported = payload.keys() - {"labels", "reassign"}
+    unsupported = payload.keys() - {"labels", "reassign", "based_on"}
     if unsupported:
         raise LabelEditError(
             f"Only labels can be changed here. Remove {_quoted(sorted(unsupported))} and try again."
@@ -370,6 +385,7 @@ def _plan_label_edit(project: Project, payload: dict[str, Any]) -> tuple[list[st
     return names, renames, removed
 
 
+@access(PATCH="label", DELETE="train")
 @require_http_methods(["PATCH", "DELETE"])
 def project_detail(request: HttpRequest, project_id) -> JsonResponse:
     if request.method == "PATCH":
@@ -392,6 +408,17 @@ def _update_project_labels(request: HttpRequest, project_id) -> JsonResponse:
         payload = _read_label_edit(request)
         with transaction.atomic():
             project = Project.objects.select_for_update().get(id=project.id)
+            based_on = payload.get("based_on")
+            if based_on is not None and (
+                not isinstance(based_on, list) or not all(isinstance(item, str) for item in based_on)
+            ):
+                raise LabelEditError("“based_on” must be the list of label names you were looking at.")
+            if based_on is not None and based_on != list(project.labels):
+                raise LabelEditError(
+                    "Someone changed this project's labels while you had the page open, so nothing was saved. "
+                    "Reload the page to see their changes, then make your change again.",
+                    409,
+                )
             names, renames, removed = _plan_label_edit(project, payload)
 
             reassign = payload.get("reassign", {})
@@ -465,6 +492,7 @@ def _update_project_labels(request: HttpRequest, project_id) -> JsonResponse:
     return JsonResponse({"project": _project_data(saved), "boxes_updated": boxes_updated})
 
 
+@access(POST="label")
 @require_http_methods(["GET", "POST"])
 def project_assets(request: HttpRequest, project_id) -> JsonResponse:
     project = get_object_or_404(Project, id=project_id)
@@ -519,6 +547,7 @@ def project_assets(request: HttpRequest, project_id) -> JsonResponse:
     return JsonResponse({"assets": [_asset_data(asset) for asset in created]}, status=201)
 
 
+@access(DELETE="label")
 @require_http_methods(["DELETE"])
 def project_asset_detail(request: HttpRequest, project_id, asset_id) -> JsonResponse:
     project = get_object_or_404(Project, id=project_id, modality="image")
@@ -528,6 +557,7 @@ def project_asset_detail(request: HttpRequest, project_id, asset_id) -> JsonResp
     return delete_asset(request, project, asset)
 
 
+@access(POST="label")
 @require_http_methods(["GET", "POST"])
 def project_asset_annotations(
     request: HttpRequest, project_id, asset_id
@@ -552,6 +582,7 @@ def project_asset_annotations(
     return JsonResponse({"annotation": _annotation_data(annotation)}, status=201)
 
 
+@access(PATCH="label", DELETE="label")
 @require_http_methods(["PATCH", "DELETE"])
 def box_annotation_detail(
     request: HttpRequest, project_id, asset_id, annotation_id
@@ -592,6 +623,7 @@ def box_annotation_detail(
     return JsonResponse({"annotation": _annotation_data(annotation)})
 
 
+@access()
 @require_http_methods(["GET"])
 def project_asset_content(request: HttpRequest, project_id, asset_id) -> FileResponse:
     asset = get_object_or_404(

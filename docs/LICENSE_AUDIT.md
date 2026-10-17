@@ -14,8 +14,8 @@
 | SDK/CLI deps: pydantic 2.14.1 + 4 transitive | **Yes**, MIT/PSF |
 | `examples/adapters/yolo_adapter.py` | Adapter source is Apache-2.0 and **links nothing copyleft** at ship time. `ultralytics` (AGPL-3.0) is *not* a declared dependency. **Using** the adapter with ultralytics installed pulls in AGPL-3.0: **NO** for a closed commercial service without an Ultralytics Enterprise license |
 | SAM weights `facebook/sam-vit-base` | **Yes**, Apache-2.0 (declared on the model card; upstream LICENSE read) |
-| CLIP weights `openai/clip-vit-base-patch32` | **Unclear, treat as risk.** The Hugging Face repo declares **no license**; upstream code repo is MIT; the model card states **any deployed use, commercial or not, is out of scope** (not a license term, but a stated intended-use limit) |
-| Static assets / fonts / CDNs | **None third-party found.** System font stack, no CDN, no icons |
+| CLIP weights `openai/clip-vit-base-patch32` | **Unclear, treat as risk.** The Hugging Face repo declares **no license**; upstream code repo is MIT; the model card states **any deployed use, commercial or not, is out of scope** (not a license term, but a stated intended-use limit) **Owner decision 2026-10-17: stays enabled by default** as the owner's accepted business risk, not a legal clearance (see [Owner decision: CLIP](#owner-decision-clip-stays-enabled-2026-10-17)) |
+| Static assets / fonts / CDNs | **Three OFL-1.1 fonts, self-hosted** (Anybody, Hanken Grotesk, Martian Mono). No CDN, no icon set, no third-party JS/CSS |
 | Docker base `python:3.13-slim` | **Yes**, but distributing the image means complying with Debian's GPL/LGPL packages (source offer) |
 | GitHub Actions used | **Yes**, MIT (CI-only, not distributed) |
 
@@ -196,14 +196,15 @@ It says the model is trained on a dataset of 11 million images and 1.1 billion m
 Read: `web/projects/static/projects/console.css`, `console.js`, `web/projects/templates/{projects/console.html,registration/login.html}`.
 
 * The only references are `{% static 'projects/console.css' %}` and `console.js`. A search for `http(s)://`, `@import`, `@font-face`, `<link`, `<script` found **no external URL, CDN, web font, icon set or third-party JS/CSS**.
-* Font stack is `-apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif`: system fonts, nothing is shipped. No images/SVG/woff/ico files under `web/projects`.
+* **Updated 2026-10-17:** the console now ships three variable fonts, Anybody, Hanken Grotesk and Martian Mono (Latin and Latin Extended `woff2`, `web/projects/static/projects/fonts/`), all SIL OFL 1.1 (copyright lines and licence texts in `OFL-*.txt` beside them; checked against github.com/google/fonts `ofl/anybody`, `ofl/hankengrotesk`, `ofl/martianmono`). OFL permits commercial use and bundling; the fonts must not be sold alone, and the reserved font names stay with their authors. They are served from the console's own origin, which the Content Security Policy requires (`font-src 'self'`). Also shipped: the Athena mark as two small PNGs (`brand/`), Athena's own artwork.
 * No Django admin in `INSTALLED_APPS`, so Django's bundled admin static (jQuery, Select2, etc.) is not shipped. `web/staticfiles/` is build output (git-ignored) containing only the two own files.
 * No copyright/license banners in `console.js`/`console.css`: no vendored third-party code found by inspection. `.DS_Store` in `web/projects/templates/` is an untracked junk file, not a license matter.
 
 | Component | Version | SPDX license | Evidence | Commercial use OK? | Obligations |
 |---|---|---|---|---|---|
 | Console CSS/JS/templates | n/a | Apache-2.0 (first-party) | files read as above | yes | none |
-| Third-party fonts/icons/CDN assets | none | n/a | grep of templates/static | n/a | none |
+| Fonts: Anybody, Hanken Grotesk, Martian Mono | Google Fonts builds, v13 / v12 / v6 | OFL-1.1 | `fonts/OFL-*.txt`; upstream METADATA.pb | yes | keep the licence text with the fonts; do not sell the fonts alone |
+| Icons / CDN assets | none | n/a | grep of templates/static | n/a | none |
 
 ## 7. Docker base image and GitHub Actions
 
@@ -250,13 +251,86 @@ This repo has **no `NOTICE` file**. `THIRD_PARTY_NOTICES.md` (repo root) now car
 
 ## Needs a lawyer / owner decision
 
-1. Whether Athena may offer the CLIP-based auto-labeler as a hosted/paid feature given OpenAI's "any deployed use ... out of scope" statement and the lack of an explicit weights license on the HF repo. Or whether to swap or gate it.
+1. Whether Athena may offer the CLIP-based auto-labeler as a hosted/paid feature given OpenAI's "any deployed use ... out of scope" statement and the lack of an explicit weights license on the HF repo. Or whether to swap or gate it. *Status 2026-10-17: the owner decided to keep CLIP enabled (see [Owner decision: CLIP](#owner-decision-clip-stays-enabled-2026-10-17)). That is a risk acceptance, not an answer to this question, so the question stays open for any hosted or paid offering.*
 2. Training-data exposure for CLIP (scraped web data) and SAM (SA-1B research license for the dataset) for your jurisdictions and customers' contracts (e.g. IP indemnities you may be asked to give).
 3. The AGPL boundary for the YOLO adapter: keep it in the Apache-2.0 tree with a warning, move it out of the `athena-cli` wheel, or remove it. And whether to buy an Ultralytics Enterprise license if customers use it.
 4. Container distribution: the exact GPL/LGPL source-offer mechanism for the Debian base layer and torch's bundled components.
 5. Whether to publish GPU images (NVIDIA EULA review).
 6. Whether to add a `NOTICE` file and which attribution text to put in it (Apache-2.0 §4(d)); whether docs stay CC-BY-4.0 while code is Apache-2.0.
 7. Trademark ("Athena", "Hugging Face", "Ultralytics", etc.) is out of scope for this audit.
+
+## Owner decision: CLIP stays enabled (2026-10-17)
+
+**Decision (owner, 2026-10-17):** keep using CLIP (`openai/clip-vit-base-patch32`) for auto-suggested labels. The default
+configuration keeps `ATHENA_AUTOLABEL_BACKEND=sam` and `ATHENA_CLIP_MODEL=openai/clip-vit-base-patch32`
+(`web/athena_web/settings.py`, `web/.env.example`). Nothing in the code was changed by this decision.
+
+**What this decision is, and is not.**
+
+* It is the owner's acceptance of a business risk for the project's own default setup. It is **not** a legal clearance, a
+  finding that CLIP may be used commercially, or advice from a lawyer. No lawyer reviewed it.
+* It binds **nobody else**. A company that self-hosts Athena OS runs its own worker, downloads the weights itself and carries
+  its own exposure. It cannot rely on the project owner's decision and must take its own advice before commercial deployment
+  (`web/DEPLOYMENT.md`, "Licences and model terms", says so).
+* Athena OS must not describe CLIP as "MIT-licensed weights" or "cleared for commercial use". Searched on 2026-10-17 in `README.md`,
+  `PRODUCT.md`, `ROADMAP.md`, `web/README.md`, `web/DEPLOYMENT.md`, `THIRD_PARTY_NOTICES.md`, the console templates and static
+  files, and `web/projects/autolabel/`: none does.
+
+**What remains true and unresolved** (re-checked 2026-10-17, sources below):
+
+1. **The Hugging Face repo declares no licence.** The model's API record at revision `3d74acf9a28c` (the same revision as the original
+   audit) has no `license:` tag, the model card's front matter has no `license` field, and the file list has no LICENSE file.
+2. **The upstream code repository is MIT; that is not a statement about the weights.** `openai/CLIP` `LICENSE` begins "MIT License /
+   Copyright (c) 2021 OpenAI" and grants permission "to deal in the Software without restriction, including without limitation the
+   rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software". It defines the licensed
+   thing as "the Software" and says nothing about trained weights. Whether OpenAI licensed the weights under MIT is **not stated** on
+   the pages read.
+3. **The model card says deployed use is out of scope.** Auto-suggest in a running console is a deployed use. The card is a statement of
+   intended use, not a licence term, but a customer or regulator can quote it.
+4. **The card also puts "surveillance" use out of scope**, and Athena's example operators are warehouse and security-scanner staff.
+   Whether labelling pictures for an inspection-screen workflow falls under "surveillance" is a question for a lawyer, not answered here.
+5. **Training data is undisclosed.** The card says part of the data came from the developers' own web crawl and that they "will not be releasing the dataset".
+   Copyright and privacy status of that data is unsettled and unreviewed here.
+6. **CLIP quality on real items is unmeasured.** The only run so far used 14 flat synthetic shapes (see `docs/dogfood/2026-10-operator-ux-report.md`).
+   The card says CLIP's performance varies with the class taxonomy and calls for "thorough in-domain testing".
+
+**What mitigates, without removing, the risk.** CLIP only proposes label names for regions that SAM found. Every proposal is stored
+as **Needs review** and is never exported or trained on until a person accepts it. An operator can switch the feature off
+(`ATHENA_AUTOLABEL_BACKEND=disabled`) or point `ATHENA_CLIP_MODEL` at another model; manual labelling does not use either model.
+
+**Quoted text (fetched 2026-10-17; only what was read).**
+
+Model card, `https://huggingface.co/openai/clip-vit-base-patch32/raw/main/README.md`:
+
+> "It was not developed for general model deployment - to deploy models like CLIP, researchers will first need to carefully study their capabilities in relation to the specific context they’re being deployed within."
+>
+> "**Any** deployed use case of the model - whether commercial or not - is currently out of scope. Non-deployed use cases such as image search in a constrained environment, are also not recommended unless there is thorough in-domain testing of the model with a specific, fixed class taxonomy."
+>
+> "Certain use cases which would fall under the domain of surveillance and facial recognition are always out-of-scope regardless of performance of the model."
+>
+> "The model was trained on publicly available image-caption data. This was done through a combination of crawling a handful of websites and using commonly-used pre-existing image datasets such as YFCC100M."
+>
+> "We do not intend for this dataset to be used as the basis for any commercial or deployed model and will not be releasing the dataset."
+
+Code repository licence, `https://raw.githubusercontent.com/openai/CLIP/main/LICENSE` (the whole file is the standard MIT text):
+
+> "MIT License
+>
+> Copyright (c) 2021 OpenAI
+>
+> Permission is hereby granted, free of charge, to any person obtaining a copy of this software and associated documentation files (the "Software"), to deal in the Software without restriction, including without limitation the rights to use, copy, modify, merge, publish, distribute, sublicense, and/or sell copies of the Software, [...]"
+
+Hugging Face API record, `https://huggingface.co/api/models/openai/clip-vit-base-patch32`: revision `3d74acf9a28c67741b2f4f2ea7635f0aaf6f0268`,
+last modified 2024-02-29; no tag beginning `license:`; files: `.gitattributes`, `README.md`, `config.json`, `flax_model.msgpack`, `merges.txt`,
+`preprocessor_config.json`, `pytorch_model.bin`, `special_tokens_map.json`, `tf_model.h5`, `tokenizer.json`, `tokenizer_config.json`, `vocab.json`.
+
+**Fetch notes.** The model-card page and the LICENSE file were fetched with the web extraction tool on 2026-10-17; the page extraction was
+abridged, so the card's full text and the API record were read from the raw/API URLs above with `curl` on the same day. I did not re-fetch
+`https://github.com/openai/CLIP/blob/main/model-card.md` on 2026-10-17 (the 2026-10-16 audit said it has the same text; unverified today).
+This section is an engineering record, not legal advice.
+
+**Triggers to revisit:** a hosted or paid Athena offering; a customer contract asking for IP indemnity or a licence warranty; OpenAI or
+Hugging Face adding or changing a licence statement; a measured quality problem; a decision to move to a model with an explicit weights licence.
 
 ## What I could not verify
 
@@ -293,6 +367,7 @@ Distributions with no license metadata are reported as UNKNOWN (fail with `--str
 | Caveat 2: CLIP deployed-use language not surfaced to operators | **Partly done.** `web/DEPLOYMENT.md` has a new "Licences and model terms" section: SAM (Apache-2.0) and the CLIP caveat as this audit recorded it (no licence declared on the Hugging Face repo; model card calls deployed use out of scope), with operator options (evaluate, set `ATHENA_AUTOLABEL_BACKEND=disabled`, or point `ATHENA_CLIP_MODEL` at a different model after your own licence review). **Still open:** the hosted/paid-feature decision (owner/lawyer decision 1) and any in-console notice. |
 | Training/inference follow-ups (W8) | **Done.** `torchvision==0.24.1` added to this audit and `THIRD_PARTY_NOTICES.md` (BSD-3-Clause; gate result OK with no allowlist change: ML venv of 16 distributions, OK=16, WARN=0, UNKNOWN=0, FAIL=0). The ML-venv resolution is macOS arm64; the Linux CPU wheel's own licence bundle was not downloaded. `examples/adapters/yolo_adapter.py` now carries the AGPL-3.0 warning in its docstring and `ImportError` text (message text only), closing the "still open" part of caveat 1; whether the adapter stays in the `athena-cli` wheel remains an owner decision. |
 | Caveat 3: "Without Docker" installed plain `requirements-autolabel.txt` | **Done.** `web/DEPLOYMENT.md` now uses `pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-autolabel.txt`, the same command `web/Dockerfile` runs, with the reason (PyPI CUDA wheels pull in NVIDIA packages) stated. The wording was not re-resolved on Linux in this pass; it reuses the approach verified above. |
+| Caveat 2 / owner decision 1 (CLIP) | **Owner decision recorded 2026-10-17: CLIP stays enabled by default**, as the owner's accepted risk, not a legal clearance and not transferable to downstream operators. See [Owner decision: CLIP](#owner-decision-clip-stays-enabled-2026-10-17). `web/DEPLOYMENT.md` and `THIRD_PARTY_NOTICES.md` updated the same day. **Still open:** the legal question for hosted/paid use; an in-console notice. |
 | Risk 8: CI path / layout mismatch | **Reported, not fixed** (owner decides; `.github/` untouched). See below. |
 | Pydantic floor (found while fixing `tests/test_contracts.py::test_generated_schema_matches_models`) | **Done.** `sdk/python/pyproject.toml` declared `pydantic>=2.6,<3`, but the checked-in `contracts/v1/model.schema.json` carries `"additionalProperties": true` on `metadata`, which Pydantic emits from 2.11 on. With 2.10.6 the schema generator output differs and the drift test fails; with 2.11.0 and 2.12.5 it passes unchanged. The checked-in schema was not stale; the declared floor was too low. Floor raised to `pydantic>=2.11,<3`; the test was not changed. |
 

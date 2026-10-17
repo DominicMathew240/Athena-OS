@@ -49,9 +49,33 @@ The suite covers sign-in, lockout, CSRF, CSP, deploy-time settings validation, t
 review rules (with a deterministic stand-in for the model), and the dataset API (review gating, validation,
 splits, immutability, COCO/YOLO round trips). The real SAM + CLIP pipeline is not run in the suite.
 
+### Browser smoke test (a real browser, one command)
+
+The Django tests read the JavaScript as text, so a script that throws on load leaves every button dead while the
+suite stays green (see `docs/blog/2026-10-tests-green-console-dead.md`). The smoke test opens the real pages in a
+real browser instead:
+
+```bash
+npm install --prefix web/scripts/.smoke playwright          # once; a development tool, not a dependency of the product
+npx --prefix web/scripts/.smoke playwright install chromium  # add `webkit` for the Safari engine
+bash web/scripts/run_browser_smoke.sh                        # Chromium
+bash web/scripts/run_browser_smoke.sh webkit "iPhone 13"     # Safari engine, phone emulation
+```
+
+`run_browser_smoke.sh` builds a disposable database in a temporary folder (never your data folder), starts the console
+on a free loopback port, runs `scripts/browser_smoke.mjs`, then stops the server and deletes everything. Needs Node 18+
+and the console's Python requirements (`ATHENA_SMOKE_PYTHON` picks the interpreter; `PLAYWRIGHT_NODE_MODULES` points at
+an existing `node_modules` that has `playwright`). It fails (exit 1) on an uncaught script error, a console error, a
+Content Security Policy violation, a failed request, a console that rendered but did not start, a control or form
+without an accessible name, a form field under 16 px or a page that scrolls sideways at 390/820/1024/1440 px, a
+dialog that lets Tab or Shift+Tab leave it or does not return focus, and a created project missing from the address.
+It does not measure accuracy, test real operators, Firefox, or a screen reader. CI runs it only on manual dispatch or on
+pull requests that change `web/projects/static/**` or `web/projects/templates/**` (job `browser-smoke` in
+`.github/workflows/web-ci.yml`).
+
 ## Implemented
 
-- Sign-in with lockout after repeated failures; one role (every user can see every project).
+- Sign-in with lockout after repeated failures. Four access roles (Viewer, Labeler, Trainer, Approver) enforced on the server for every write; a role can be given console-wide or for one project (it replaces the console-wide role on that project), but every signed-in person can still see every project. Administrators (superusers) assign roles on the **Access** screen (`/access`), which also shows a record of every role change; `manage.py athena_roles` does the same from the command line; people in no role group count as Labelers (or Viewers with `ATHENA_UNASSIGNED_ROLE=viewer`) and can never approve. Optional rule: whoever started a teaching run cannot approve its model (`ATHENA_APPROVAL_REQUIRES_SECOND_PERSON=1`). See [../docs/guides/access-roles.md](../docs/guides/access-roles.md).
 - Create, list, filter, search, and delete project metadata for ten modality types; only image projects have a task workspace.
 - A project checklist and short plain-language explanations on each panel (what a project, label, or suggestion is), rather than tool jargon.
 - Label editor: add, rename, reorder, and remove a project's labels without code. Renaming a label also renames it on boxes already drawn.
@@ -63,7 +87,7 @@ splits, immutability, COCO/YOLO round trips). The real SAM + CLIP pipeline is no
 
 ## Not implemented
 
-Roles and per-project access, encryption at rest, rights evidence/review, a console screen for dataset
+Hiding a project from some people (per-project roles limit who may change a project, not who may see it), delegated role assignment (only superusers assign), export of the role-change record, encryption at rest, rights evidence/review, a console screen for dataset
 versions and export (only the API exists), near-duplicate (not just byte-identical) leak
 detection, re-importing an exported dataset, model training/evaluation, operational inference, scanner
 connectors, modality plugins, and any benchmark of auto-label accuracy. Undo/redo is in memory only; full

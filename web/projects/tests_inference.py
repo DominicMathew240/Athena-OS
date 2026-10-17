@@ -428,6 +428,19 @@ class RunTests(InferenceBase):
         lifecycle.record_worker_heartbeat(lifecycle.INFERENCE_WORKER_KEY, "ready", {"fake-backend": True})
         self.assertEqual(self.run_image(app["id"], process=False).status_code, 202)
 
+    def test_a_model_whose_backend_is_not_installed_gets_a_plain_503_not_a_500(self) -> None:
+        # Found by the browser smoke run: the stand-in backend that made a seeded model was not installed in the web process.
+        from . import training
+
+        app = self.make_app()
+        training.unregister_backend(FakeBackend.name)
+        training._loaded = True  # keep the registry as it is: no re-discovery
+        response = self.run_image(app["id"], process=False)
+        self.assertEqual(response.status_code, 503, response.content[:200])
+        self.assertIn("no prediction was made", response.json()["error"])
+        self.assertIn("not installed", response.json()["error"])
+        self.assertEqual(ObservationRecord.objects.count(), 0)
+
     def test_upload_validation(self) -> None:
         app = self.make_app(config={"accepted_inputs": ["image/png"]})
         url = self.apps_url(f"/{app['id']}/run")

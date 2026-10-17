@@ -201,6 +201,7 @@
   /* -- saving ----------------------------------------------------------------------------- */
   async function onSave(event) {
     event.preventDefault();
+    if (!Athena.can("train")) { CS.showAlert(saveAlert, { title: "Not saved", text: Athena.reasonFor("train") }); return; }
     CS.hideAlert(saveAlert);
     setMsg(f.saveMsg, "");
     const data = collect();
@@ -289,6 +290,7 @@
 
   /* -- trying a picture ------------------------------------------------------------------- */
   async function onTry() {
+    if (!Athena.can("label")) return;
     const status = byId("cs-try-msg");
     setMsg(status, "");
     CS.hideAlert(tryAlert);

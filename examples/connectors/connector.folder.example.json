@@ -1,0 +1,24 @@
+{
+  "connector": {
+    "type": "folder_drop",
+    "path": "./inbox",
+    "source_label": "lane-1",
+    "stable_seconds": 2.0
+  },
+  "sink": {
+    "type": "athena_console",
+    "base_url": "http://127.0.0.1:8000",
+    "project_id": "00000000-0000-0000-0000-000000000000",
+    "app": "your-check-screen-slug",
+    "poll_timeout": 60
+  },
+  "pipeline": {
+    "ledger_path": "./connector-ledger.sqlite",
+    "queue_size": 16,
+    "overflow": "block",
+    "retry": {"max_attempts": 5, "base_delay": 0.5, "max_delay": 30, "jitter": "full"},
+    "drain_timeout": 20,
+    "health_interval": 10,
+    "health_file": "./connector-health.json"
+  }
+}

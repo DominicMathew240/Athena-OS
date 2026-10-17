@@ -750,6 +750,67 @@ class StageAndApprovalTests(TrainingBase):
         self.assertIn(("staged", "candidate", "staged", self.user.pk), events)
         self.assertIn(("approved", "staged", "approved", self.user.pk), events)
 
+    def weak_staged_model(self) -> ModelVersion:
+        FakeBackend.boxes = []  # predicts nothing, so it finds none of the held-out boxes
+        model = self.new_candidate()
+        self.assertEqual(model.evaluation["overall"]["recall"], 0.0)
+        self.assertEqual(self.stage(model).status_code, 200)
+        return model
+
+    def test_a_model_that_found_none_of_the_test_boxes_needs_an_explicit_acknowledgement(self) -> None:
+        model = self.weak_staged_model()
+        response = self.approve(model)
+        self.assertEqual(response.status_code, 409)
+        body = response.json()
+        self.assertTrue(body["needs_acknowledgement"])
+        self.assertIn("found none", body["error"])
+        self.assertIn("acknowledge_weak_results", body["error"])
+        model.refresh_from_db()
+        self.assertEqual(model.stage, "staged")  # nothing changed
+        self.assertFalse(ModelEvent.objects.filter(kind="approved").exists())
+        # a falsy or non-boolean flag is not an acknowledgement
+        self.assertEqual(self.post(self.api(f"/models/{model.id}/approve"), {"note": "ok", "acknowledge_weak_results": False}).status_code, 409)
+        self.assertEqual(self.post(self.api(f"/models/{model.id}/approve"), {"note": "ok", "acknowledge_weak_results": "yes"}).status_code, 400)
+
+    def test_acknowledged_weak_approval_works_and_is_audited_in_the_event_note(self) -> None:
+        model = self.weak_staged_model()
+        response = self.post(
+            self.api(f"/models/{model.id}/approve"), {"note": "Only for a dry run.", "acknowledge_weak_results": True}
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["model"]["stage"], "approved")
+        event = ModelEvent.objects.get(model_version=model, kind="approved")
+        self.assertIn("Only for a dry run.", event.note)
+        self.assertIn("acknowledged", event.note.lower())
+        self.assertIn("none of the", event.note)
+        self.assertEqual(event.actor_id_snapshot, self.user.pk)
+
+    def test_a_model_whose_evaluation_is_not_available_also_needs_the_acknowledgement(self) -> None:
+        model = self.new_candidate()
+        self.assertEqual(self.stage(model).status_code, 200)
+        from django.db import connection
+
+        with connection.cursor() as cursor:  # the ORM refuses to rewrite evaluations; simulate a damaged row
+            cursor.execute(
+                f"UPDATE {ModelVersion._meta.db_table} SET evaluation = %s WHERE id = %s",
+                [json.dumps({"available": False, "reason": "No test images."}), model.pk.hex if hasattr(model.pk, "hex") else model.pk],
+            )
+        model.refresh_from_db()
+        self.assertFalse(model.evaluation["available"])
+        refused = self.approve(model)
+        self.assertEqual(refused.status_code, 409)
+        self.assertTrue(refused.json()["needs_acknowledgement"])
+        self.assertIn("no results", refused.json()["error"])
+        ok = self.post(self.api(f"/models/{model.id}/approve"), {"note": "Pilot.", "acknowledge_weak_results": True})
+        self.assertEqual(ok.status_code, 200, ok.content)
+        self.assertIn("no results", ModelEvent.objects.get(model_version=model, kind="approved").note)
+
+    def test_a_good_model_needs_no_acknowledgement_and_gets_no_extra_audit_text(self) -> None:
+        model = self.new_candidate()
+        self.stage(model)
+        self.assertEqual(self.approve(model).status_code, 200)
+        self.assertNotIn("acknowledged", ModelEvent.objects.get(model_version=model, kind="approved").note.lower())
+
     def test_approving_a_second_model_retires_the_first_and_keeps_a_rollback_pointer(self) -> None:
         first = self.new_candidate()
         self.stage(first)

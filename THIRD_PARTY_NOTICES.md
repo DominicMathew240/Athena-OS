@@ -86,6 +86,17 @@ terms apply to what you do with it.
 | `facebook/sam-vit-base` (Segment Anything, ViT-B) | Apache-2.0 | https://huggingface.co/facebook/sam-vit-base ; https://github.com/facebookresearch/segment-anything (facebookresearch) |
 | `openai/clip-vit-base-patch32` (CLIP) | No license declared on the Hugging Face repo; the upstream code repository https://github.com/openai/CLIP is MIT, "Copyright (c) 2021 OpenAI". OpenAI's model card states that any deployed use of the model, commercial or not, is out of scope; see `docs/LICENSE_AUDIT.md` | https://huggingface.co/openai/clip-vit-base-patch32 |
 
+### Third-party model terms
+
+Model weights are not covered by Athena OS's Apache-2.0 licence and are not redistributed by it; your worker downloads them from
+Hugging Face and their terms apply to you. For **CLIP** (`openai/clip-vit-base-patch32`), the Hugging Face repository declares no
+licence (checked 2026-10-17), the MIT licence in the upstream `openai/CLIP` code repository is not a statement about the weights, the
+model card says any deployed use, commercial or not, is out of scope, and the training data is undisclosed. The Athena owner decided on
+2026-10-17 to keep CLIP enabled by default; that is a risk acceptance, **not a legal clearance, and not one that downstream operators
+can rely on**. Anyone deploying Athena OS commercially should take their own advice and may switch it off with
+`ATHENA_AUTOLABEL_BACKEND=disabled` or change the model with `ATHENA_CLIP_MODEL` (see `web/DEPLOYMENT.md`). Details and sources:
+[`docs/LICENSE_AUDIT.md`](docs/LICENSE_AUDIT.md).
+
 Citations requested by the model cards: Kirillov et al., "Segment Anything", arXiv:2304.02643; Radford et al., "Learning Transferable Visual Models From Natural Language Supervision", arXiv:2103.00020.
 
 ## Container base image
@@ -96,7 +107,15 @@ if you distribute the image, you are responsible for making corresponding source
 
 ## Static assets
 
-The web console uses only its own CSS/JS/templates and the system font stack. No third-party fonts, icons, scripts, or CDN resources are included.
+The web console uses its own CSS/JS/templates. It ships three third-party **fonts**, served from the console itself (no CDN), and no third-party icons or scripts. All three are under the SIL Open Font License 1.1; each licence text is in `web/projects/static/projects/fonts/OFL-*.txt`, and the fonts may be redistributed with the console but not sold on their own:
+
+| Font | Used for | Copyright | Licence |
+|---|---|---|---|
+| Anybody (variable) | headings, buttons | 2020 The Anybody Project Authors (https://github.com/Etcetera-Type-Co/Anybody) | OFL-1.1 |
+| Hanken Grotesk (variable) | text | 2021 The Hanken Grotesk Project Authors (https://github.com/marcologous/hanken-grotesk) | OFL-1.1 |
+| Martian Mono (variable) | labels, numbers, ids | 2021 The Martian Mono Project Authors (https://github.com/evilmartians/mono) | OFL-1.1 |
+
+They are the Google Fonts builds (Latin and Latin Extended subsets), the same faces as the athena-forge landing page. The console's logo is the Athena mark, copied from athena-forge (`frontend/public/athena-mark.png`), resized; it is Athena's own artwork.
 
 ## Documentation
 

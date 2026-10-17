@@ -1,0 +1,74 @@
+{% load static %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#09090a">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>Who can do what · Athena console</title>
+  <link rel="icon" type="image/png" href="{% static 'projects/brand/athena-mark-32.png' %}">
+  <link rel="stylesheet" href="{% static 'projects/console.css' %}">
+  <link rel="stylesheet" href="{% static 'projects/access.css' %}">
+</head>
+<body {% include 'projects/_access_attrs.html' %}>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <div class="app">
+    <header class="rail">
+      <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>ATHENA<small>DATA LABELLING</small></span></div>
+      <div class="rail-heading">WORKSPACE</div>
+      <nav class="nav" aria-label="Main navigation">
+        <a href="/">Projects</a>
+        <a href="{% url 'access-page' %}" aria-current="page">Access</a>
+      </nav>
+      <div class="rail-foot"><span class="rail-user" title="Signed in as {{ request.user.get_username }}">{{ request.user.get_username }}</span><form method="post" action="{% url 'logout' %}" aria-label="Sign out">{% csrf_token %}<button type="submit" class="rail-signout">Sign out</button></form></div>
+    </header>
+    <main class="main" id="main" tabindex="-1">
+      <header class="page-head">
+        <div>
+          <h1>Who can do what</h1>
+          <p class="subtitle">Give each person a role for the whole console, or for one project only. A role on a project replaces their console-wide role on that project and nowhere else.</p>
+        </div>
+      </header>
+      <noscript><p class="notice" data-open="true">This page needs JavaScript to work. Turn it on in your browser and reload.</p></noscript>
+      <p class="access-status" id="access-status" role="status" aria-live="polite"></p>
+
+      <section class="panel access-panel" aria-labelledby="roles-heading">
+        <h2 id="roles-heading">The four roles</h2>
+        <p class="panel-intro">Each role can do everything the one before it can. Superusers can do everything and cannot be given a role.</p>
+        <dl class="role-key" id="role-key"></dl>
+        <p class="field-help" id="unassigned-note"></p>
+      </section>
+
+      <section class="panel access-panel" aria-labelledby="people-heading">
+        <h2 id="people-heading">People</h2>
+        <p class="panel-intro">A change takes effect on the person’s next click. Every change is written to the record below.</p>
+        <div class="access-find">
+          <label for="people-search">Find a person<input id="people-search" type="search" autocomplete="off" placeholder="Start typing a username"></label>
+          <p class="field-help" id="people-count" aria-live="polite"></p>
+        </div>
+        <ul class="people" id="people" aria-label="People and their roles"></ul>
+        <p class="field-help" id="people-empty" hidden>Nobody matches that search.</p>
+      </section>
+
+      <section class="panel access-panel" aria-labelledby="record-heading">
+        <h2 id="record-heading">Record of role changes</h2>
+        <p class="panel-intro">Newest first. It cannot be edited or deleted. It keeps who was changed and who changed them as ids such as <code>u3</code>; names shown here are looked up today.</p>
+        <div class="access-find access-filters">
+          <label for="record-project">Project<select id="record-project"><option value="">All changes</option></select></label>
+          <label for="record-person">Person<select id="record-person"><option value="">Everyone</option></select></label>
+        </div>
+        <div class="table-wrap">
+          <table class="record-table" aria-label="Role changes, newest first">
+            <thead><tr><th scope="col">When</th><th scope="col">Person</th><th scope="col">Where</th><th scope="col">Change</th><th scope="col">Made by</th></tr></thead>
+            <tbody id="record-rows"></tbody>
+          </table>
+        </div>
+        <p class="field-help" id="record-empty" hidden>No role has been changed yet.</p>
+        <div class="access-more"><button class="secondary" id="record-more" type="button" hidden>Show older changes</button><span class="field-help" id="record-count"></span></div>
+      </section>
+    </main>
+  </div>
+  <script src="{% static 'projects/ui_common.js' %}"></script>
+  <script src="{% static 'projects/access.js' %}" defer></script>
+</body>
+</html>
