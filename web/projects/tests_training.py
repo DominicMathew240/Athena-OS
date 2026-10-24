@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 import importlib.util
+import io
 import json
+import os
 import subprocess
 import sys
 import tempfile
@@ -17,7 +19,7 @@ import numpy as np
 from django.core.cache import cache
 from django.core.management import call_command
 from django.db import IntegrityError, transaction
-from django.test import Client, override_settings
+from django.test import Client, SimpleTestCase, override_settings
 from django.utils import timezone
 from PIL import Image, ImageDraw
 
@@ -32,7 +34,7 @@ from .models import (
     TrainingRun,
 )
 from .tests_datasets import DatasetBase, png_bytes
-from .training import evaluation as ev, lifecycle, report, runner
+from .training import evaluation as ev, lifecycle, report, runner, torchvision_frcnn as tv
 from .training.base import Availability, BoxPrediction, TrainingBackend, TrainingCancelled, TrainResult
 
 TORCH_INSTALLED = (
@@ -141,14 +143,44 @@ class TrainingBase(DatasetBase):
         body = {"backend": "fake-backend", "dataset_id": str(dataset.id), **payload}
         return self.post(self.api("/training/runs"), body)
 
-    def train_candidate(self, dataset=None) -> ModelVersion:
-        """Queue + run a training run to completion; returns the resulting candidate."""
+    def train_candidate(self, dataset=None, *, solid: bool | None = None) -> ModelVersion:
+        """Queue + run a training run to completion; returns the resulting candidate.
+
+        The approval gate asks for an acknowledgement when the plain verdict is ``not_ready`` or ``cannot_tell``, and
+        a fabricated 14-picture run is always ``cannot_tell``. So a candidate asked for with no dataset (the "I just
+        need a model I can approve" call) is made *solid*: its tiny evaluation is swapped for one with enough test
+        boxes and a high share found (``good_enough_to_try``). Pass a dataset (the test is about the real numbers) or
+        ``solid=False`` to keep the real evaluation, ``solid=True`` to force it."""
+        if solid is None:
+            solid = dataset is None
         response = self.start_run(dataset)
         self.assertEqual(response.status_code, 202, response.content)
         run = runner.claim_next_run()
         finished = runner.run_training(run)
         self.assertEqual(finished.status, TrainingRun.SUCCEEDED, finished.error)
-        return finished.model_versions.get()
+        model = finished.model_versions.get()
+        return self.set_solid_evaluation(model) if solid else model
+
+    def set_evaluation(self, model: ModelVersion, evaluation: dict) -> ModelVersion:
+        """Overwrite a stored evaluation (the ORM refuses to; a damaged or hand-made row is simulated in SQL)."""
+        from django.db import connection
+
+        with connection.cursor() as cursor:
+            cursor.execute(
+                f"UPDATE {ModelVersion._meta.db_table} SET evaluation = %s WHERE id = %s",
+                [json.dumps(evaluation), model.pk.hex if hasattr(model.pk, "hex") else model.pk],
+            )
+        model.refresh_from_db()
+        return model
+
+    def set_solid_evaluation(self, model: ModelVersion, boxes_per_label: int = 100, found: int = 95) -> ModelVersion:
+        from .tests_results_plain import counts_evaluation
+
+        counts = counts_evaluation({label: (boxes_per_label, found, 2) for label in model.evaluation["per_label"]})
+        evaluation = {**model.evaluation, **{key: counts[key] for key in ("per_label", "overall", "data")}}
+        model = self.set_evaluation(model, evaluation)
+        self.assertEqual(report.plain_results(model.evaluation)["overall"]["verdict"], "good_enough_to_try")
+        return model
 
 
 # ----------------------------------------------------------------------------------------
@@ -713,8 +745,8 @@ class StageAndApprovalTests(TrainingBase):
     def approve(self, model, note="Read the report; numbers are acceptable for a pilot."):
         return self.post(self.api(f"/models/{model.id}/approve"), {"note": note} if note is not None else {})
 
-    def new_candidate(self) -> ModelVersion:
-        return self.train_candidate()
+    def new_candidate(self, *, solid: bool = True) -> ModelVersion:
+        return self.train_candidate(solid=solid)
 
     def test_candidate_cannot_be_approved_directly(self) -> None:
         model = self.new_candidate()
@@ -752,7 +784,7 @@ class StageAndApprovalTests(TrainingBase):
 
     def weak_staged_model(self) -> ModelVersion:
         FakeBackend.boxes = []  # predicts nothing, so it finds none of the held-out boxes
-        model = self.new_candidate()
+        model = self.new_candidate(solid=False)
         self.assertEqual(model.evaluation["overall"]["recall"], 0.0)
         self.assertEqual(self.stage(model).status_code, 200)
         return model
@@ -804,6 +836,176 @@ class StageAndApprovalTests(TrainingBase):
         ok = self.post(self.api(f"/models/{model.id}/approve"), {"note": "Pilot.", "acknowledge_weak_results": True})
         self.assertEqual(ok.status_code, 200, ok.content)
         self.assertIn("no results", ModelEvent.objects.get(model_version=model, kind="approved").note)
+
+    # -- thin or weak verdicts need the acknowledgement too (final integration review I3) -----------------
+    def staged_with(self, counts: dict[str, tuple[int, int, int]]) -> ModelVersion:
+        from .tests_results_plain import counts_evaluation
+
+        model = self.new_candidate(solid=False)
+        self.assertEqual(self.stage(model).status_code, 200)
+        fresh = counts_evaluation(counts)
+        return self.set_evaluation(model, {**model.evaluation, **{k: fresh[k] for k in ("per_label", "overall", "data")}})
+
+    def test_the_reason_helper_fires_for_not_ready_and_cannot_tell_but_not_for_good_or_needs_more_examples(self) -> None:
+        from .tests_results_plain import counts_evaluation
+
+        def reason(counts):
+            evaluation = counts_evaluation(counts)
+            return report.plain_results(evaluation)["overall"]["verdict"], lifecycle.weak_results_reason(evaluation)
+
+        self.assertEqual(reason({"d": (100, 95, 2)}), ("good_enough_to_try", None))
+        self.assertEqual(reason({"d": (100, 70, 2)}), ("needs_more_examples", None))  # decided, mediocre: note is enough
+        verdict, thin = reason({"d": (10, 9, 0)})
+        self.assertEqual(verdict, "cannot_tell")
+        verdict, weak = reason({"d": (100, 40, 0)})
+        self.assertEqual(verdict, "not_ready")
+        for text in (thin, weak):
+            self.assertIn("too thin or too weak", text)
+            self.assertNotIn("Not a final decision", text)
+            self.assertFalse(text.endswith("."))  # it is spliced into a longer sentence
+        self.assertIn("Cannot tell yet", thin)
+        self.assertIn("Not ready", weak)
+        # recall 0 keeps its own, older wording
+        self.assertIn("found none", reason({"d": (100, 0, 0)})[1])
+
+    def test_a_thin_result_with_some_boxes_found_needs_the_acknowledgement(self) -> None:
+        model = self.staged_with({"d": (10, 9, 0)})  # fewer than 30 test boxes: cannot tell
+        self.assertGreater(model.evaluation["overall"]["recall"], 0)
+        response = self.approve(model)
+        self.assertEqual(response.status_code, 409)
+        body = response.json()
+        self.assertEqual(set(body), {"error", "needs_acknowledgement", "weak_results"})
+        self.assertTrue(body["needs_acknowledgement"])
+        self.assertIn("too thin or too weak", body["weak_results"])
+        self.assertIn("Cannot tell yet", body["weak_results"])
+        self.assertIn(body["weak_results"], body["error"])
+        self.assertIn("acknowledge_weak_results", body["error"])
+        model.refresh_from_db()
+        self.assertEqual(model.stage, "staged")
+        self.assertEqual(
+            self.post(self.api(f"/models/{model.id}/approve"), {"note": "ok", "acknowledge_weak_results": "yes"}).status_code, 400
+        )
+        self.assertFalse(ModelEvent.objects.filter(kind="approved").exists())
+
+    def test_a_weak_result_with_some_boxes_found_needs_the_acknowledgement_and_it_is_audited(self) -> None:
+        model = self.staged_with({"d": (100, 40, 3)})  # enough boxes, under half found: not ready
+        self.assertEqual(self.approve(model).status_code, 409)
+        ok = self.post(self.api(f"/models/{model.id}/approve"), {"note": "Pilot only.", "acknowledge_weak_results": True})
+        self.assertEqual(ok.status_code, 200, ok.content)
+        note = ModelEvent.objects.get(model_version=model, kind="approved").note
+        self.assertIn("Pilot only.", note)
+        self.assertIn("acknowledged", note.lower())
+        self.assertIn("too thin or too weak", note)
+
+    def test_needs_more_examples_is_approved_with_the_note_alone(self) -> None:
+        model = self.staged_with({"d": (100, 70, 2)})
+        self.assertEqual(report.plain_results(model.evaluation)["overall"]["verdict"], "needs_more_examples")
+        self.assertEqual(self.approve(model).status_code, 200)
+        self.assertNotIn("acknowledged", ModelEvent.objects.get(model_version=model, kind="approved").note.lower())
+
+    # -- a fair "worse than the model in use" comparison needs the acknowledgement too (W12-G2b / RED7) -------------
+    def staged_with_comparison(self, *, baseline_found: int = 190, b: int = 0, c: int = 20, fair: bool = True,
+                               overlap: int = 0) -> ModelVersion:
+        """A staged model whose own results read ``good_enough_to_try`` (170 of 200 found) and that carries a stored,
+        hand-made comparison block: the model in use found ``baseline_found`` of the same 200 boxes."""
+        from .tests_comparison import make_block
+        from .tests_results_plain import counts_evaluation
+
+        model = self.new_candidate(solid=False)
+        self.assertEqual(self.stage(model).status_code, 200)
+        fresh = counts_evaluation({"damaged": (200, 170, 2)})
+        evaluation = {**model.evaluation, **{k: fresh[k] for k in ("per_label", "overall", "data")}}
+        evaluation["comparison"] = make_block(
+            fresh, baseline_found={"damaged": baseline_found}, baseline_wrong=2, b=b, c=c, fair=fair, overlap=overlap
+        )
+        model = self.set_evaluation(model, evaluation)
+        self.assertEqual(report.plain_results(model.evaluation)["overall"]["verdict"], "good_enough_to_try")
+        return model
+
+    def test_a_fair_worse_comparison_needs_the_acknowledgement_even_when_the_results_read_good(self) -> None:
+        model = self.staged_with_comparison()
+        plain = report.plain_results(model.evaluation)
+        self.assertEqual((plain["comparison"]["available"], plain["comparison"]["fair"], plain["comparison"]["verdict"]),
+                         (True, True, "worse"))
+        response = self.approve(model)
+        self.assertEqual(response.status_code, 409, response.content)
+        body = response.json()
+        self.assertEqual(set(body), {"error", "needs_acknowledgement", "weak_results"})
+        self.assertTrue(body["needs_acknowledgement"])
+        self.assertTrue(
+            body["weak_results"].startswith(
+                "the new model did worse than the model in use on the same test pictures (Worse on these test pictures: "
+            ),
+            body["weak_results"],
+        )
+        self.assertIn("found 170 of 200 test boxes", body["weak_results"])
+        self.assertNotIn("Not a final decision", body["weak_results"])
+        self.assertTrue(body["weak_results"].endswith(")"))
+        self.assertIn(body["weak_results"], body["error"])
+        self.assertIn("acknowledge_weak_results", body["error"])
+        model.refresh_from_db()
+        self.assertEqual(model.stage, "staged")  # nothing changed
+        self.assertFalse(ModelEvent.objects.filter(kind="approved").exists())
+        url = self.api(f"/models/{model.id}/approve")
+        self.assertEqual(self.post(url, {"note": "ok", "acknowledge_weak_results": False}).status_code, 409)
+        self.assertEqual(self.post(url, {"note": "ok", "acknowledge_weak_results": "yes"}).status_code, 400)
+        model.refresh_from_db()
+        self.assertEqual(model.stage, "staged")
+
+    def test_the_worse_acknowledgement_works_and_is_audited_like_the_other_weak_cases(self) -> None:
+        model = self.staged_with_comparison()
+        ok = self.post(self.api(f"/models/{model.id}/approve"), {"note": "Needed for a trial.", "acknowledge_weak_results": True})
+        self.assertEqual(ok.status_code, 200, ok.content)
+        note = ModelEvent.objects.get(model_version=model, kind="approved").note
+        self.assertIn("Needed for a trial.", note)
+        self.assertIn("[Weak results acknowledged by the approver: the new model did worse than the model in use", note)
+        self.assertIn("Approved anyway.]", note)
+
+    def test_other_comparison_verdicts_add_no_friction(self) -> None:
+        for name, kwargs in (
+            ("better", {"baseline_found": 150, "b": 20, "c": 0}),
+            ("about_the_same", {"baseline_found": 168, "b": 2, "c": 0}),
+            ("cannot_tell (unfair)", {"fair": False, "overlap": 5}),  # a worse-looking count, but not a fair test
+        ):
+            with self.subTest(name):
+                model = self.staged_with_comparison(**kwargs)
+                comparison = report.plain_results(model.evaluation)["comparison"]
+                self.assertTrue(comparison["available"])
+                self.assertNotEqual(comparison["verdict"], "worse")
+                self.assertIsNone(lifecycle.weak_results_reason(model.evaluation))
+                self.assertEqual(self.approve(model).status_code, 200)
+
+    def test_an_unfair_comparison_with_fewer_boxes_found_is_not_a_worse_verdict_and_adds_no_gate(self) -> None:
+        model = self.staged_with_comparison(fair=False, overlap=5, baseline_found=190, b=0, c=20)
+        block = report.plain_results(model.evaluation)["comparison"]
+        self.assertEqual((block["fair"], block["verdict"]), (False, "cannot_tell"))
+        self.assertIsNone(lifecycle.weak_results_reason(model.evaluation))
+
+    def test_a_damaged_or_lying_comparison_block_neither_triggers_nor_hides_the_rule(self) -> None:
+        model = self.staged_with_comparison()
+        worse = lifecycle.weak_results_reason(model.evaluation)
+        self.assertIn("did worse", worse)
+        # damaged: the counts no longer add up, so the reader refuses the block; the rule does not fire
+        damaged = json.loads(json.dumps(model.evaluation))
+        damaged["comparison"]["candidate_result"]["found"] += 1
+        self.assertFalse(report.plain_results(damaged)["comparison"]["available"])
+        self.assertIsNone(lifecycle.weak_results_reason(damaged))
+        for junk in ("worse", 5, [], {"schema": "athena.comparison/1", "available": True}):
+            self.assertIsNone(lifecycle.weak_results_reason({**model.evaluation, "comparison": junk}), junk)
+        self.assertIsNone(lifecycle.weak_results_reason({k: v for k, v in model.evaluation.items() if k != "comparison"}))
+        # a stored word is not trusted: a "better" block that claims "worse" does not trigger it
+        better = self.staged_with_comparison(baseline_found=150, b=20, c=0)
+        lying = json.loads(json.dumps(better.evaluation))
+        lying["comparison"]["verdict"] = "worse"
+        self.assertEqual(report.plain_results(lying)["comparison"]["verdict"], "better")
+        self.assertIsNone(lifecycle.weak_results_reason(lying))
+        # ... and a "worse" block that claims "better" does not hide it
+        hiding = json.loads(json.dumps(model.evaluation))
+        hiding["comparison"]["verdict"] = "better"
+        self.assertEqual(lifecycle.weak_results_reason(hiding), worse)
+        # the model itself, with the damaged block, is approved with the note alone
+        self.set_evaluation(model, damaged)
+        self.assertEqual(self.approve(model).status_code, 200)
 
     def test_a_good_model_needs_no_acknowledgement_and_gets_no_extra_audit_text(self) -> None:
         model = self.new_candidate()
@@ -908,6 +1110,11 @@ class StageAndApprovalTests(TrainingBase):
             ModelEvent.objects.all().update(note="x")
         with self.assertRaises(ValueError):
             ModelEvent.objects.all().delete()
+        with self.assertRaises(ValueError):
+            ModelEvent.objects.all()._raw_delete(using="default")
+        with self.assertRaises(ValueError):
+            ModelEvent.objects.bulk_create([event], update_conflicts=True, update_fields=["note"], unique_fields=["id"])
+        self.assertNotEqual(ModelEvent.objects.get(pk=event.pk).note, "edited")
 
     def test_model_list_detail_and_evaluation_report(self) -> None:
         model = self.new_candidate()
@@ -996,3 +1203,331 @@ class TorchvisionReferenceBackendTests(TrainingBase):
         run = runner.claim_next_run()
         TrainingRun.objects.filter(pk=run.pk).update(cancel_requested=True)
         self.assertEqual(runner.run_training(run).status, "cancelled")
+
+
+class RedirectRestrictionTests(SimpleTestCase):
+    """Downloads follow redirects only to the pinned hosts, over https (hygiene H5). No test uses the network."""
+
+    ALLOWED = (
+        "https://download.pytorch.org/models/other.pth",
+        "https://DOWNLOAD.PYTORCH.ORG/models/other.pth",
+        "https://download.pytorch.org:443/models/other.pth",
+    )
+    REFUSED = {
+        "https://evil.example/x": "evil.example",
+        "https://download.pytorch.org.evil.example/x": "download.pytorch.org.evil.example",
+        "https://evildownload.pytorch.org/x": "evildownload.pytorch.org",
+        "https://sub.download.pytorch.org/x": "sub.download.pytorch.org",
+        "https://download.pytorch.org@evil.example/x": "evil.example",
+        "https://download.pytorch.org./x": "download.pytorch.org.",
+        "https://127.0.0.1/x": "127.0.0.1",
+        "https://huggingface.co/x": "huggingface.co",
+        "https://download.pytorch.org:8443/x": "download.pytorch.org:8443",
+        "http://download.pytorch.org/x": "download.pytorch.org",
+        "http://evil.example/x": "evil.example",
+    }
+
+    def test_the_decision_function_allows_only_the_pinned_host_over_https(self) -> None:
+        for url in self.ALLOWED:
+            with self.subTest(url=url):
+                self.assertIsNone(tv.redirect_refusal(url, tv.DOWNLOAD_HOSTS))
+        for url, named in self.REFUSED.items():
+            with self.subTest(url=url):
+                sentence = tv.redirect_refusal(url, tv.DOWNLOAD_HOSTS)
+                self.assertIsNotNone(sentence)
+                self.assertIn(named, sentence)
+                self.assertIn("nothing was saved", sentence)
+                if url.startswith("https"):
+                    self.assertIn("download.pytorch.org", sentence)  # says where downloads may come from
+
+    def test_the_exact_sentences(self) -> None:
+        self.assertEqual(
+            tv.redirect_refusal("https://evil.example/x", tv.DOWNLOAD_HOSTS),
+            "The download was redirected to evil.example, which is not where Athena fetches ready-made models from "
+            "(download.pytorch.org), so it was stopped and nothing was saved.",
+        )
+        self.assertEqual(
+            tv.redirect_refusal("http://download.pytorch.org/x", tv.DOWNLOAD_HOSTS),
+            "The download was redirected to download.pytorch.org over a plain, unencrypted connection (http), which is "
+            "not allowed, so it was stopped and nothing was saved.",
+        )
+
+    def test_odd_inputs_are_a_refusal_not_a_crash(self) -> None:
+        for url in ("", "not a url", "https://", "https:///x", "file:///etc/passwd", "ftp://download.pytorch.org/x",
+                    "https://exa\x00mple.com/x", "https://" + "a" * 5000 + ".example/x", "https://[::1]/x", "https://[bad/x"):
+            with self.subTest(url=url[:40]):
+                sentence = tv.redirect_refusal(url, tv.DOWNLOAD_HOSTS)
+                self.assertIsInstance(sentence, str)
+                self.assertLess(len(sentence), 400)
+                self.assertNotIn("\x00", sentence)
+
+    def test_the_handler_refuses_through_the_standard_redirect_hook(self) -> None:
+        import urllib.request
+
+        handler = tv.PinnedRedirects(tv.DOWNLOAD_HOSTS)
+        request = urllib.request.Request("https://download.pytorch.org/models/a.pth")
+        ok = handler.redirect_request(request, None, 302, "Found", {}, "https://download.pytorch.org/models/b.pth")
+        self.assertEqual(ok.full_url, "https://download.pytorch.org/models/b.pth")
+        with self.assertRaisesMessage(ValueError, "evil.example"):
+            handler.redirect_request(request, None, 302, "Found", {}, "https://evil.example/b.pth")
+
+    def serve(self, hops):
+        """Patch the https layer: each request pops the next ``(code, location_or_body)``; returns the urls asked for."""
+        import email.message
+        import io
+        import urllib.request
+        import urllib.response
+
+        asked: list[str] = []
+
+        def https_open(handler, request):
+            asked.append(request.full_url)
+            code, extra = hops.pop(0)
+            headers = email.message.Message()
+            if code == 302:
+                headers["Location"] = extra
+            response = urllib.response.addinfourl(io.BytesIO(b"" if code == 302 else extra), headers, request.full_url, code)
+            response.msg = "Found" if code == 302 else "OK"
+            return response
+
+        return asked, mock.patch.object(urllib.request.HTTPSHandler, "https_open", https_open)
+
+    def test_end_to_end_a_redirect_to_another_host_is_refused_and_never_followed(self) -> None:
+        import hashlib
+
+        with tempfile.TemporaryDirectory() as folder:
+            destination = Path(folder) / "w" / "w.pth"
+            asked, patched = self.serve([(302, "https://evil.example/w.pth"), (200, b"never read")])
+            with patched, self.assertRaisesMessage(ValueError, "redirected to evil.example"):
+                tv._fetch("https://download.pytorch.org/models/w.pth", destination, hashlib.sha256(b"x").hexdigest()[:8])
+            self.assertEqual(asked, ["https://download.pytorch.org/models/w.pth"])  # the second hop was never requested
+            self.assertEqual(list(destination.parent.iterdir()) if destination.parent.exists() else [], [])
+
+    def test_end_to_end_a_redirect_within_the_pinned_host_still_works_and_the_checksum_still_decides(self) -> None:
+        import hashlib
+
+        data = b"weights"
+        with tempfile.TemporaryDirectory() as folder:
+            destination = Path(folder) / "w" / "w.pth"
+            asked, patched = self.serve([(302, "https://download.pytorch.org/models/real.pth"), (200, data)])
+            with patched:
+                tv._fetch("https://download.pytorch.org/models/w.pth", destination, hashlib.sha256(data).hexdigest()[:8])
+            self.assertEqual(asked, ["https://download.pytorch.org/models/w.pth", "https://download.pytorch.org/models/real.pth"])
+            self.assertEqual(destination.read_bytes(), data)
+            asked, patched = self.serve([(302, "https://download.pytorch.org/models/real.pth"), (200, b"tampered")])
+            other = Path(folder) / "w" / "v.pth"
+            with patched, self.assertRaisesMessage(ValueError, "did not match its published checksum"):
+                tv._fetch("https://download.pytorch.org/models/w.pth", other, "00000000")
+            self.assertFalse(other.exists())
+
+    def test_the_fetch_uses_a_restricted_opener_not_the_global_default(self) -> None:
+        source = Path(tv.__file__).read_text()
+        self.assertFalse("urllib.request.urlopen(" in source, "a download must go through tv.open_pinned")
+
+
+class StricterRedirectTests(SimpleTestCase):
+    """W10-FX3 / B3: a web address with a user name or password in it, or a host with an empty part, is refused."""
+
+    HOSTS = {
+        "pytorch": tv.DOWNLOAD_HOSTS,
+        "huggingface": tv.AllowedHosts(("huggingface.co",), (".hf.co",), "huggingface.co and hf.co"),
+    }
+    # (url, allowed set names that must ALLOW it)  - everything else must be refused by both
+    ALLOW = {
+        "https://download.pytorch.org/models/a.pth": {"pytorch"},
+        "https://DOWNLOAD.PYTORCH.ORG:443/a": {"pytorch"},
+        "https://huggingface.co/a": {"huggingface"},
+        "https://HuggingFace.CO/a": {"huggingface"},
+        "https://cdn-lfs.hf.co/a": {"huggingface"},
+        "https://cas-bridge.xethub.hf.co/a": {"huggingface"},
+        "https://a.b.hf.co:443/a": {"huggingface"},
+        # an "@" after the "#" or "?" is not a user name: the connection still goes to huggingface.co
+        "https://huggingface.co#@evil.com/a": {"huggingface"},
+        "https://huggingface.co?@evil.com/a": {"huggingface"},
+    }
+    REFUSE = (
+        # the reviewer's cases
+        "https://evil.com@x.hf.co/a", "https://x..hf.co/a", "https://hf.co@evil.com/a", "https://x.hf.co./a",
+        "https://.hf.co/a", "https://x.hf.co:8443/a", "https://x.hf.co:0/a", "https://x.hf.co:abc/a",
+        "https://x.hf.co.evil.com/a", "https://evil-hf.co/a", "https://hf.co/a", "https://xn--hf-co-9ya.com/a",
+        "https://x.HF.CO\t.evil.com/a", " https://x.hf.co/a", "ftp://x.hf.co/a", "file:///etc/passwd",
+        "https:///x.hf.co/a", "https:x.hf.co/a", "//evil.com/x", "/relative/x", "relative/x", "",
+        "https://[::1]/a", "https://[huggingface.co]/a", "http://huggingface.co/a", "http://download.pytorch.org/x",
+        # new: user name / password in the address, whatever the host after it is
+        "https://evil.com@download.pytorch.org/x", "https://user:pw@download.pytorch.org/x",
+        "https://:pw@download.pytorch.org/x", "https://@download.pytorch.org/x", "https://u@huggingface.co/a",
+        "https://u:p@cdn-lfs.hf.co/a", "https://@x.hf.co/a", "https://evil.com%40@x.hf.co/a",
+        "https://download.pytorch.org:443@evil.com/x", "https://download.pytorch.org:pw@evil.com/x",
+        # new: empty names between dots, leading or trailing dot
+        "https://download..pytorch.org/x", "https://..download.pytorch.org/x", "https://download.pytorch.org../x",
+        "https://download.pytorch.org./x", "https://.download.pytorch.org/x", "https://a..b.hf.co/a",
+        "https://x.hf..co/a", "https://huggingface..co/a", "https://huggingface.co./a", "https://.huggingface.co/a",
+        "https://cdn-lfs.hf.co../a", "https://%2e.hf.co/a", "https://x%2ehf.co/a",
+    )
+
+    def test_every_listed_address_is_decided_the_same_for_both_host_lists(self) -> None:
+        for url in self.REFUSE:
+            for name, hosts in self.HOSTS.items():
+                with self.subTest(url=url, hosts=name):
+                    sentence = tv.redirect_refusal(url, hosts)
+                    self.assertIsInstance(sentence, str)
+                    self.assertIn("nothing was saved", sentence)
+                    self.assertLess(len(sentence), 400)
+        for url, names in self.ALLOW.items():
+            for name, hosts in self.HOSTS.items():
+                with self.subTest(url=url, hosts=name):
+                    sentence = tv.redirect_refusal(url, hosts)
+                    if name in names:
+                        self.assertIsNone(sentence)
+                    else:
+                        self.assertIsInstance(sentence, str)
+
+    def test_dfines_real_host_list_decides_the_same_way(self) -> None:
+        from .training import dfine
+
+        for url in self.REFUSE:
+            with self.subTest(url=url):
+                self.assertIsNotNone(tv.redirect_refusal(url, dfine.PINNED_HOSTS))
+        for url, names in self.ALLOW.items():
+            with self.subTest(url=url):
+                self.assertEqual(tv.redirect_refusal(url, dfine.PINNED_HOSTS) is None, "huggingface" in names)
+
+    def test_the_user_name_sentence_names_the_host_never_the_password(self) -> None:
+        sentence = tv.redirect_refusal("https://evil.com:s3cret@x.hf.co/a", self.HOSTS["huggingface"])
+        self.assertEqual(
+            sentence,
+            "The download was redirected to x.hf.co using a web address with a user name or password in it, which is "
+            "not allowed (Athena only fetches ready-made models from huggingface.co and hf.co), so it was stopped and "
+            "nothing was saved.",
+        )
+        self.assertNotIn("s3cret", sentence)
+
+    def test_an_address_that_hides_a_user_name_is_refused_by_the_handler_too(self) -> None:
+        import urllib.request
+
+        handler = tv.PinnedRedirects(tv.DOWNLOAD_HOSTS)
+        request = urllib.request.Request("https://download.pytorch.org/models/a.pth")
+        with self.assertRaisesMessage(ValueError, "user name or password"):
+            handler.redirect_request(request, None, 302, "Found", {}, "https://evil.com@download.pytorch.org/b.pth")
+
+    def test_a_scheme_less_target_does_not_print_empty_brackets(self) -> None:
+        sentence = tv.redirect_refusal("//evil.com/x", tv.DOWNLOAD_HOSTS)
+        self.assertNotIn("()", sentence)
+        self.assertEqual(
+            sentence,
+            "The download was redirected to evil.com over a plain, unencrypted connection (an unknown scheme), which "
+            "is not allowed, so it was stopped and nothing was saved.",
+        )
+
+    def test_a_named_scheme_is_still_printed(self) -> None:
+        self.assertIn("(ftp)", tv.redirect_refusal("ftp://download.pytorch.org/x", tv.DOWNLOAD_HOSTS))
+        self.assertIn("(http)", tv.redirect_refusal("http://download.pytorch.org/x", tv.DOWNLOAD_HOSTS))
+
+
+class _Endless:
+    """A response that never ends: ``read`` hands back as many bytes as asked for and counts them."""
+
+    def __init__(self, limit_reads: int = 10_000) -> None:
+        self.sent = 0
+        self.reads = 0
+        self.limit_reads = limit_reads
+
+    def read(self, size: int = -1) -> bytes:
+        self.reads += 1
+        if self.reads > self.limit_reads or size is None or size < 0:
+            raise AssertionError("the download kept reading past any sensible cap")
+        self.sent += size
+        return b"\0" * size
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *exc) -> bool:
+        return False
+
+
+class _Stream(_Endless):
+    """A response with exactly these bytes."""
+
+    def __init__(self, data: bytes) -> None:
+        super().__init__()
+        self.buffer = io.BytesIO(data)
+
+    def read(self, size: int = -1) -> bytes:
+        return self.buffer.read(size)
+
+
+class DownloadSizeCapTests(SimpleTestCase):
+    """W10-FX3 / B4: a torchvision download is cut off at a named size cap, before the checksum is looked at."""
+
+    def fetch(self, response, destination: Path, url: str, **kw):
+        with mock.patch.object(tv, "open_pinned", return_value=response):
+            tv._fetch(url, destination, "00000000", **kw)
+
+    def test_the_cap_is_a_named_constant_and_the_known_sizes_are_pinned(self) -> None:
+        self.assertEqual(tv.MAX_DOWNLOAD_BYTES, 200 * 1024 * 1024)
+        self.assertEqual(tv.PRETRAINED_FILES["imagenet_backbone"]["bytes"], 22_139_423)
+        self.assertEqual(tv.PRETRAINED_FILES["coco"]["bytes"], 77_844_807)
+
+    def test_a_known_file_is_cut_off_one_byte_past_its_size_and_the_partial_is_discarded(self) -> None:
+        url = tv.PRETRAINED_FILES["imagenet_backbone"]["url"]
+        endless = _Endless()
+        with tempfile.TemporaryDirectory() as folder:
+            destination = Path(folder) / "w" / "w.pth"
+            with self.assertRaisesMessage(ValueError, "The download was larger than expected (22,139,423 bytes for this file)"):
+                self.fetch(endless, destination, url)
+            self.assertEqual(endless.sent, 22_139_423 + 1)
+            self.assertFalse(destination.exists())
+            self.assertEqual(list(destination.parent.iterdir()), [])  # no .part left behind
+
+    def test_the_exact_sentence(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaises(ValueError) as caught:
+                self.fetch(_Endless(), Path(folder) / "w.pth", tv.PRETRAINED_FILES["coco"]["url"])
+        self.assertEqual(
+            str(caught.exception),
+            "The download was larger than expected (77,844,807 bytes for this file), so it was stopped and discarded.",
+        )
+
+    def test_an_unknown_address_gets_the_general_cap(self) -> None:
+        endless = _Endless()
+        with tempfile.TemporaryDirectory() as folder:
+            destination = Path(folder) / "w.pth"
+            with self.assertRaisesMessage(ValueError, "larger than expected (209,715,200 bytes for this file)"):
+                self.fetch(endless, destination, "https://download.pytorch.org/models/other.pth")
+            self.assertEqual(endless.sent, tv.MAX_DOWNLOAD_BYTES + 1)
+            self.assertFalse(destination.exists())
+
+    def test_an_explicit_size_wins(self) -> None:
+        endless = _Endless()
+        with tempfile.TemporaryDirectory() as folder:
+            with self.assertRaisesMessage(ValueError, "larger than expected (16 bytes for this file)"):
+                self.fetch(endless, Path(folder) / "w.pth", tv.PRETRAINED_FILES["coco"]["url"], expected_bytes=16)
+        self.assertEqual(endless.sent, 17)
+
+    def test_a_file_of_exactly_the_expected_size_is_still_checked_by_its_checksum_and_saved(self) -> None:
+        import hashlib
+
+        data = b"x" * 16
+        with tempfile.TemporaryDirectory() as folder:
+            destination = Path(folder) / "w.pth"
+            with mock.patch.object(tv, "open_pinned", return_value=_Stream(data)):
+                tv._fetch("https://download.pytorch.org/models/other.pth", destination, hashlib.sha256(data).hexdigest()[:8], expected_bytes=16)
+            self.assertEqual(destination.read_bytes(), data)
+
+    def test_a_small_wrong_file_still_fails_on_the_checksum_not_the_size(self) -> None:
+        with tempfile.TemporaryDirectory() as folder:
+            destination = Path(folder) / "w.pth"
+            with mock.patch.object(tv, "open_pinned", return_value=_Stream(b"tampered")):
+                with self.assertRaisesMessage(ValueError, "did not match its published checksum"):
+                    tv._fetch("https://download.pytorch.org/models/other.pth", destination, "00000000")
+            self.assertFalse(destination.exists())
+            self.assertEqual(list(destination.parent.iterdir()), [])
+
+    def test_ensure_pretrained_weights_still_calls_fetch_with_three_arguments(self) -> None:
+        with mock.patch.dict(os.environ, {tv.DOWNLOAD_ENV: "1"}), tempfile.TemporaryDirectory() as folder, \
+                mock.patch.object(tv, "pretrained_dir", return_value=Path(folder)), \
+                mock.patch.object(tv, "downloads_allowed", return_value=True), \
+                mock.patch.object(tv, "_fetch") as fetch, mock.patch.object(tv, "_sha256", return_value="0" * 64):
+            tv.ensure_pretrained_weights("coco")
+        self.assertEqual(len(fetch.call_args.args), 3)

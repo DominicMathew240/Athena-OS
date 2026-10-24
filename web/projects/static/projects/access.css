@@ -19,7 +19,6 @@
 .person { padding: 12px 14px; border: 1px solid var(--rule-2); background: var(--panel-2); }
 .person-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 8px; }
 .person-name { margin: 0; font-size: 16px; overflow-wrap: anywhere; }
-.person-ref { color: var(--fg-3); font: 14px/1.2 var(--f-mono); }
 .person-row, .project-role, .project-add { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
 .person-row label, .project-role label, .project-add label { font-size: 15px; font-weight: 700; }
 .project-role label { min-width: 160px; overflow-wrap: anywhere; }
@@ -35,6 +34,27 @@
 .access-more { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
 .access-more .field-help { margin: 0; }
 .access-panel code { font: 14px var(--f-mono); }
+.downloads-state { margin: 0 0 6px; padding: 9px 12px; border: 1px solid var(--rule-2); background: var(--panel-2); font-size: 17px; font-weight: 700; line-height: 1.4; }
+.downloads-state[data-tone="on"] { border-color: var(--ok); }
+.downloads-state[data-tone="error"] { border-color: var(--bad-line); color: var(--bad); background: var(--bad-tint); }
+.access-panel > .field-help { margin: 6px 0 0; max-width: 75ch; }
+.downloads-licence { margin: 12px 0; }
+.downloads-licence-body { max-width: 75ch; display: grid; gap: 8px; font-size: 15px; line-height: 1.5; color: var(--fg-2); overflow-wrap: anywhere; }
+.downloads-licence-body p { margin: 0; }
+.downloads-licence-body h3.downloads-licence-title { margin: 8px 0 0; font: 700 15px/1.3 var(--f-body); letter-spacing: 0; color: var(--fg); }
+.downloads-form { margin-top: 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px; max-width: 75ch; }
+.downloads-choice { display: block; margin: 0; padding: 0; border: 0; min-width: 0; } /* not a grid: WebKit sizes a grid fieldset's legend from the widest window it has seen */
+.downloads-choice > * + * { margin-top: 8px; }
+.downloads-choice legend { padding: 0; margin-bottom: 6px; width: 100%; max-width: 100%; box-sizing: border-box; white-space: normal; overflow-wrap: anywhere; font-size: 16px; font-weight: 700; } /* WebKit keeps a legend as wide as it was at the widest window */
+.downloads-choice .inline-check { cursor: pointer; font-size: 16px; }
+.downloads-choice .inline-check input { flex: none; width: 22px; height: 22px; margin: 0; accent-color: var(--y); }
+.downloads-on-only { margin-left: 30px; }
+.downloads-note { display: grid; gap: 5px; font-size: 15px; font-weight: 700; }
+.downloads-note textarea { min-height: 64px; padding: 7px 10px; border: 1px solid var(--field-line); border-radius: 0; background: var(--field); color: var(--fg); font-weight: 400; resize: vertical; max-width: 100%; }
+.downloads-note .field-help { font-weight: 400; }
+.downloads-form .form-actions { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 10px; }
+.downloads-form .form-actions button { min-height: 44px; }
+#downloads-last { margin-top: 12px; }
 @media (max-width: 850px) {
   .person .secondary, .access-find input, .access-find select, .person select, .project-add select { min-height: 44px; }
   .role-key-row { grid-template-columns: 1fr; gap: 2px; }

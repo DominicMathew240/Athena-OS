@@ -8,7 +8,7 @@ the lock.
 | Role (group name) | Can do | Cannot do |
 | --- | --- | --- |
 | **Viewer** (`Athena Viewer`) | Look at everything: every project, picture, box, snapshot, model, report and check screen. | Change anything. |
-| **Labeler** (`Athena Labeler`) | Everything a Viewer can, plus: create projects; add and remove pictures; draw, edit and delete boxes; edit labels; run auto-suggest and review its suggestions; save snapshots; download (export) snapshots; run a picture through a check screen; record feedback and review decisions. | Start or stop teaching, move a model to trial, set up check screens, delete a project, approve. |
+| **Labeler** (`Athena Labeler`) | Everything a Viewer can, plus: create projects; add and remove pictures; draw, edit and delete boxes; edit labels; run auto-suggest and review its suggestions; save snapshots; download (export) snapshots; run a picture through a check screen; record feedback and review decisions; pull check-screen corrections into the project as pictures to review. | Start or stop teaching, move a model to trial, set up check screens, delete a project, approve. |
 | **Trainer** (`Athena Trainer`) | Everything a Labeler can, plus: start and stop teaching; move a model to trial ("staged"); create, edit and delete check screens; delete a whole project. | Approve a model for use or go back to the previous one. |
 | **Approver** (`Athena Approver`) | Everything a Trainer can, plus: **approve a model for use** and **go back to the previous model**. | — |
 | **Superuser** (Django flag) | Everything an Approver can. | — |
@@ -130,7 +130,7 @@ from elsewhere) has no starter and is not restricted. The model's JSON names the
 - A line at the top of the page: "Your role: Viewer. Your account can look but not change things. Ask an
   administrator for the Labeler role." (and the equivalent for the other roles).
 - Controls the person cannot use are **switched off**, not hidden, with the reason shown above the area
-  (and next to the main button, such as "Start teaching" or "Save a snapshot"). Approve and "Go back to the
+  (and next to the main button, such as "Teach the computer" or "Save a snapshot"). Approve and "Go back to the
   previous model" say which role is missing; with the second-person rule on, the model card also says "you
   started the teaching run for this model".
 - A Viewer can still open a picture to look at its boxes (the button says "See boxes"); dragging on the
@@ -181,10 +181,20 @@ configuration and compares it with the table below, so a new route cannot be add
 | Role needed | Routes |
 | --- | --- |
 | Viewer (any signed-in user with a role) | Every `GET` except dataset export; the console and check-screen pages; `GET /api/me` |
-| Labeler | `POST /api/projects`; `PATCH …/projects/<id>` (labels); `POST …/assets`; `DELETE …/assets/<id>`; `POST …/annotations`; `PATCH`/`DELETE …/annotations/<id>`; `POST …/autolabel`, `…/autolabel/<job>/cancel`, `…/annotations/review`; `POST …/datasets`; `GET …/datasets/<id>/export`; `POST …/inference/apps/<id>/run`, `…/observations/<id>/feedback`, `…/observations/<id>/decision` |
-| Trainer | `POST …/training/runs`, `…/runs/<id>/cancel`; `POST …/models/<id>/stage`; `POST`/`PATCH`/`DELETE …/inference/apps…`; `DELETE …/projects/<id>` |
+| Labeler | `POST /api/projects`; `PATCH …/projects/<id>` (labels); `POST …/assets`; `DELETE …/assets/<id>`; `POST …/annotations`; `PATCH`/`DELETE …/annotations/<id>`; `POST …/autolabel`, `…/autolabel/<job>/cancel`, `…/annotations/review`; `POST …/datasets`; `GET …/datasets/<id>/export`; `POST …/inference/apps/<id>/run`, `…/observations/<id>/feedback`, `…/observations/<id>/decision`; `POST …/feedback/corrections/import` |
+| Trainer | `POST …/training/runs`, `…/runs/<id>/cancel`; `POST …/models/<id>/stage`; `POST`/`PATCH`/`DELETE …/inference/apps…`; `DELETE …/projects/<id>`; `GET /api/console/training-downloads` (read the download switch) |
 | Approver | `POST …/models/<id>/approve`, `…/models/<id>/rollback` |
-| Administrator (superuser) | `GET /access`; `GET /api/access`, `GET /api/access/changes`; `PUT /api/access/people/<id>/console`; `PUT`/`DELETE /api/access/people/<id>/projects` |
+| Administrator (superuser) | `GET /access`; `GET /api/access`, `GET /api/access/changes`; `PUT /api/access/people/<id>/console`; `PUT`/`DELETE /api/access/people/<id>/projects`; `PUT /api/console/training-downloads` (the ready-made model download switch) |
+
+The one-button teach request (`POST …/training/runs` with `"snapshot": "latest"`) needs the Trainer role even though it may save a
+snapshot first, and a Viewer or Labeler who sends it gets 403 with nothing created (`tests_training_auto.py`,
+`test_viewers_and_labelers_cannot_start_and_nothing_is_created`). The two read-only routes added with it,
+`GET …/datasets/health` and `GET …/models/<id>/results/plain`, need only the Viewer role.
+
+The improve loop adds `GET …/feedback/corrections` (Viewer: it only lists) and `POST …/feedback/corrections/import` (**Labeler**, the same role
+that may record feedback and review boxes; a Viewer gets 403 and nothing is created). The comparison with the model in use needs no route of its own: it
+is part of `GET …/models/<id>/results/plain` (Viewer) and of the evaluation the Trainer's teaching run stores. Approving still needs the Approver role.
+See [Improve the model from check-screen corrections](improve-loop.md).
 
 For routes under `…/projects/<id>/…` the role that applies is the person's role **on that project** (their own
 role there if they have one, otherwise their console-wide role). Routes with no project in them, such as creating

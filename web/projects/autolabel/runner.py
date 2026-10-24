@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import time
+import uuid
 from datetime import timedelta
 
 from django.conf import settings
@@ -13,7 +14,7 @@ from django.db import transaction
 from django.utils import timezone
 from PIL import Image
 
-from ..models import Asset, AutoLabelJob, BoxAnnotation
+from ..models import Asset, AutoLabelJob, BoxAnnotation, FeedbackImport
 from .base import AutoLabeler, normalized_box
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,13 @@ MAX_ERROR_CHARS = 400
 
 WORKER_LOADING = "loading"
 WORKER_READY = "ready"
+
+# Pictures copied in from operator feedback carry the operator's own boxes as Needs-review suggestions
+# (origin "model", so the review controls treat them like any suggestion). They are never auto-suggested:
+# a rerun would delete those boxes before anyone has judged them. This must stay equal to
+# ``feedback_import.BOX_SOURCE_NAME`` (a test checks it; importing that module here would be circular).
+FEEDBACK_BOX_SOURCE = "operator feedback"
+KEPT_REASON = "kept for review: this picture came from operator feedback"
 
 
 def record_heartbeat(state: str = WORKER_READY) -> None:
@@ -75,13 +83,48 @@ def claim_next_job() -> AutoLabelJob | None:
         return AutoLabelJob.objects.get(pk=job.pk) if claimed else None
 
 
-def _target_assets(job: AutoLabelJob) -> list[Asset]:
+def _scope_assets(job: AutoLabelJob):
+    """Every picture this job was asked about, before any are left out."""
     assets = Asset.objects.filter(project=job.project)
     if job.asset_id:
         assets = assets.filter(pk=job.asset_id)
     elif job.only_unlabeled:
         assets = assets.exclude(annotations__status=BoxAnnotation.STATUS_ACCEPTED)
+    return assets
+
+
+def _kept_ids(job: AutoLabelJob) -> set:
+    return set(_scope_assets(job).filter(feedback_imports__isnull=False).values_list("pk", flat=True))
+
+
+def kept_for_review_count(job: AutoLabelJob) -> int:
+    """How many pictures in the job's scope are left out because they came from operator feedback."""
+    return len(_kept_ids(job))
+
+
+def _target_assets(job: AutoLabelJob) -> list[Asset]:
+    assets = _scope_assets(job).exclude(feedback_imports__isnull=False)
     return list(assets.order_by("created_at", "id"))
+
+
+def _linked_to_feedback(asset: Asset) -> bool:
+    return FeedbackImport.objects.filter(asset_id=asset.pk).exists()
+
+
+def _feedback_box_ids(asset: Asset) -> set[str]:
+    """Ids of the boxes any feedback import made on this picture (the link keeps them as text)."""
+    found: set[str] = set()
+    for ids in FeedbackImport.objects.filter(asset_id=asset.pk).values_list("annotation_ids", flat=True):
+        found.update(str(item) for item in ids or [])
+    return found
+
+
+def _is_uuid(value: str) -> bool:
+    try:
+        uuid.UUID(value)
+    except ValueError:
+        return False
+    return True
 
 
 def _cancelled(job: AutoLabelJob) -> bool:
@@ -96,6 +139,17 @@ def _skipped_note(names: list[str]) -> str:
     return f"Skipped {len(names)} unreadable {noun} ({shown}). Remove or re-import them."[:MAX_ERROR_CHARS]
 
 
+def job_note(kept: int, unreadable: list[str]) -> str:
+    """The plain-language remark stored on a finished job: pictures left out, then unreadable ones."""
+    parts = []
+    if kept:
+        noun = "picture" if kept == 1 else "pictures"
+        parts.append(f"{kept} {noun} left out ({KEPT_REASON}).")
+    if unreadable:
+        parts.append(_skipped_note(unreadable))
+    return " ".join(parts)[:MAX_ERROR_CHARS]
+
+
 def run_job(job: AutoLabelJob, labeler: AutoLabeler) -> AutoLabelJob:
     """Run a claimed job to completion. Never raises: failures are recorded on the job."""
     try:
@@ -106,6 +160,7 @@ def run_job(job: AutoLabelJob, labeler: AutoLabeler) -> AutoLabelJob:
         AutoLabelJob.objects.filter(pk=job.pk).update(total_assets=len(assets), model_name=labeler.name)
         proposed = 0
         unreadable: list[str] = []
+        kept = _kept_ids(job)  # ids, so a picture caught twice is still counted once
         for index, asset in enumerate(assets):
             if _cancelled(job):
                 AutoLabelJob.objects.filter(pk=job.pk).update(
@@ -113,6 +168,10 @@ def run_job(job: AutoLabelJob, labeler: AutoLabeler) -> AutoLabelJob:
                 )
                 return AutoLabelJob.objects.get(pk=job.pk)
             started = time.monotonic()
+            if _linked_to_feedback(asset):  # linked after the job was queued: still hands off
+                kept.add(asset.pk)
+                AutoLabelJob.objects.filter(pk=job.pk).update(processed_assets=index + 1)
+                continue
             try:
                 with default_storage.open(asset.storage_key, "rb") as handle, Image.open(handle) as opened:
                     opened.load()
@@ -132,10 +191,17 @@ def run_job(job: AutoLabelJob, labeler: AutoLabeler) -> AutoLabelJob:
             with transaction.atomic():
                 if not Asset.objects.filter(pk=asset.pk).exists():
                     continue
+                if _linked_to_feedback(asset):  # linked while the model was thinking
+                    kept.add(asset.pk)
+                    AutoLabelJob.objects.filter(pk=job.pk).update(processed_assets=index + 1)
+                    continue
+                # Only ever replace this tool's own earlier suggestions, never the operator-feedback boxes.
                 BoxAnnotation.objects.filter(
                     asset=asset,
                     origin=BoxAnnotation.ORIGIN_MODEL,
                     status=BoxAnnotation.STATUS_SUGGESTED,
+                ).exclude(model_name__startswith=FEEDBACK_BOX_SOURCE).exclude(
+                    id__in=[item for item in _feedback_box_ids(asset) if _is_uuid(item)]
                 ).delete()
                 rows = []
                 for proposal in proposals:
@@ -162,7 +228,7 @@ def run_job(job: AutoLabelJob, labeler: AutoLabeler) -> AutoLabelJob:
         AutoLabelJob.objects.filter(pk=job.pk).update(
             status=AutoLabelJob.SUCCEEDED,
             finished_at=timezone.now(),
-            error=_skipped_note(unreadable),
+            error=job_note(len(kept), unreadable),
         )
     except Exception as error:  # noqa: BLE001 - recorded on the job for the operator
         logger.exception("Auto-label job %s failed", job.pk)

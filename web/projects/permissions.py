@@ -207,12 +207,13 @@ def _wants_page(request: HttpRequest) -> bool:
     return not request.path.startswith("/api/") and "text/html" in request.headers.get("Accept", "")
 
 
-def denied(request: HttpRequest, action: str, project=None) -> HttpResponse:
+def denied(request: HttpRequest, action: str, project=None, message: str | None = None) -> HttpResponse:
+    """The refusal. ``message`` is a view's own sentence for a signed-in person (see :func:`access`)."""
     if not request.user.is_authenticated:
         response = JsonResponse({"error": "Sign in to continue."}, status=401)
     else:
         role = role_of(request.user, project)
-        message = denial_message(role, action)
+        message = message or denial_message(role, action)
         if _wants_page(request):
             from django.template.loader import render_to_string
 
@@ -236,11 +237,17 @@ def denied(request: HttpRequest, action: str, project=None) -> HttpResponse:
     return response
 
 
-def access(**by_method: str):
+def access(*, messages: dict[str, str] | None = None, **by_method: str):
     """Declare the role a view needs. ``@access()`` means "any signed-in user may GET"; name the others:
 
         @access(POST="label", DELETE="train")      # GET stays "view"
         @access(GET="label")                       # a GET that exports data
+        @access(GET="train", PUT="admin", messages={"admin": "Only an administrator can change this setting."})
+
+    ``messages`` maps an access level (``"label"``, ``"admin"``...) to the sentence a signed-in person who is refused
+    *that level on this view* is told, instead of the standard one (:func:`denial_message`). Other levels on the same
+    view, the "Sign in" answer and the 403 status are unchanged, and the declaration that ``ConsoleLoginRequiredMiddleware``
+    and ``tests_roles`` read (``athena_access``) does not carry the words.
 
     Put it outermost (above ``require_http_methods``). A method that is not named here is passed straight
     on, so the view's own method check answers 405 for it; ``tests_roles`` proves no route answers a
@@ -251,6 +258,14 @@ def access(**by_method: str):
     if bad:
         raise ValueError(f"Unknown access level {sorted(bad)}; use one of {sorted([*ACTION_ROLE, ADMIN])}.")
     declared.setdefault("GET", VIEW)
+    words = dict(messages) if isinstance(messages, dict) else messages
+    if words is not None and (
+        not isinstance(words, dict)
+        or any(level not in ACTION_ROLE and level != ADMIN for level in words)
+        or any(not isinstance(text, str) or not text.strip() for text in words.values())
+    ):
+        raise ValueError(f"messages must map an access level ({sorted([*ACTION_ROLE, ADMIN])}) to a non-empty sentence.")
+    words = words or {}
 
     def decorate(view):
         @functools.wraps(view)
@@ -259,7 +274,7 @@ def access(**by_method: str):
             action = declared.get(method) or (declared["GET"] if method in SAFE_METHODS else None)
             project_id = kwargs.get("project_id")  # a role given for this project applies here
             if action is not None and not can(request.user, action, project_id):
-                return denied(request, action, project_id)
+                return denied(request, action, project_id, words.get(action))
             return view(request, *args, **kwargs)
 
         wrapped.athena_access = {**declared}

@@ -6,6 +6,7 @@ from typing import Any
 
 from django.core.exceptions import RequestDataTooBig
 from django.db import IntegrityError, transaction
+from django.db.models import Count, Q
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.utils import timezone
@@ -49,6 +50,7 @@ def _number(payload: dict[str, Any], key: str, default: float, low: float, high:
 
 
 def job_data(job: AutoLabelJob) -> dict[str, Any]:
+    kept = runner.kept_for_review_count(job)
     return {
         "id": str(job.id),
         "status": job.status,
@@ -63,6 +65,9 @@ def job_data(job: AutoLabelJob) -> dict[str, Any]:
         "boxes_proposed": job.boxes_proposed,
         "cancel_requested": job.cancel_requested,
         "error": job.error,
+        # Pictures that came from operator feedback are never auto-suggested; this says how many were left out.
+        "kept_for_review": kept,
+        "kept_for_review_reason": runner.KEPT_REASON if kept else "",
         "created_at": job.created_at.isoformat(),
         "started_at": job.started_at.isoformat() if job.started_at else None,
         "finished_at": job.finished_at.isoformat() if job.finished_at else None,
@@ -163,24 +168,51 @@ def project_autolabel_cancel(request: HttpRequest, project_id, job_id) -> JsonRe
     return JsonResponse({"job": job_data(job)})
 
 
+def _review_counts(boxes) -> dict[str, int]:
+    """How many of ``boxes`` there are, how many have no confidence score, how many came from operator feedback."""
+    from_feedback = Q(model_name__startswith=runner.FEEDBACK_BOX_SOURCE)
+    counts = boxes.aggregate(
+        total=Count("pk"),
+        without_score=Count("pk", filter=Q(confidence__isnull=True)),
+        from_operator_feedback=Count("pk", filter=from_feedback),
+    )
+    return {key: counts[key] or 0 for key in ("total", "without_score", "from_operator_feedback")}
+
+
 @access(POST="label")
 @require_http_methods(["POST"])
 def project_annotation_review(request: HttpRequest, project_id) -> JsonResponse:
-    """Accept or reject model proposals in bulk. Only ever touches ``suggested`` boxes."""
+    """Accept or reject model proposals in bulk. Only ever touches ``suggested`` boxes.
+
+    Besides ``updated`` and ``pending_boxes`` the answer says (additively) what the action covers:
+
+    * ``preview: true`` in the request changes nothing and only reports the counts below (``updated`` is 0);
+    * ``would_update`` - how many suggested boxes the request's filters select (equals ``updated`` on a real run);
+    * ``from_operator_feedback`` - how many of those came from a check-screen correction (a reject deletes them and
+      the picture can never be pulled in again, so a screen should warn before it);
+    * ``left_for_review`` - suggested boxes inside the same picture/id scope that the filters did NOT select, so were
+      not changed: ``total``, how many of those ``without_score`` (a box someone drew has no confidence score, so a
+      minimum-confidence filter never selects it) and how many are ``from_operator_feedback``. The two sub-counts
+      can overlap. This never changes which boxes are accepted or rejected.
+    """
     project = get_object_or_404(Project, id=project_id, modality="image")
     try:
         payload = _json_body(request)
-        if payload.keys() - {"action", "asset_id", "min_confidence", "ids"}:
+        if payload.keys() - {"action", "asset_id", "min_confidence", "ids", "preview"}:
             raise ValueError("Request contains an unsupported field.")
         action = payload.get("action")
         if action not in {"accept", "reject"}:
             raise ValueError("action must be accept or reject.")
-        suggestions = BoxAnnotation.objects.filter(
+        preview = payload.get("preview")
+        if preview is not None and not isinstance(preview, bool):
+            raise ValueError("preview must be true or false.")
+        preview = bool(preview)
+        in_scope = BoxAnnotation.objects.filter(
             asset__project=project, status=BoxAnnotation.STATUS_SUGGESTED
         )
         if payload.get("asset_id") is not None:
             try:
-                suggestions = suggestions.filter(asset_id=uuid.UUID(str(payload["asset_id"])))
+                in_scope = in_scope.filter(asset_id=uuid.UUID(str(payload["asset_id"])))
             except ValueError as error:
                 raise ValueError("asset_id is not valid.") from error
         if payload.get("ids") is not None:
@@ -188,9 +220,10 @@ def project_annotation_review(request: HttpRequest, project_id) -> JsonResponse:
             if not isinstance(ids, list) or len(ids) > 500:
                 raise ValueError("ids must be a list of up to 500 annotation ids.")
             try:
-                suggestions = suggestions.filter(id__in=[uuid.UUID(str(item)) for item in ids])
+                in_scope = in_scope.filter(id__in=[uuid.UUID(str(item)) for item in ids])
             except ValueError as error:
                 raise ValueError("ids contains an invalid annotation id.") from error
+        suggestions = in_scope
         if payload.get("min_confidence") is not None:
             suggestions = suggestions.filter(
                 confidence__gte=_number(payload, "min_confidence", 0, 0, 1)
@@ -198,7 +231,12 @@ def project_annotation_review(request: HttpRequest, project_id) -> JsonResponse:
     except ValueError as error:
         return JsonResponse({"error": str(error)}, status=400)
 
-    if action == "accept":
+    selected = _review_counts(suggestions)
+    # Read before anything changes. Only a minimum-confidence filter can select fewer than the scope.
+    left = _review_counts(in_scope.exclude(pk__in=suggestions.values("pk")))
+    if preview:
+        updated = 0
+    elif action == "accept":
         updated = suggestions.update(
             status=BoxAnnotation.STATUS_ACCEPTED,
             reviewed_by=request.user,
@@ -209,5 +247,13 @@ def project_annotation_review(request: HttpRequest, project_id) -> JsonResponse:
     remaining = BoxAnnotation.objects.filter(
         asset__project=project, status=BoxAnnotation.STATUS_SUGGESTED
     ).count()
-    return JsonResponse({"updated": updated, "pending_boxes": remaining})
-
+    return JsonResponse(
+        {
+            "updated": updated,
+            "pending_boxes": remaining,
+            "preview": preview,
+            "would_update": selected["total"] if preview else updated,
+            "from_operator_feedback": selected["from_operator_feedback"],
+            "left_for_review": left,
+        }
+    )

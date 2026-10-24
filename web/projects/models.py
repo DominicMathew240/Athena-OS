@@ -338,6 +338,16 @@ class _AppendOnlyQuerySet(models.QuerySet):
     def delete(self):
         raise ValueError("This record is append-only and cannot be deleted.")
 
+    def _raw_delete(self, using):
+        # The fast path under delete() and cascades: it would empty the table without calling delete().
+        raise ValueError("This record is append-only and cannot be deleted.")
+
+    def bulk_create(self, objs, *args, update_conflicts=False, **kwargs):
+        # Adding rows is the point; an upsert would rewrite one that exists.
+        if update_conflicts:
+            raise ValueError("This record is append-only and cannot be changed.")
+        return super().bulk_create(objs, *args, update_conflicts=update_conflicts, **kwargs)
+
 
 class _AppendOnlyModel(models.Model):
     objects = _AppendOnlyQuerySet.as_manager()
@@ -615,6 +625,54 @@ class ReviewDecision(_AppendOnlyModel):
         ordering = ("created_at", "id")
 
 
+class FeedbackImport(_AppendOnlyModel):
+    """The record that one check-screen observation was copied into the project as a reviewable picture.
+
+    One row per observation, ever (the unique constraint is what makes importing idempotent and safe against
+    two people pressing the button at once). Never edited or deleted. It is the provenance of the picture and
+    its Needs-review boxes: observation -> model version (id and artifact checksum) -> picture -> boxes.
+
+    The picture and the model are kept as plain text as well as links: if the picture is deleted later the
+    link goes empty (like ``DatasetImage.asset``) and the text still says what it was. Nothing here points at
+    a model version, run or dataset with a real foreign key, so this table can never hold one back.
+    People appear as an opaque ``u<id>`` plus the role they held, never as a name.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="feedback_imports")
+    observation = models.ForeignKey(ObservationRecord, on_delete=models.CASCADE, related_name="feedback_imports")
+    observation_ref = models.CharField(max_length=36)
+    asset = models.ForeignKey(Asset, null=True, blank=True, on_delete=models.SET_NULL, related_name="feedback_imports")
+    asset_ref = models.CharField(max_length=36, blank=True)
+    model_version_ref = models.CharField(max_length=36)
+    model_version_number = models.PositiveIntegerField()
+    artifact_sha256 = models.CharField(max_length=64)
+    image_sha256 = models.CharField(max_length=64)
+    # How many detections the operator called right / wrong and how many missed objects they reported.
+    kinds = models.JSONField(default=dict)
+    boxes_created = models.PositiveIntegerField(default=0)
+    missed_without_box = models.PositiveIntegerField(default=0)
+    # Boxes that were not made, and why: [{"reason": "label_not_in_project", "label": ..., "kind": ...}, ...]
+    skipped = models.JSONField(default=list)
+    # Ids (as text) of the Needs-review boxes made; they may be edited or removed later, the ids stay.
+    annotation_ids = models.JSONField(default=list)
+    imported_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    imported_by_ref = models.CharField(max_length=24, blank=True)  # "u3"
+    imported_by_role = models.CharField(max_length=16, blank=True)  # the role held at the time
+    created_at = models.DateTimeField(default=timezone.now, editable=False)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        constraints = (
+            models.UniqueConstraint(fields=("observation",), name="feedbackimport_one_per_observation"),
+        )
+
+    def __str__(self) -> str:
+        return f"{self.observation_ref} -> {self.asset_ref or 'removed picture'}"
+
+
 # --- Dataset export audit ------------------------------------------------------------------
 
 
@@ -716,3 +774,54 @@ class RoleChange(_AppendOnlyModel):
 
     def __str__(self) -> str:
         return f"{self.user_ref} {self.scope} {self.before or '-'} -> {self.after or '-'}"
+
+
+class ConsoleSetting(models.Model):
+    """A console-wide switch an administrator can change without touching the server's environment.
+
+    One row per setting, ``key`` being the name. No row means "never set in the console": the environment (or
+    the built-in default) decides. Only :mod:`projects.console_settings` writes here, and every change it makes
+    also writes a :class:`ConsoleSettingEvent`.
+    """
+
+    key = models.CharField(max_length=64, primary_key=True)
+    value = models.CharField(max_length=16)  # "on" or "off"
+    updated_at = models.DateTimeField(default=timezone.now)
+    updated_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+
+    class Meta:
+        ordering = ("key",)
+
+    def __str__(self) -> str:
+        return f"{self.key}={self.value}"
+
+
+class ConsoleSettingEvent(_AppendOnlyModel):
+    """One row for every change of a console setting. Never edited or deleted.
+
+    Like :class:`RoleChange`, no names are stored: the person is an opaque id (``u3``) plus the role they
+    held at the time, with a link that is cleared if the account is deleted.
+    """
+
+    id = models.BigAutoField(primary_key=True)
+    created_at = models.DateTimeField(default=timezone.now, editable=False, db_index=True)
+    key = models.CharField(max_length=64)
+    actor = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    actor_ref = models.CharField(max_length=24, blank=True)  # "u3"
+    actor_role = models.CharField(max_length=16, blank=True)  # "administrator" (a superuser) at the time
+    before = models.CharField(max_length=16)  # what was in force: "on" or "off"
+    before_source = models.CharField(max_length=16)  # where that came from: "console", "environment" or "default"
+    after = models.CharField(max_length=16)
+    terms_acknowledged = models.BooleanField(default=False)  # the licence tick, when turning something on
+    note = models.CharField(max_length=300, blank=True)
+
+    class Meta:
+        ordering = ("-id",)
+        indexes = (models.Index(fields=("key", "-id")),)
+
+    def __str__(self) -> str:
+        return f"{self.key} {self.before} -> {self.after}"

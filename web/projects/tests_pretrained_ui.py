@@ -242,8 +242,10 @@ class PanelMarkupTests(TrainingBase):
         super().setUp()
         self.html = self.client.get("/").content.decode()
 
-    def test_the_control_is_collapsed_and_has_a_radio_group_a_licence_box_and_a_tick(self) -> None:
-        self.assertRegex(self.html, r'<details class="dataset-advanced" id="tr-start-from"(?![^>]*\bopen\b)[^>]*hidden')
+    def test_the_control_is_inside_the_closed_administrator_fold_and_has_a_radio_group_a_licence_box_and_a_tick(self) -> None:
+        self.assertRegex(self.html, r'<details class="admin-fold train-admin" id="tr-admin"(?![^>]*\bopen\b)')
+        self.assertRegex(self.html, r'<div class="train-start-from" id="tr-start-from" hidden>')
+        self.assertLess(self.html.index('id="tr-admin"'), self.html.index('id="tr-start-from"'))
         for element_id in ("tr-start-from-why", "tr-pre-none", "tr-pre-imagenet_backbone", "tr-pre-coco", "tr-pre-licence", "tr-pre-ack"):
             with self.subTest(element_id=element_id):
                 self.assertIn(f'id="{element_id}"', self.html)
@@ -251,7 +253,9 @@ class PanelMarkupTests(TrainingBase):
         self.assertRegex(self.html, r'<input id="tr-pre-ack" type="checkbox"')
 
     def test_summary_text(self) -> None:
-        self.assertIn("Advanced: start from a ready-made model", self.html)
+        self.assertIn("Start from a ready-made model", self.html)
+        self.assertNotIn("Advanced: start from a ready-made model", self.html)
+        self.assertNotIn("Most people can leave this closed", self.html)  # the setting that decides success was hidden behind this
 
     def test_script_sends_the_choice_and_the_tick_and_never_trusts_innerhtml(self) -> None:
         js = (STATIC / "console.js").read_text()

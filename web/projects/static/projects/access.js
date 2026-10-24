@@ -42,7 +42,12 @@ async function api(url, options = {}) {
   } catch (error) {
     body = {};
   }
-  if (!response.ok) throw new Error(body.error || `The server answered ${response.status}.`);
+  if (!response.ok) {
+    const failure = new Error(body.error || `The server answered ${response.status}.`);
+    failure.status = response.status;
+    failure.body = body;
+    throw failure;
+  }
   return body;
 }
 
@@ -94,7 +99,7 @@ function personCard(person) {
   item.dataset.user = String(person.user_id);
   const head = el("div", "person-head");
   const name = el("h3", "person-name", person.username);
-  head.append(name, el("span", "person-ref", person.id));
+  head.append(name); // the id (u1) stays in the record of changes, where it is the permanent identity; here the name is enough
   item.append(head);
 
   if (person.superuser) {
@@ -318,6 +323,167 @@ function fillFilters() {
   overview.people.forEach(person => recordPerson.append(new Option(person.username, person.id)));
 }
 
+/* ---- ready-made model downloads ----------------------------------------------------------------
+   One switch for the whole console, kept by /api/console/training-downloads. The server decides who may change it
+   (superusers only) and checks the tick, the note and that the page was not out of date; this section only asks. */
+const DOWNLOADS_URL = "/api/console/training-downloads";
+const DOWNLOADS_MIN_NOTE = 3;
+const dl = {
+  section: $("ready-made-model-downloads"), state: $("downloads-state"), source: $("downloads-source"), precedence: $("downloads-precedence"),
+  licence: $("downloads-licence"), licenceBody: $("downloads-licence-body"), form: $("downloads-form"), fields: $("downloads-fields"),
+  off: $("downloads-off"), on: $("downloads-on"), onOnly: $("downloads-on-only"), ack: $("downloads-ack"), note: $("downloads-note"),
+  noteLabel: $("downloads-note-label"), noteHelp: $("downloads-note-help"), error: $("downloads-error"), save: $("downloads-save"),
+  reload: $("downloads-reload"), saveHelp: $("downloads-save-help"), reason: $("downloads-reason"), last: $("downloads-last")
+};
+let downloads = null; // the last answer from the server
+let downloadsEvent = null; // the change this page made, for the line "last change"
+let downloadsSaving = false;
+let downloadsStale = false;
+
+// Server sentences name commands between backticks: the command is shown as code, everything else as plain text.
+function richText(node, text) {
+  node.replaceChildren();
+  String(text || "").split("\u0060").forEach((part, index) => { if (part) node.append(index % 2 ? el("code", "", part) : part); });
+  return node;
+}
+
+const downloadsChoice = () => (dl.on.checked ? true : dl.off.checked ? false : null);
+const switchWord = allow => (allow ? "on" : "off");
+
+function renderDownloadsLicence(licence) {
+  dl.licenceBody.replaceChildren();
+  if (!licence) { dl.licence.hidden = true; return; }
+  dl.licence.hidden = false;
+  if (licence.general_terms) dl.licenceBody.append(richText(el("p"), licence.general_terms));
+  (licence.options || []).forEach(option => {
+    dl.licenceBody.append(el("h3", "downloads-licence-title", option.title), richText(el("p"), option.licence_plain));
+  });
+  if (licence.backend_note) dl.licenceBody.append(el("h3", "downloads-licence-title", "The teaching tool’s own licence note, word for word"), richText(el("p"), licence.backend_note));
+}
+
+function downloadsLastText() {
+  const stored = downloads.stored;
+  if (!stored) return "Nobody has chosen in the console yet.";
+  let text = `Last change in the console: switched ${switchWord(stored.allow)}, ${whenText(stored.changed_at)}.`;
+  const event = downloadsEvent;
+  if (event) {
+    const who = overview?.people.find(person => person.id === event.by)?.username;
+    text += ` By ${who ? `${who} (${event.by})` : event.by || "an administrator"}${event.role ? `, ${event.role}` : ""}${event.terms_acknowledged ? ", who ticked that they had read the licence text" : ""}.`;
+    if (event.note) text += ` Note: ${event.note}`;
+  }
+  return text;
+}
+
+function renderDownloads() {
+  const state = downloads;
+  dl.state.textContent = state.summary;
+  dl.state.dataset.tone = state.allow ? "on" : "off";
+  const variable = state.environment?.variable || "ATHENA_TRAINING_ALLOW_DOWNLOAD";
+  dl.source.textContent = state.source === "console" && state.environment?.set
+    ? `The setting ${variable} in the helper’s environment says ${switchWord(state.environment.allow)}. The choice made here wins over it.`
+    : state.source === "environment" ? `Choosing below replaces the setting ${variable} for everyone.` : "";
+  richText(dl.precedence, [state.precedence, state.fetched_by].filter(Boolean).join(" "));
+  renderDownloadsLicence(state.licence);
+  dl.last.textContent = downloadsLastText();
+
+  const canChange = state.can_change === true;
+  dl.form.hidden = false;
+  dl.fields.disabled = !canChange || downloadsSaving;
+  dl.reason.hidden = canChange;
+  dl.reason.textContent = canChange ? "" : "Only an administrator (a superuser) can change this switch. You can read what it is set to here.";
+  dl.off.checked = !state.allow;
+  dl.on.checked = state.allow;
+  dl.ack.checked = false;
+  dl.note.value = "";
+  dl.error.dataset.open = "false";
+  dl.error.textContent = "";
+  dl.reload.hidden = !downloadsStale;
+  syncDownloadsForm();
+}
+
+function syncDownloadsForm() {
+  if (!downloads) return;
+  const choice = downloadsChoice();
+  const changed = choice !== null && choice !== downloads.allow;
+  const turningOn = changed && choice === true;
+  dl.onOnly.hidden = !turningOn;
+  if (turningOn) dl.licence.open = true; // the licence text is open when the box asks whether it was read
+  dl.noteLabel.textContent = turningOn ? "Why are you switching downloads on? (required)" : "Note for the record (optional)";
+  dl.noteHelp.textContent = turningOn ? `At least ${DOWNLOADS_MIN_NOTE} characters. It is written to the record with your name.` : "It is written to the record with your name.";
+  const noteLength = dl.note.value.trim().length;
+  let missing = "";
+  if (downloads.can_change !== true) missing = "";
+  else if (downloadsStale) missing = "The setting changed while this page was open. Show the current setting first.";
+  else if (!changed) missing = "Choose a different option to save a change.";
+  else if (turningOn && !dl.ack.checked) missing = "Tick the box saying you have read the licence text.";
+  else if (turningOn && noteLength < DOWNLOADS_MIN_NOTE) missing = `Write a short note saying why (at least ${DOWNLOADS_MIN_NOTE} characters).`;
+  dl.save.disabled = downloads.can_change !== true || Boolean(missing) || downloadsSaving;
+  dl.save.setAttribute("aria-busy", String(downloadsSaving));
+  dl.save.textContent = downloadsSaving ? "Saving…" : choice === true ? "Switch downloads on" : choice === false && changed ? "Switch downloads off" : "Save this choice";
+  dl.saveHelp.textContent = downloadsSaving ? "" : missing;
+}
+
+async function loadDownloads(focusChoice = false) {
+  try {
+    downloads = await api(DOWNLOADS_URL);
+  } catch (error) {
+    dl.state.textContent = `Could not load this setting. ${error.message}`;
+    dl.state.dataset.tone = "error";
+    return;
+  }
+  downloadsStale = false;
+  renderDownloads();
+  if (focusChoice) (dl.on.checked ? dl.on : dl.off).focus();
+}
+
+async function saveDownloads(event) {
+  event.preventDefault();
+  if (downloadsSaving || dl.save.disabled || !downloads) return; // one request at a time
+  const allow = downloadsChoice();
+  const payload = { allow, based_on: downloads.allow };
+  if (allow) payload.acknowledge_terms = true;
+  const note = dl.note.value.trim();
+  if (note) payload.note = note;
+  downloadsSaving = true;
+  dl.fields.disabled = true;
+  dl.error.dataset.open = "false";
+  syncDownloadsForm();
+  try {
+    const body = await sendJson(DOWNLOADS_URL, "PUT", payload);
+    downloadsEvent = body.event || null;
+    downloads = body;
+    downloadsSaving = false;
+    renderDownloads();
+    say(body.changed ? `Ready-made model downloads are now switched ${switchWord(body.allow)}.` : `Nothing changed: downloads were already switched ${switchWord(body.allow)}.`, "ok");
+    (dl.on.checked ? dl.on : dl.off).focus(); // the button just went grey; keep the keyboard where the result is
+  } catch (error) {
+    downloadsSaving = false;
+    dl.fields.disabled = downloads.can_change !== true;
+    if (error.status === 409) {
+      downloadsStale = true;
+      dl.error.textContent = error.message; // the server's sentence already says nothing was changed
+      dl.reload.hidden = false;
+    } else if (error.status === 403) {
+      dl.error.textContent = error.message; // the server's own sentence for “you may not”, as it is
+    } else {
+      dl.error.textContent = `Nothing was changed. ${error.message}`;
+    }
+    dl.error.dataset.open = "true";
+    syncDownloadsForm();
+    (downloadsStale ? dl.reload : dl.save).focus();
+  }
+}
+
+dl.form.addEventListener("submit", saveDownloads);
+dl.form.addEventListener("change", syncDownloadsForm);
+dl.note.addEventListener("input", syncDownloadsForm);
+dl.reload.addEventListener("click", () => { say("Showing the current setting.", "ok"); void loadDownloads(true); });
+
+async function startDownloads() {
+  await loadDownloads();
+  if (new URL(document.URL).hash === "#ready-made-model-downloads") dl.section.focus(); // the address names this section: take focus there
+}
+
 async function start() {
   try {
     overview = await api("/api/access");
@@ -336,3 +502,4 @@ recordProject.addEventListener("change", () => loadRecord(true));
 recordPerson.addEventListener("change", () => loadRecord(true));
 recordMore.addEventListener("click", () => loadRecord(false));
 void start();
+void startDownloads();

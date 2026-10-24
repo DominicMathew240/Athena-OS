@@ -311,3 +311,17 @@ def _export(request: HttpRequest, version: DatasetVersion, fmt: str):
     response["Content-Disposition"] = f'attachment; filename="{filename}"'
     response["X-Content-Type-Options"] = "nosniff"
     return _no_store(response)
+
+
+@access()
+@require_http_methods(["GET"])
+def project_dataset_health(request: HttpRequest, project_id) -> JsonResponse:
+    """Per-label example counts, held-back readiness and near-duplicate pictures. Reads only; creates nothing."""
+    from .datasets import health  # local import keeps this change to one appended function
+
+    project = _image_project(project_id)
+    try:
+        config = _config_from_query(request.GET)
+    except ValueError as error:
+        return JsonResponse({"error": str(error)}, status=400)
+    return _no_store(JsonResponse(health.build(project, config)))

@@ -28,12 +28,35 @@
   CS.typeList = (types) => types.map((t) => CS.TYPE_NAMES[t] || t).join(", ");
   CS.megabytes = (bytes) => `${Math.round(bytes / 1048576)} MB`;
 
-  /* A plain phrase for the computer's own score. It is a guess, never a measured accuracy. */
-  CS.sureness = function (score) {
-    if (score >= 0.9) return "Very sure";
-    if (score >= 0.75) return "Fairly sure";
-    if (score >= 0.5) return "Somewhat sure";
-    return "Not very sure";
+  /* How a score is worded. The words come only from what was measured on the Final test pictures and arrive in the
+     render model as `confidence_wording` {measured, bands:[{low, high, label, precision, n, enough}], note}. Nothing
+     here invents an edge or a phrase: with no measurement the number is shown as the computer's own number. */
+  CS.NOT_CHECKED_NOTE = "The score is the computer’s own number. It has not been checked against pictures, so it is not a probability. A person decides.";
+  CS.scoreNumber = (score) => `score ${Number(score).toFixed(2)}`;
+  CS.bandFor = function (wording, score) {
+    if (!wording || wording.measured !== true || !Array.isArray(wording.bands)) return null;
+    const bands = wording.bands;
+    for (let i = 0; i < bands.length; i += 1) {
+      const band = bands[i];
+      const last = i === bands.length - 1;
+      // low is inclusive, high is exclusive; the last band also holds a score of exactly 1.
+      if (score >= band.low && (score < band.high || (last && score <= band.high))) return band;
+    }
+    return null;
+  };
+  /* {text, kind}: kind is "measured" | "thin" | "unchecked". */
+  CS.scoreWords = function (score, wording) {
+    const band = CS.bandFor(wording, score);
+    if (band && band.enough === true && typeof band.label === "string" && band.label) {
+      return { kind: "measured", text: `${band.label.charAt(0).toUpperCase()}${band.label.slice(1)} · ${CS.scoreNumber(score)}`, band };
+    }
+    if (band) return { kind: "thin", text: `${CS.scoreNumber(score)} · not enough checking to say how often this is right`, band };
+    return { kind: "unchecked", text: `${CS.scoreNumber(score)} (the computer’s own number, not checked)`, band: null };
+  };
+  /* The one sentence about the scores that a screen shows once. */
+  CS.scoreNote = (render) => {
+    const note = render && render.confidence_wording && render.confidence_wording.note;
+    return typeof note === "string" && note ? note : CS.NOT_CHECKED_NOTE;
   };
 
   CS.thresholdWords = function (threshold) {
@@ -287,15 +310,15 @@
     return api;
   };
 
-  CS.detectionRow = function (det, number) {
+  CS.detectionRow = function (det, number, render) {
     const item = CS.el("li", "cs-det");
     item.dataset.index = String(det.index);
     const head = CS.el("div", "cs-det-head");
     head.appendChild(CS.el("span", "cs-det-num", String(number)));
     head.appendChild(CS.el("strong", "cs-det-label", det.label));
-    const sure = CS.el("span", "cs-det-sure");
-    sure.textContent = `${CS.sureness(det.score)} · ${CS.percent(det.score)}`;
-    sure.title = "The percentage is the computer’s own guess. It is not a measured accuracy.";
+    const words = CS.scoreWords(det.score, render && render.confidence_wording);
+    const sure = CS.el("span", "cs-det-sure", words.text);
+    sure.dataset.wording = words.kind;
     head.appendChild(sure);
     item.appendChild(head);
     return item;

@@ -250,6 +250,27 @@ class ImageAssetTests(SignedInMixin, TestCase):
         self.assertEqual(b"".join(content_response.streaming_content), content)
         self.assertEqual(content_response["Content-Type"], "image/png")
 
+    def test_upload_accepts_multi_picture_jpeg_as_jpeg(self) -> None:
+        # Phone and thermal-camera .jpg files often carry an MPF header; Pillow names that format MPO.
+        buffer = BytesIO()
+        first = Image.new("RGB", (4, 3), color=(200, 40, 40))
+        first.save(buffer, format="MPO", save_all=True, append_images=[Image.new("RGB", (4, 3))])
+        content = buffer.getvalue()
+        self.assertEqual(Image.open(BytesIO(content)).format, "MPO")
+
+        response = self.client.post(
+            self.upload_url(),
+            data={"images": SimpleUploadedFile("camera.jpg", content, content_type="image/jpeg")},
+        )
+
+        self.assertEqual(response.status_code, 201, response.content)
+        asset = response.json()["assets"][0]
+        self.assertEqual((asset["width"], asset["height"]), (4, 3))
+        self.assertEqual(asset["sha256"], hashlib.sha256(content).hexdigest())
+        content_response = self.client.get(asset["content_url"])
+        self.assertEqual(content_response["Content-Type"], "image/jpeg")
+        self.assertEqual(b"".join(content_response.streaming_content), content)
+
     def test_rejects_corrupt_and_unsupported_images_without_partial_import(self) -> None:
         valid, _ = self.image_file()
         corrupt = SimpleUploadedFile("bad.png", b"not an image", content_type="image/png")

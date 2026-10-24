@@ -1251,3 +1251,244 @@ class ExportAuditTests(DatasetBase):
         event = ExportEvent.objects.get()
         self.assertIsNone(event.user_id)
         self.assertIsNotNone(event.user_id_snapshot)
+
+
+class SharedHelperTests(DatasetBase):
+    """One public fingerprint and one accepted-boxes query, used by every caller (hygiene follow-ups H1, H2)."""
+
+    def old_fingerprint(self) -> str:
+        # The formula as it was written before the helper existed: pinned here so the refactor cannot change the value.
+        rows = (
+            BoxAnnotation.objects.filter(asset__project=self.project, status=BoxAnnotation.STATUS_ACCEPTED)
+            .order_by("id")
+            .values_list("id", "label", "x", "y", "width", "height", "updated_at", "asset__sha256")
+        )
+        digest = hashlib.sha256()
+        for row in rows:
+            digest.update(repr(row).encode())
+        return digest.hexdigest()
+
+    def test_the_public_fingerprint_and_the_old_private_name_are_one_function_with_one_value(self) -> None:
+        self.assertIs(dataset_service._fingerprint, dataset_service.content_fingerprint)
+        self.labelled_asset()
+        self.make_suggestion(self.make_asset())
+        value = dataset_service.content_fingerprint(self.project)
+        self.assertEqual(value, dataset_service._fingerprint(self.project))
+        self.assertEqual(value, self.old_fingerprint())
+
+    def test_lifecycle_uses_the_public_name_not_the_private_one(self) -> None:
+        from .training import lifecycle
+
+        source = Path(lifecycle.__file__).read_text()
+        self.assertIn("dataset_service.content_fingerprint(", source)
+        self.assertNotIn("dataset_service._fingerprint", source)
+
+    def test_accepted_boxes_is_the_old_query_ordered_by_id_with_the_picture_loaded(self) -> None:
+        first = self.labelled_asset()
+        self.make_suggestion(self.make_asset())  # never counts
+        second = self.labelled_asset()
+        by_id = sorted([first, second], key=lambda asset: asset.annotations.get().id)  # box ids are random UUIDs
+        boxes = dataset_service.accepted_boxes(self.project)
+        with self.assertNumQueries(1):
+            found = list(boxes)
+            self.assertEqual([box.asset_id for box in found], [asset.id for asset in by_id])
+            self.assertEqual([box.asset.sha256 for box in found], [asset.sha256 for asset in by_id])  # no extra query
+        self.assertEqual([box.id for box in found], sorted(box.id for box in found))
+        other = Project.objects.create(name="Other", modality="image", task="Object detection", labels=["damaged"])
+        self.assertEqual(list(dataset_service.accepted_boxes(other)), [])
+
+    def test_the_four_callers_see_the_same_boxes_after_add_accept_and_delete(self) -> None:
+        from .datasets import health
+        from .training import lifecycle
+
+        def seen():
+            """The accepted-box ids each caller works from, plus how many times the shared helper was asked."""
+            with mock.patch.object(dataset_service, "accepted_boxes", wraps=dataset_service.accepted_boxes) as shared:
+                dataset_service.content_fingerprint(self.project)
+                analysis = dataset_service.analyse(self.project, splits.SplitConfig.default())
+                health.build(self.project)
+            self.assertEqual(shared.call_count, 4)  # fingerprint 1, analyse 2 (its query and its fingerprint), health 1
+            return analysis
+
+        def expected_ids():
+            return sorted(
+                BoxAnnotation.objects.filter(
+                    asset__project=self.project, status=BoxAnnotation.STATUS_ACCEPTED
+                ).values_list("id", flat=True)
+            )
+
+        def check(label):
+            analysis = seen()
+            self.assertEqual([box.id for box in analysis.accepted], expected_ids(), label)
+            self.assertEqual([box.id for box in dataset_service.accepted_boxes(self.project)], expected_ids(), label)
+            self.assertEqual(analysis.fingerprint, self.old_fingerprint(), label)
+            return analysis
+
+        empty = check("empty")
+        self.assertEqual(empty.accepted, [])
+        asset = self.labelled_asset()
+        added = check("added")
+        self.assertEqual(len(added.accepted), 1)
+        suggestion = self.make_suggestion(self.make_asset())
+        self.assertEqual(len(check("suggestion only").accepted), 1)
+        suggestion.status = BoxAnnotation.STATUS_ACCEPTED
+        suggestion.save()
+        accepted = check("accepted")
+        self.assertEqual(len(accepted.accepted), 2)
+        self.assertNotEqual(accepted.fingerprint, added.fingerprint)
+        # the fourth caller: the "is the latest snapshot current?" comparison reads the analysis the others share
+        version = dataset_service.create_version(accepted, self.user)
+        self.assertTrue(lifecycle.snapshot_is_current(self.project, version, accepted))
+        asset.annotations.all().delete()
+        deleted = check("deleted")
+        self.assertEqual(len(deleted.accepted), 1)
+        self.assertFalse(lifecycle.snapshot_is_current(self.project, version, deleted))
+
+    def test_health_has_no_private_copy_of_the_status_constants(self) -> None:
+        from .datasets import health
+
+        self.assertIs(health.ACCEPTED, dataset_service.ACCEPTED)
+        self.assertIs(health.SUGGESTED, dataset_service.SUGGESTED)
+        self.assertNotIn("ACCEPTED = BoxAnnotation", Path(health.__file__).read_text())
+        self.assertNotIn("SUGGESTED = BoxAnnotation", Path(health.__file__).read_text())
+
+
+class FileCheckBudgetTests(DatasetBase):
+    """``analyse(file_check=...)``: how many picture files are re-checked (hygiene follow-up H3)."""
+
+    def setUp(self) -> None:
+        super().setUp()
+        validation.clear_verification_cache()
+        self.addCleanup(validation.clear_verification_cache)
+
+    def hasher(self):
+        return mock.patch.object(validation, "storage_sha256", wraps=validation.storage_sha256)
+
+    def ticking(self, step: float = 1.0):
+        """A clock that moves ``step`` seconds every time it is read, starting at 0."""
+        state = {"now": -step}
+
+        def clock() -> float:
+            state["now"] += step
+            return state["now"]
+
+        return mock.patch.object(dataset_service, "_clock", clock)
+
+    def analyse(self, **kw):
+        return dataset_service.analyse(self.project, splits.SplitConfig.default(), **kw)
+
+    def test_full_is_the_default_and_checks_every_file(self) -> None:
+        for _ in range(3):
+            self.labelled_asset()
+        with self.hasher() as hasher:
+            analysis = self.analyse()
+        self.assertEqual(hasher.call_count, 3)
+        self.assertTrue(analysis.files_rechecked)
+        self.assertEqual((analysis.files_checked, analysis.files_not_rechecked), (3, 0))
+
+    def test_skip_checks_no_file_and_says_so(self) -> None:
+        asset = self.labelled_asset()
+        self.labelled_asset()
+        default_storage.delete(asset.storage_key)
+        with self.hasher() as hasher:
+            analysis = self.analyse(file_check="skip")
+        hasher.assert_not_called()
+        self.assertFalse(analysis.files_rechecked)
+        self.assertEqual((analysis.files_checked, analysis.files_not_rechecked), (0, 2))
+        self.assertEqual(analysis.problems, [])  # the missing file is NOT reported: it was not looked at
+
+    def test_a_budget_stops_re_checking_when_the_clock_runs_out(self) -> None:
+        for _ in range(5):
+            self.labelled_asset()
+        with self.ticking(1.0), self.hasher() as hasher:
+            analysis = self.analyse(file_check=2.5)
+        self.assertEqual(hasher.call_count, 2)  # read at 0 (start); files go at 1 and 2; at 3 the 2.5 s are used up
+        self.assertFalse(analysis.files_rechecked)
+        self.assertEqual((analysis.files_checked, analysis.files_not_rechecked), (2, 3))
+
+    def test_a_budget_that_is_never_used_up_checks_everything(self) -> None:
+        for _ in range(3):
+            self.labelled_asset()
+        with self.ticking(0.001), self.hasher() as hasher:
+            analysis = self.analyse(file_check=30)
+        self.assertEqual(hasher.call_count, 3)
+        self.assertTrue(analysis.files_rechecked)
+
+    def test_files_checked_before_the_budget_ran_out_still_report_their_problems(self) -> None:
+        first, second = self.labelled_asset(), self.labelled_asset()
+        default_storage.delete(first.storage_key)
+        default_storage.delete(second.storage_key)
+        with self.ticking(1.0):
+            analysis = self.analyse(file_check=1.5)
+        self.assertEqual([p.code for p in analysis.problems], ["file_missing"])  # one file looked at, one not
+        self.assertEqual(analysis.files_not_rechecked, 1)
+
+    def test_other_checks_are_unchanged_when_files_are_skipped(self) -> None:
+        asset = self.labelled_asset()
+        BoxAnnotation.objects.filter(asset=asset).update(label="not-a-label")
+        analysis = self.analyse(file_check="skip")
+        self.assertEqual([p.code for p in analysis.problems], ["label_not_in_project"])
+
+    def test_nothing_accepted_means_nothing_was_left_unchecked(self) -> None:
+        analysis = self.analyse(file_check="skip")
+        self.assertTrue(analysis.files_rechecked)
+        self.assertEqual(analysis.files_not_rechecked, 0)
+
+    def test_an_unknown_mode_is_refused_plainly(self) -> None:
+        for bad in ("fast", "", None, True, -1, float("nan"), [1]):
+            with self.subTest(bad=bad):
+                with self.assertRaises(ValueError):
+                    self.analyse(file_check=bad)
+
+
+class PartialAnalysisCannotFreezeTests(DatasetBase):
+    """A version is only ever frozen from an analysis that looked at every picture file (W10-FX3 / B2)."""
+
+    REFUSAL = (
+        "This check did not look at every picture file (2 of 2 were left unchecked), so a dataset version cannot be "
+        "frozen from it. Run the full check and try again. Nothing was created."
+    )
+
+    def analyse(self, **kw):
+        return dataset_service.analyse(self.project, splits.SplitConfig.default(), **kw)
+
+    def setUp(self) -> None:
+        super().setUp()
+        self.first, self.second = self.labelled_asset(), self.labelled_asset()
+
+    def test_complete_is_true_only_when_every_file_was_looked_at(self) -> None:
+        self.assertIs(self.analyse().complete, True)
+        self.assertIs(self.analyse(file_check="skip").complete, False)
+        self.assertIs(self.analyse(file_check=0).complete, False)
+
+    def test_ready_keeps_its_meaning_for_the_preview(self) -> None:
+        default_storage.delete(self.first.storage_key)
+        skipped = self.analyse(file_check="skip")
+        self.assertTrue(skipped.ready)  # the preview's answer: nothing it looked at is wrong...
+        self.assertFalse(skipped.complete)  # ...and this says it did not look at everything
+        full = self.analyse()
+        self.assertFalse(full.ready)
+        self.assertTrue(full.complete)
+
+    def test_a_partial_analysis_with_a_missing_file_cannot_be_frozen(self) -> None:
+        default_storage.delete(self.first.storage_key)
+        partial = self.analyse(file_check="skip")
+        self.assertTrue(partial.ready)
+        with self.assertRaises(dataset_service.IncompleteAnalysis) as caught:
+            dataset_service.create_version(partial, self.user)
+        self.assertEqual(str(caught.exception), self.REFUSAL)
+        self.assertEqual(DatasetVersion.objects.count(), 0)
+        self.assertEqual(DatasetImage.objects.count(), 0)
+
+    def test_a_partial_analysis_with_nothing_wrong_is_refused_too(self) -> None:
+        with self.assertRaises(dataset_service.IncompleteAnalysis):
+            dataset_service.create_version(self.analyse(file_check="skip"), self.user)
+        self.assertEqual(DatasetVersion.objects.count(), 0)
+
+    def test_it_is_a_plain_value_error_not_a_version_conflict(self) -> None:
+        self.assertTrue(issubclass(dataset_service.IncompleteAnalysis, ValueError))
+        self.assertFalse(issubclass(dataset_service.IncompleteAnalysis, dataset_service.VersionConflict))
+
+    def test_a_full_analysis_still_freezes(self) -> None:
+        version = dataset_service.create_version(self.analyse(), self.user)
+        self.assertEqual((version.version, version.image_count), (1, 2))

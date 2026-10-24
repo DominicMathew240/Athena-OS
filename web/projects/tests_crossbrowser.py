@@ -132,6 +132,103 @@ class OperatorSentenceTests(TestCase):
         self.assertEqual(self.run_sentence(2, 0.25), "The computer found 2 things it is at least 25% sure about.")
 
 
+@skipUnless(NODE, "Node is not installed")
+class MeasuredScoreWordingTests(TestCase):
+    """The check screen words a score only from what the server measured (`confidence_wording`), never from fixed edges."""
+
+    def wording(self) -> dict:
+        from .tests_operating_points import synthetic_operating_points
+        from .training import operating_points as op
+
+        return op.confidence_wording({"operating_points": synthetic_operating_points()})
+
+    def words(self, score: float, wording: dict) -> dict:
+        script = f"""
+        const vm = require('vm'); const fs = require('fs');
+        const window = {{}}; const Athena = {{ ICONS: {{}} }};
+        vm.runInNewContext(fs.readFileSync({json.dumps(str(STATIC / "checkscreen_core.js"))}, 'utf8'), {{ window, Athena, document: {{}} }});
+        const w = window.CheckScreen.scoreWords({score}, {json.dumps(wording)});
+        process.stdout.write(JSON.stringify({{ kind: w.kind, text: w.text }}));
+        """
+        return json.loads(subprocess.run([NODE, "-e", script], capture_output=True, text=True, check=True, timeout=30).stdout)
+
+    def test_a_score_in_a_measured_band_is_shown_with_that_bands_own_label(self) -> None:
+        wording = self.wording()
+        self.assertTrue(wording["measured"])
+        for band in wording["bands"]:
+            if not band["enough"]:
+                continue
+            middle = round((band["low"] + band["high"]) / 2, 3)
+            got = self.words(middle, wording)
+            self.assertEqual(got["kind"], "measured")
+            self.assertEqual(got["text"], f"{band['label'][0].upper()}{band['label'][1:]} · score {middle:.2f}")
+
+    def test_band_edges_low_is_inclusive_high_is_exclusive_and_the_last_band_holds_one(self) -> None:
+        wording = self.wording()
+        bands = wording["bands"]
+        self.assertGreater(len(bands), 2)
+        for lower, upper in zip(bands, bands[1:]):
+            edge = upper["low"]
+            self.assertEqual(lower["high"], edge)
+            self.assertTrue(self.words(edge, wording)["text"].startswith(upper["label"][0].upper() + upper["label"][1:]) or not upper["enough"])
+            if upper["enough"] and lower["enough"] and lower["label"] != upper["label"]:
+                self.assertNotIn(lower["label"][1:], self.words(edge, wording)["text"])
+        last = bands[-1]
+        self.assertEqual(self.words(1.0, wording)["kind"], "measured" if last["enough"] else "thin")
+        self.assertIn(last["label"][1:], self.words(1.0, wording)["text"])
+
+    def test_a_band_without_enough_checking_says_so_and_gives_no_measured_words(self) -> None:
+        wording = self.wording()
+        thin = json.loads(json.dumps(wording))
+        thin["bands"][3].update({"enough": False, "label": "too few examples to say"})
+        score = round((thin["bands"][3]["low"] + thin["bands"][3]["high"]) / 2, 3)
+        got = self.words(score, thin)
+        self.assertEqual(got["kind"], "thin")
+        self.assertEqual(got["text"], f"score {score:.2f} · not enough checking to say how often this is right")
+        self.assertNotIn("right about", got["text"])
+
+    def test_without_a_measurement_the_number_is_the_computers_own_and_nothing_stronger(self) -> None:
+        for wording in ({"measured": False, "bands": [], "note": "x"}, None, {}):
+            got = self.words(0.82, wording)
+            self.assertEqual(got, {"kind": "unchecked", "text": "score 0.82 (the computer’s own number, not checked)"})
+        # a stored band list that is marked as not measured is not used, whatever it holds
+        lie = {**self.wording(), "measured": False}
+        self.assertEqual(self.words(0.95, lie)["kind"], "unchecked")
+
+    def test_the_servers_note_is_what_the_screen_shows_and_the_old_fixed_words_are_gone_everywhere(self) -> None:
+        old = ["Very" + " sure", "Fairly" + " sure", "Somewhat" + " sure", "Not very" + " sure"]
+        for folder in (STATIC, TEMPLATES):
+            for path in folder.rglob("*"):
+                if path.suffix in {".js", ".html", ".css"}:
+                    text = path.read_text()
+                    for phrase in old:
+                        self.assertNotIn(phrase, text, f"{path.name}: {phrase}")
+        self.assertNotIn("sureness(", source("checkscreen_core.js"))
+        self.assertIn("CS.scoreNote(render)", source("checkscreen.js"))
+        self.assertIn("Not a final decision", (TEMPLATES / "projects" / "checkscreen.html").read_text())  # the banner stays
+
+
+class BuilderSuggestionTests(TestCase):
+    """The builder shows the server's plain sentence; the button exists only for a usable, measured value."""
+
+    def test_the_button_needs_a_value_and_enough_data_and_nothing_is_applied_by_itself(self) -> None:
+        js = source("checkscreen_builder.js")
+        self.assertIn('typeof hint.value === "number" && hint.value >= 0 && hint.value <= 1 && hint.enough_data === true', js)
+        self.assertIn("f.suggestUse.hidden = suggestion.value === null;", js)
+        use = js[js.index("function useSuggestion()") : js.index("function fillForm(app)")]
+        self.assertIn("markDirty", js)
+        self.assertNotIn("onSave", use)  # filling the field never saves
+        self.assertNotIn("CS.request", use)
+        html = (TEMPLATES / "projects" / "checkscreen_builder.html").read_text()
+        self.assertIn('id="cs-suggest-use" hidden>Use the suggested setting</button>', html)
+        self.assertIn('id="cs-threshold" type="range" min="0" max="100"', html)  # the range the validator takes is unchanged
+
+    def test_a_suggestion_belongs_to_the_saved_model_only(self) -> None:
+        js = source("checkscreen_builder.js")
+        self.assertIn("preview.model.id !== modelId", js)
+        self.assertIn("preview = null; // the last screen's render model must not feed this screen's suggestion", js)
+
+
 class Landmarks(HTMLParser):
     def __init__(self) -> None:
         super().__init__()
@@ -226,7 +323,7 @@ class BrowserSmokeKitTests(TestCase):
     def test_the_script_fails_on_every_class_of_dead_page_it_promises(self) -> None:
         js = (SCRIPTS / "browser_smoke.mjs").read_text()
         for needle in ('page.on("pageerror"', "securitypolicyviolation", 'message.type() === "error"', 'page.on("requestfailed"',
-                       'page.on("response"', "project-count", "Checking…", "unnamed controls", "under 16px", "sideways",
+                       'page.on("response"', "project-count", "data-ready", "unnamed controls", "under 16px", "sideways",
                        "Tab", "Shift+Tab", "Escape", "process.exit(1)"):
             with self.subTest(needle=needle):
                 self.assertIn(needle, js)

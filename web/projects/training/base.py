@@ -27,6 +27,16 @@ class BackendUnavailable(Exception):
     """The backend cannot run here; the message says how to enable it."""
 
 
+class StartBlocked(Exception):
+    """A run cannot be started right now for a reason only an administrator can fix (HTTP 409).
+
+    ``str(error)`` is the plain-language reason; ``details`` is extra JSON the page can render."""
+
+    def __init__(self, message: str, **details: Any) -> None:
+        super().__init__(message)
+        self.details = details
+
+
 @dataclass(frozen=True)
 class Availability:
     ok: bool
@@ -58,12 +68,16 @@ class TrainResult:
 
 @dataclass
 class EvalItem:
-    """One held-out image: where it is and its ground-truth boxes (normalized x, y, w, h + label)."""
+    """One held-out image: where it is and its ground-truth boxes (normalized x, y, w, h + label).
+
+    ``asset_id`` is the project picture it came from. It is optional: when every item has one, the evaluation
+    also records which pictures were missed or got a wrong box."""
 
     path: Path
     boxes: list[tuple[str, float, float, float, float]]
     width: int
     height: int
+    asset_id: str | None = None
 
 
 class TrainingBackend:
@@ -110,6 +124,26 @@ class TrainingBackend:
         box about the terms of what is being used."""
         return {"needs_acknowledgement": False, "blocked": ""}
 
+    def resolve_start(self, worker: dict[str, Any]) -> dict[str, Any] | None:
+        """What an automatic "start from the best ready-made model" would pick right now.
+
+        ``None`` (the default) means this backend has no ready-made starts and does not understand ``"auto"``.
+        Otherwise ``{"resolved": value | None, "available": [start_options entries], "reason_if_none": str,
+        "how_to_enable": str}``. It never resolves to a from-scratch start."""
+        return None
+
+    def prepare_config(self, config: dict[str, Any], *, train_pictures: int, worker: dict[str, Any]) -> dict[str, Any]:
+        """Turn the caller's config into the one that is stored, before ``validate_config``.
+
+        Resolve ``"auto"`` choices and fill derived settings. Raise ``ValueError`` (HTTP 400) for a bad request and
+        ``StartBlocked`` (HTTP 409) when it cannot run here. The default changes nothing."""
+        return config
+
+    def teach_preview(self, train_pictures: int | None, start: str | None) -> dict[str, Any] | None:
+        """Settings the one-click start would derive for each quality choice, with a time estimate, shown before
+        starting. ``None`` (the default) means this backend does not derive settings."""
+        return None
+
     def runtime_info(self) -> dict[str, Any]:
         """Framework versions and device, captured when a run starts. No paths, no host names."""
         return {}
@@ -135,3 +169,18 @@ class TrainingBackend:
         from .evaluation import evaluate_items
 
         return evaluate_items(self, artifact, items, labels, thresholds)
+
+    def predict_split(self, artifact: Path, items: list[EvalItem], labels: list[str], thresholds: dict[str, Any]):
+        """Predictions on one split, for choosing a confidence threshold (the ``operating_points`` block).
+
+        Returns ``(ground_truth, predictions)`` as ``evaluation.predict_items`` does, or ``None`` when this backend
+        cannot predict on pictures outside the test split; the evaluation then simply has no ``operating_points``.
+        Optional and additive: a backend that overrides ``evaluate`` keeps working unchanged. The default runs
+        ``predict`` at the product's prediction floor, so it needs nothing extra from a backend.
+        """
+        from .evaluation import predict_items
+
+        try:
+            return predict_items(self, artifact, items, labels, thresholds)
+        except NotImplementedError:
+            return None

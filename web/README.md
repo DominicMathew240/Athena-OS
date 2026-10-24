@@ -2,11 +2,13 @@
 
 The Athena console is the self-hosted web UI for projects, image import, bounding-box labelling, and
 model-assisted auto-labelling with human review, written in plain language for non-specialists. A JSON API
-can also freeze the reviewed boxes into numbered dataset versions and export them as COCO or YOLO zips (no
-screen for that yet). Sign-in is required for every page and API route.
+freezes the reviewed boxes into numbered dataset versions and exports them as COCO or YOLO zips; a "Make a training set" panel
+covers saving a snapshot and downloading it. A prototype "Teach the computer" part trains a detector on CPU, shows plain-language
+results and lets check screens use an approved model (all verified on synthetic data only; see Implemented and Not implemented).
+Sign-in is required for every page and API route.
 
 - **Deploy it:** see [DEPLOYMENT.md](DEPLOYMENT.md) (Docker Compose, environment reference, backups, model licences, known limits).
-- **Export a dataset:** see [../docs/guides/data-export.md](../docs/guides/data-export.md) (API only).
+- **Export a dataset:** see [../docs/guides/data-export.md](../docs/guides/data-export.md) (the API; the console panel covers the common steps).
 - **Run it locally:** below.
 
 ## Run locally
@@ -46,8 +48,11 @@ python web/manage.py test projects
 ```
 
 The suite covers sign-in, lockout, CSRF, CSP, deploy-time settings validation, the API, the auto-label queue and
-review rules (with a deterministic stand-in for the model), and the dataset API (review gating, validation,
-splits, immutability, COCO/YOLO round trips). The real SAM + CLIP pipeline is not run in the suite.
+review rules (with a deterministic stand-in for the model), the dataset API (review gating, validation,
+splits, immutability, COCO/YOLO round trips), the training lifecycle, the Teach flow's data-health and plain-results endpoints,
+the one-click start, the download switch, operating points, the improve loop (correction import and the comparison with the model in use), model decisions, check screens, access roles, and the connector SDK's console sink. The real SAM + CLIP
+pipeline is not run in the suite. As reported by the lead's own runs on 2026-10-24 (not re-run by the docs pass), the suite has 1410 tests: OK with 28 skipped in a lean environment (no torch) and with 18 skipped in one that has torch and torchvision; the skips are the tests that need those packages. The
+D-FINE backend's 81 tests need `transformers` and `scipy` and run in a separate environment (`web/projects/tests_training_dfine.py`), not in the main suite.
 
 ### Browser smoke test (a real browser, one command)
 
@@ -78,18 +83,24 @@ pull requests that change `web/projects/static/**` or `web/projects/templates/**
 - Sign-in with lockout after repeated failures. Four access roles (Viewer, Labeler, Trainer, Approver) enforced on the server for every write; a role can be given console-wide or for one project (it replaces the console-wide role on that project), but every signed-in person can still see every project. Administrators (superusers) assign roles on the **Access** screen (`/access`), which also shows a record of every role change; `manage.py athena_roles` does the same from the command line; people in no role group count as Labelers (or Viewers with `ATHENA_UNASSIGNED_ROLE=viewer`) and can never approve. Optional rule: whoever started a teaching run cannot approve its model (`ATHENA_APPROVAL_REQUIRES_SECOND_PERSON=1`). See [../docs/guides/access-roles.md](../docs/guides/access-roles.md).
 - Create, list, filter, search, and delete project metadata for ten modality types; only image projects have a task workspace.
 - A project checklist and short plain-language explanations on each panel (what a project, label, or suggestion is), rather than tool jargon.
+- A project opens on its "Get started" checklist and shows one part at a time (Labels, Pictures, Make a training set, Teach the computer, Check screens), with Back / Next buttons; the picture-marking window fits a 1366×768 screen and keeps Done in view; results of an action appear in a message at the bottom of the window.
 - Label editor: add, rename, reorder, and remove a project's labels without code. Renaming a label also renames it on boxes already drawn.
 - Import, preview, and delete JPEG/PNG/WebP images (validated, capped at 20 MB / 25 MP per image and 100 MB per batch, SHA-256 recorded).
 - Manual bounding boxes: pointer or keyboard creation, class reassignment, move/resize, delete, 50–400% zoom, pan, undo/redo of the last 100 changes while the dialog is open.
 - Auto-labelling: SAM proposes regions, CLIP names them with the project's labels. Jobs run per image or per project in a worker, with progress and cancel. Proposals are marked **Needs review** with model name and score, and are accepted, corrected, or rejected one by one or in bulk. A re-run replaces only unreviewed proposals.
-- Dataset versions and export, **backend JSON API only (no console screen yet)**: `GET …/datasets/readiness` previews what would be exported and what blocks it; `POST …/datasets` freezes an immutable, numbered version containing only accepted boxes (model proposals still marked **Needs review** are excluded and counted), with a deterministic 80/10/10 train/val/test split by image checksum and a `manifest.json` carrying a SHA-256; `GET …/datasets/<id>/export?format=coco|yolo` streams a zip. Geometry, label, and file-checksum problems block a version and are reported per image. See [../docs/guides/data-export.md](../docs/guides/data-export.md).
+- Dataset versions and export, **JSON API plus a "Make a training set" console panel** (save a snapshot, see the per-group counts, download a COCO or YOLO zip; the API has more than the panel shows): `GET …/datasets/readiness` previews what would be exported and what blocks it; `POST …/datasets` freezes an immutable, numbered version containing only accepted boxes (model proposals still marked **Needs review** are excluded and counted), with a deterministic 80/10/10 train/val/test split by image checksum and a `manifest.json` carrying a SHA-256; `GET …/datasets/<id>/export?format=coco|yolo` streams a zip. Geometry, label, and file-checksum problems block a version and are reported per image. See [../docs/guides/data-export.md](../docs/guides/data-export.md).
+- Teaching and results (prototype, tested on synthetic data and a toy model only): a "Teach the computer" part with one primary button, a picture check that counts boxes per label and flags near-copies before teaching (`GET …/datasets/health`), a Quick / Better choice, and a plain-language results card ("found X of Y", a verdict that is never called accurate, a list of the pictures it got wrong). It always starts from a ready-made model and refuses to start from nothing unless an administrator chooses to; the ready-made models are off until downloads are allowed (see [DEPLOYMENT.md](DEPLOYMENT.md#ready-made-starting-models-in-the-teach-panel)). The training helper is `manage.py train_worker`; model decisions (move to trial, approve, go back) and check screens (`/projects/<id>/check-screen/setup`, `/check/<slug>`) use the approved model through `manage.py inference_worker`. See [../docs/guides/model-quality.md](../docs/guides/model-quality.md) and [../docs/api-reference.md](../docs/api-reference.md).
+- Connectors: `athena_sdk.connectors` (folder drop, HTTP push, a console sink; reference implementations, no real scanner protocol) sends images to a check screen through a service account.
+- Improve loop (prototype, synthetic data and stand-in models only): a Labeler pulls check-screen corrections into a project from the "Corrections from check screens" card (`GET`/`POST …/feedback/corrections[/import]`, `web/projects/feedback_import.py`): each picture is copied once, its confirmed or drawn boxes arrive as **Needs review** (a wrongly drawn model box is never copied), an append-only `FeedbackImport` row keeps the lineage, camera-rotated pictures are skipped, and auto-suggest leaves these pictures alone. After teaching, the results card shows a paired comparison with the model in use (`evaluation["comparison"]`, fairness rule, "cannot tell" below 30 test boxes per label). Nothing changes a model by itself. Guide: [../docs/guides/improve-loop.md](../docs/guides/improve-loop.md); shapes: [../docs/api-reference.md](../docs/api-reference.md#console-http-api-the-improve-loop-2026-10-24-prototype).
 - `/healthz`, strict CSP, HSTS, secure cookies, Docker packaging.
 
 ## Not implemented
 
-Hiding a project from some people (per-project roles limit who may change a project, not who may see it), delegated role assignment (only superusers assign), export of the role-change record, encryption at rest, rights evidence/review, a console screen for dataset
-versions and export (only the API exists), near-duplicate (not just byte-identical) leak
-detection, re-importing an exported dataset, model training/evaluation, operational inference, scanner
-connectors, modality plugins, and any benchmark of auto-label accuracy. Undo/redo is in memory only; full
-assistive-technology verification has not been done. A dataset version reflects only which boxes a person
-accepted; it says nothing about whether you have the rights to use the images, and no training step exists yet to gate on it.
+Hiding a project from some people (per-project roles limit who may change a project, not who may see it), delegated role assignment (only superusers assign), export of the role-change record, encryption at rest, rights evidence/review, a snapshot that is blocked by near-duplicate (not just byte-identical) leaks (a read-only
+warning exists, tried only on generated pictures), re-importing an exported dataset, a real-operator trace of the correction-to-new-model path (the pieces exist, see Implemented), any measured
+accuracy of a trained model on real scanner pictures (the only numbers are on synthetic shapes), real scanner or industrial-feed
+connectors, modality plugins, and any benchmark of auto-label accuracy. A real run on the one-click path with real ready-made
+weights, a real usability session with operators, Firefox and Safari testing of the Teach flow, and a screen-reader pass have not been
+done. Undo/redo is in memory only; full assistive-technology verification has not been done. A dataset version reflects only which
+boxes a person accepted; it says nothing about whether you have the rights to use the images, and nothing in the training step
+gates on that.

@@ -130,7 +130,7 @@ def finished_model():
 
 first = finished_model()
 lifecycle.stage_model(first, user)
-first, _ = lifecycle.approve_model(first, user, "Stand-in model approved for the browser smoke test only.")
+first, _ = lifecycle.approve_model(first, user, "Stand-in model approved for the browser smoke test only.", acknowledge_weak_results=True)  # the stand-in has a tiny test set, which the server reads as "cannot tell"
 app = inference.create_app(project, user, name="Smoke check screen", slug="smoke-check", model=first, config={})
 second = finished_model()
 lifecycle.stage_model(second, user)  # left "ready for trial": the approve dialog can be opened, never confirmed

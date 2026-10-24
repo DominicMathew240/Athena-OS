@@ -16,15 +16,22 @@ what is not. This README only claims what the source tree and its tests demonstr
   import with checksums, a label editor, manual bounding boxes, and optional SAM + CLIP auto-suggested boxes that
   stay **Needs review** until a person accepts them. Self-hosting guide: [`web/DEPLOYMENT.md`](web/DEPLOYMENT.md);
   developer notes: [`web/README.md`](web/README.md).
-- **Dataset versioning and export (backend API only, no console UI yet)**: immutable numbered versions of the
+- **Dataset versioning and export (JSON API plus a "Make a training set" console panel)**: immutable numbered versions of the
   accepted boxes, deterministic train/val/test splits, a hashed manifest, and COCO or YOLO zip export.
   See [`docs/guides/data-export.md`](docs/guides/data-export.md).
+- **Teaching, models and check screens (prototype)**: a one-button "Teach the computer" part that trains a CPU detector from a
+  ready-made starting model, a picture check, plain-language results, model stages with an approval note, check screens that run an
+  image through the approved model, and four access roles. Operator corrections from check screens can be pulled back into a project as pictures with
+  **Needs review** boxes and a new model compared with the one in use ([`docs/guides/improve-loop.md`](docs/guides/improve-loop.md)); nothing changes a model by
+  itself. Tested on synthetic data and a toy model only; a usability session with
+  real operators has not been run. See [`docs/guides/model-quality.md`](docs/guides/model-quality.md) for what was measured and what was not.
 
 ## What does not exist yet
 
-Rights/evidence review, a screen for dataset versions, model training and evaluation, a configurable inference
-interface, scanner connectors, roles/permissions, and any measured accuracy for auto-labelling. Do not treat the
-console as a complete dataset manager.
+Rights/evidence review, a real-operator trace of the correction-to-new-model path (the pieces exist as a prototype: see
+[`docs/guides/improve-loop.md`](docs/guides/improve-loop.md)), connectors for any real scanner (only reference connectors exist),
+any measured accuracy on real imagery for the trained detector or for auto-labelling, and real-operator usability evidence. Do not
+treat the console as a complete dataset manager.
 
 ## Licences
 

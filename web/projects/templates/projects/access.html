@@ -66,6 +66,34 @@
         <p class="field-help" id="record-empty" hidden>No role has been changed yet.</p>
         <div class="access-more"><button class="secondary" id="record-more" type="button" hidden>Show older changes</button><span class="field-help" id="record-count"></span></div>
       </section>
+
+      <section class="panel access-panel" id="ready-made-model-downloads" aria-labelledby="downloads-heading" tabindex="-1">
+        <h2 id="downloads-heading">Ready-made model downloads</h2>
+        <p class="panel-intro">Teaching works best when it starts from a ready-made model, and that model has to be downloaded once. This switch says whether the teaching helper may download it. The console itself never downloads anything.</p>
+        <p class="downloads-state" id="downloads-state" role="status" aria-live="polite" data-tone="">Loading this setting…</p>
+        <p class="field-help" id="downloads-source"></p>
+        <p class="field-help" id="downloads-precedence"></p>
+        <details class="snapshot-details downloads-licence" id="downloads-licence" hidden>
+          <summary>Read the licence text</summary>
+          <div class="downloads-licence-body" id="downloads-licence-body"></div>
+        </details>
+        <form class="downloads-form" id="downloads-form" novalidate aria-labelledby="downloads-form-heading" hidden>
+          <fieldset class="downloads-choice" id="downloads-fields">
+            <legend id="downloads-form-heading">Should the teaching helper be allowed to download ready-made models?</legend>
+            <label class="inline-check" for="downloads-off"><input id="downloads-off" type="radio" name="downloads-allow" value="off" autocomplete="off"><span>No, keep downloads switched off</span></label>
+            <label class="inline-check" for="downloads-on"><input id="downloads-on" type="radio" name="downloads-allow" value="on" autocomplete="off"><span>Yes, allow downloads</span></label>
+            <div class="downloads-on-only" id="downloads-on-only" hidden>
+              <label class="inline-check" for="downloads-ack"><input id="downloads-ack" type="checkbox" autocomplete="off"><span>I have read the licence text above. A ready-made model has its own terms, and I will ask a lawyer before anyone uses a result commercially.</span></label>
+            </div>
+            <label class="downloads-note" for="downloads-note"><span id="downloads-note-label">Note for the record</span><textarea id="downloads-note" rows="2" maxlength="300" autocomplete="off" aria-describedby="downloads-note-help"></textarea><span class="field-help" id="downloads-note-help"></span></label>
+          </fieldset>
+          <p class="form-error" id="downloads-error" role="alert"></p>
+          <div class="form-actions"><button class="primary" id="downloads-save" type="submit" disabled>Save this choice</button><button class="secondary" id="downloads-reload" type="button" hidden>Show the current setting</button></div>
+          <p class="field-help" id="downloads-save-help"></p>
+        </form>
+        <p class="gate-note" id="downloads-reason" hidden></p>
+        <p class="field-help" id="downloads-last" aria-live="polite"></p>
+      </section>
     </main>
   </div>
   <script src="{% static 'projects/ui_common.js' %}"></script>

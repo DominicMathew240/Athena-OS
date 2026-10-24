@@ -11,6 +11,8 @@ import copy
 import math
 from typing import Any
 
+from ..training.operating_points import NOT_MEASURED_NOTE as _NOT_MEASURED_NOTE
+
 ACCEPTED_INPUTS = ("image/jpeg", "image/png", "image/webp")
 DECISION_OPTIONS = ("confirm", "reject", "needs_second_look")
 STATE_KEYS = ("clear", "flagged", "needs_review")
@@ -33,6 +35,33 @@ DEFAULT_STATUS_TEXTS = {
     "needs_review": "Needs review by a person",
 }
 MAX_TEXT = 200
+
+# -- measured wording for the render model (W4-T) ------------------------------------------------------------------
+# The render model (preview and every rendered result) carries two READ-ONLY blocks derived from the pinned model's
+# stored ``evaluation["operating_points"]``. They are data for the screen to adopt; nothing here changes a threshold.
+#
+# ``confidence_wording``  {measured: bool, bands: [{low, high, label, precision, n, enough}], note: str}
+#   * ``bands`` tile the score range 0..1 from the lowest score up; ``low`` is inclusive and ``high`` exclusive (the
+#     last band includes 1.0). A detection belongs to the band holding its score.
+#   * ``label`` is neutral and quantitative ("right about 3 in 4 times in our check"; the fraction is read DOWN from the
+#     low end of the 90% range, so it errs cautious and is never "at least"), or "too few examples to say" when
+#     ``enough`` is false. ``precision`` is the share of predictions in the band that matched a person-drawn box on
+#     the Final test pictures and ``n`` how many predictions that is; neither may be worded as a result when
+#     ``enough`` is false.
+#   * ``measured`` false (an older model, a backend that could not score, or too few predictions): ``bands`` is ``[]``
+#     and ``note`` is ``NOT_MEASURED_NOTE``. The screen then shows the raw score as the computer's own number and
+#     nothing stronger. The keys are always present.
+# ``suggested_threshold``  {value, target_recall, basis, enough_data, plain}
+#   * ``value`` is a cut-off from 0 to 1 or ``None``. It is ``None`` unless the Checking pictures had enough drawn boxes,
+#     there were Final test pictures to check it on, the 80% share-found target was reachable and it was reached in at
+#     least 90% of the re-draws of the pictures (``recommended``); ``plain`` then says why. ``target_recall`` is 0.8 (or ``None`` when
+#     not measured), ``basis`` is "validation split" (or "not measured").
+#   * It is a hint beside the builder's own threshold field. A person sets the value; the validator below takes the
+#     same range as before (a number from 0 to 1).
+CONFIDENCE_WORDING_KEYS = frozenset({"measured", "bands", "note"})
+CONFIDENCE_BAND_KEYS = frozenset({"low", "high", "label", "precision", "n", "enough"})
+SUGGESTED_THRESHOLD_KEYS = frozenset({"value", "target_recall", "basis", "enough_data", "plain"})
+NOT_MEASURED_NOTE = _NOT_MEASURED_NOTE  # one source: training/operating_points.py
 
 
 class ConfigError(ValueError):

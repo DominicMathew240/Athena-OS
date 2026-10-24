@@ -33,6 +33,9 @@
   const clock = (iso) => new Date(iso).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
   const announce = (text) => { ui.live.textContent = ""; window.setTimeout(() => { ui.live.textContent = text; }, 30); };
   const setMsg = (node, text, tone) => { node.textContent = text; node.dataset.tone = tone || ""; };
+  // What happens to an answer, said once and plainly: it goes to a supervisor, and nothing changes by itself.
+  const SAVED_FOR_SUPERVISOR = "Saved for your supervisor. It does not change the computer by itself.";
+  const WRONG_CANNOT_TEACH = "A wrong-box answer cannot teach the computer anything on its own; drawing a box where something was missed can.";
 
   /* -- page setup ------------------------------------------------------------------------- */
   function block(title, text) {
@@ -182,8 +185,8 @@
     const hidden = [];
     if (result.hidden_below_threshold) hidden.push(`${result.hidden_below_threshold} weaker ${result.hidden_below_threshold === 1 ? "guess" : "guesses"} (less than ${CS.percent(render.confidence_threshold)} sure)`);
     if (result.hidden_other_labels) hidden.push(`${result.hidden_other_labels} ${result.hidden_other_labels === 1 ? "finding" : "findings"} of things this screen is not set up to show`);
-    const percentNote = "The percentages are the computer’s own guess, not how often it is right.";
-    ui.hiddenNote.textContent = hidden.length ? `${percentNote} The computer also had ${hidden.join(" and ")}, which ${hidden.length === 1 && result.hidden_below_threshold + result.hidden_other_labels === 1 ? "is" : "are"} not shown.` : percentNote;
+    const scoreNote = CS.scoreNote(render);
+    ui.hiddenNote.textContent = hidden.length ? `${scoreNote} The computer also had ${hidden.join(" and ")}, which ${hidden.length === 1 && result.hidden_below_threshold + result.hidden_other_labels === 1 ? "is" : "are"} not shown.` : scoreNote;
 
     // “The computer missed something”
     CS.clear(ui.missedLabel);
@@ -230,7 +233,7 @@
   /* -- per-finding feedback --------------------------------------------------------------- */
   function detectionItem(det, number) {
     stage.addDetection(det, number);
-    const item = CS.detectionRow(det, number);
+    const item = CS.detectionRow(det, number, current);
     const noteNeeded = current.decision_controls.required_note_on_override;
     const msg = el("p", "cs-inline-msg cs-det-msg");
     msg.setAttribute("role", "status");
@@ -276,8 +279,8 @@
       }
       item.dataset.verdict = verdict;
       setMsg(msg, verdict === "true_positive"
-        ? "Saved: you said this is right. Saved for later review; it does not change the model."
-        : "Saved: you said this is wrong. Saved for later review; it does not change the model.", "ok");
+        ? `Saved: you said this is right. ${SAVED_FOR_SUPERVISOR}`
+        : `Saved: you said this is wrong. ${SAVED_FOR_SUPERVISOR} ${WRONG_CANNOT_TEACH}`, "ok");
       return true;
     };
     right.addEventListener("click", async () => {
@@ -379,7 +382,7 @@
   function addMissedEntry(label, box, existing) {
     missedCount += 1;
     const where = !box ? "no position given" : `left ${round(box.x * 100, 1)}%, top ${round(box.y * 100, 1)}%, ${round(box.width * 100, 1)}% wide, ${round(box.height * 100, 1)}% tall`;
-    ui.missedList.appendChild(el("li", "", `+${missedCount} You said it missed: ${label} (${where})${existing ? "" : ". Saved for later review."}`));
+    ui.missedList.appendChild(el("li", "", `+${missedCount} You said it missed: ${label} (${where})${existing ? "" : ". Saved for your supervisor."}`));
     if (stage && box) stage.addNote(box, missedCount);
   }
 
@@ -413,7 +416,7 @@
     [ui.bx, ui.by, ui.bw, ui.bh].forEach((input) => { input.value = ""; });
     ui.unknown.checked = false;
     syncDraft();
-    setMsg(ui.missedMsg, "Saved: the computer missed this. Saved for later review; it does not change the model. You can add another.", "ok");
+    setMsg(ui.missedMsg, `Saved: the computer missed this. ${SAVED_FOR_SUPERVISOR} You can add another.`, "ok");
   }
 
   /* -- decisions -------------------------------------------------------------------------- */
@@ -441,7 +444,9 @@
     current = render;
     paintStatus(render);
     showRecorded(render.result.decision);
-    setMsg(ui.decisionMsg, "", "");
+    // A reject or a second look goes to the supervisor; a confirm is just recorded.
+    const toSupervisor = key === "reject" ? `${SAVED_FOR_SUPERVISOR} ${WRONG_CANNOT_TEACH}` : key === "needs_second_look" ? SAVED_FOR_SUPERVISOR : "";
+    setMsg(ui.decisionMsg, toSupervisor, toSupervisor ? "ok" : "");
     announce(`Decision recorded. ${render.result.status_text}.`);
     button.focus();
   }

@@ -1,6 +1,6 @@
 # Athena Open Source architecture
 
-Athena OS is intended to be an open industrial data workflow platform: project setup, human annotation and review, dataset versioning, training/evaluation integrations, and configurable interfaces for real-world inference. The current tree has a Django web app for local project metadata and validated JPEG/PNG/WebP image imports with SHA-256 hashes, but not the complete graphical platform. See the [roadmap](../ROADMAP.md) for implementation status.
+Athena OS is intended to be an open industrial data workflow platform: project setup, human annotation and review, dataset versioning, training/evaluation integrations, and configurable interfaces for real-world inference. The current tree has a Django web app (project metadata, validated JPEG/PNG/WebP image imports with SHA-256 hashes, manual and model-suggested boxes with human review, dataset snapshots and export, a CPU training backend, model stages, check screens, access roles), tested on synthetic data and a toy model only, but not the complete graphical platform. See the [roadmap](../ROADMAP.md) for implementation status.
 
 ## Design principle: open core workflows and explicit plugin boundaries
 
@@ -11,13 +11,12 @@ The open-source product is meant to be usable without a proprietary Athena accou
 - **Reference examples** — synthetic vision/audio flows and adapters that demonstrate the interfaces.
 - **CLI and documentation** — developer setup, contract checks, examples, and extension guides.
 
-The web app currently supports project metadata and local image-file imports. Imported files remain unreviewed candidates; rights evidence is not captured. These product capabilities are not implemented yet:
+The web app supports project metadata, local image-file imports, manual and suggested bounding boxes that count only after a person accepts them, numbered dataset snapshots with COCO/YOLO export, a CPU training run and evaluation on the held-out pictures, model stages with an approval note and rollback, check screens that run an image through the approved model, stored true/false feedback, and four access roles. Imported files remain unreviewed candidates; rights evidence is not captured. These are prototypes tested on synthetic data, not evidence for any real-world accuracy. These product capabilities are not implemented yet:
 
-- Rights-evidence review, dataset versioning/export, annotation, and review workspaces (the Django asset registry is only a file-import slice).
-- Training orchestration and dataset versioning.
-- A no-code configurable operator interface for real-world inference.
-- Scanner/industrial data-source connectors and deployment packaging.
-- Durable true/false feedback, approved retraining, and model-promotion workflows.
+- Rights-evidence review, a complete accessibility-verified annotation workspace, and a usability session with real operators.
+- Retraining from operator feedback in production: the pieces exist as a prototype (corrections are pulled into a project as Needs-review pictures, reviewed, taught again and compared with the model in use, see [improve loop](guides/improve-loop.md)), but nobody has run it with real operators or imagery, and feedback never changes a model by itself.
+- Connectors for any real scanner or industrial feed (the SDK has reference folder and HTTP connectors only) and a selected deployment target.
+- Measured model quality on real imagery (the only measurements are on synthetic shapes, see [model quality](guides/model-quality.md)).
 
 Optional managed hosting may exist separately in the future, but the open-source workflows must not depend on it. Third-party packages, pretrained weights, datasets, scanner SDKs, and commercial branding retain their own licenses and are not implied by the Apache-2.0 code license.
 
@@ -72,15 +71,15 @@ These contracts describe inference and evaluation records. They are not yet a da
 | `athena_sdk.interfaces.domain_pack` | Domain-policy extension contract | Implemented in source |
 | `athena_sdk.evaluation` | Evaluation interface and metric references | Implemented in source |
 | `examples/adapters` | Synthetic/reference model integrations | Implemented in source |
-| `web/projects` | Django project registry plus local image asset metadata/storage | Implemented; image-only file import, no annotation or versioned dataset |
-| Project/dataset/annotation schemas | Human labeling and versioned data | Planned; contracts not yet frozen |
-| Training integration | Reproducible training and evaluation run | Planned |
-| Custom inference UI | Operator-configurable real-world frontend | Planned |
+| `web/projects` | Django console: project registry, image storage, box annotation with review, dataset snapshots and export, training lifecycle, model stages, check screens, access roles | Implemented as a prototype (image detection only; synthetic-data testing) |
+| Project/dataset/annotation schemas | Human labeling and versioned data | Implemented as console database models and API; **not frozen as public SDK contracts** |
+| Training integration | Reproducible training and evaluation run (`web/projects/training/`, reference `torchvision-fasterrcnn` backend, `manage.py train_worker`) | Implemented in the console; accuracy unproven on real imagery; not part of the SDK |
+| Custom inference UI | Operator-configurable real-world frontend (check-screen builder `/projects/<id>/check-screen/setup`, operator page `/check/<slug>`) | Implemented as a prototype; no usability session with real operators yet |
 | `athena_sdk.connectors` | Vendor-neutral data-source connector contract, folder-watch and HTTP-push reference connectors, console sink ([guide](guides/writing-a-connector.md)) | Implemented in source; **no real scanner or vendor protocol selected or tested**; feedback integration not included |
 
 ## Interface boundary
 
-A community or proprietary model can implement `ModelAdapter` to participate in inference. A runtime can dispatch observations to adapters and optionally apply a domain pack. The current interface does not train a model or manage datasets. The roadmap adds explicit training, dataset, connector, and user-interface extension points without changing existing v1 contract semantics.
+A community or proprietary model can implement `ModelAdapter` to participate in inference. A runtime can dispatch observations to adapters and optionally apply a domain pack. The SDK's adapter interface does not train a model or manage datasets; training and datasets live in the console (`web/projects`); the console can load third-party training backends from the `athena.training_backends` entry-point group, but that is not yet a documented, versioned public contract. The roadmap adds explicit training, dataset, connector, and user-interface extension points without changing existing v1 contract semantics.
 
 ## Safety and provenance
 

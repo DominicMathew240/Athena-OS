@@ -3,6 +3,8 @@
 from __future__ import annotations
 
 import hashlib
+import math
+import time
 import uuid
 from collections import Counter, defaultdict
 from dataclasses import dataclass, field
@@ -31,6 +33,10 @@ class VersionConflict(Exception):
     """The project changed while the version was being prepared; the caller should retry."""
 
 
+class IncompleteAnalysis(ValueError):
+    """The analysis handed to ``create_version`` did not look at every picture file, so it cannot be frozen."""
+
+
 @dataclass
 class Analysis:
     project: Project
@@ -42,6 +48,15 @@ class Analysis:
     images_without_accepted: int
     problems: list[validation.Problem] = field(default_factory=list)
     fingerprint: str = ""
+    # How many picture files this analysis looked at. ``analyse(file_check="full")`` (the default) looks at every one;
+    # "skip" or a spent time budget leaves some unchecked, and then ``files_rechecked`` is False and whatever is wrong
+    # with those files is simply not in ``problems``.
+    files_checked: int = 0
+    files_not_rechecked: int = 0
+
+    @property
+    def files_rechecked(self) -> bool:
+        return self.files_not_rechecked == 0
 
     @property
     def excluded(self) -> dict[str, Any]:
@@ -73,14 +88,41 @@ class Analysis:
 
     @property
     def ready(self) -> bool:
+        """Nothing that was looked at is wrong. This is the readiness preview's answer and says nothing about files that
+        were not looked at; a version may only be frozen from an analysis that is also ``complete``."""
         return bool(self.accepted) and not self.problems
 
+    @property
+    def complete(self) -> bool:
+        """True when every picture file was checked (``analyse(file_check="full")``), so ``problems`` is the whole
+        truth. ``create_version`` refuses an analysis for which this is False."""
+        return self.files_rechecked
 
-def _fingerprint(project: Project) -> str:
-    rows = (
+
+_clock = time.monotonic  # replaced in tests: the budget of ``analyse(file_check=<seconds>)`` is wall-clock time
+
+
+def accepted_boxes(project: Project):
+    """The one query for "the accepted boxes of this project": oldest first, each with its picture already loaded.
+
+    A queryset (nothing is read until the caller does), so the fingerprint can ask for plain columns and
+    :func:`analyse` and the data-health check can ask for whole rows from the same definition.
+    """
+    return (
         BoxAnnotation.objects.filter(asset__project=project, status=ACCEPTED)
         .order_by("id")
-        .values_list("id", "label", "x", "y", "width", "height", "updated_at", "asset__sha256")
+        .select_related("asset")
+    )
+
+
+def content_fingerprint(project: Project) -> str:
+    """A hash of every accepted box (id, label, geometry, last change) and its picture's checksum.
+
+    Two reads that return the same value saw the same accepted work; ``create_version`` and the one-click start use
+    it to notice that boxes changed between looking and writing. ``_fingerprint`` is the older name, kept as an alias.
+    """
+    rows = accepted_boxes(project).values_list(
+        "id", "label", "x", "y", "width", "height", "updated_at", "asset__sha256"
     )
     digest = hashlib.sha256()
     for row in rows:
@@ -88,18 +130,47 @@ def _fingerprint(project: Project) -> str:
     return digest.hexdigest()
 
 
-def analyse(project: Project, config: splits.SplitConfig, *, use_cache: bool = False) -> Analysis:
+_fingerprint = content_fingerprint
+
+
+_FILE_CHECK_REFUSAL = "file_check must be 'full', 'skip' or a number of seconds (0 or more)."
+
+
+def _file_budget(file_check: Any) -> float | None:
+    """``None`` for a full check, ``0`` for none at all, else the seconds allowed; anything else is a mistake."""
+    if isinstance(file_check, str):
+        if file_check == "full":
+            return None
+        if file_check == "skip":
+            return 0.0
+        raise ValueError(_FILE_CHECK_REFUSAL)
+    if (
+        isinstance(file_check, (int, float))
+        and not isinstance(file_check, bool)
+        and math.isfinite(file_check)
+        and file_check >= 0
+    ):
+        return float(file_check)
+    raise ValueError(_FILE_CHECK_REFUSAL)
+
+
+def analyse(
+    project: Project, config: splits.SplitConfig, *, use_cache: bool = False, file_check: str | float = "full"
+) -> Analysis:
     """Inspect a project without writing anything.
 
     ``use_cache`` lets file checks answer from the stat-keyed verification cache. Only the
     read-only readiness view sets it; creating a version always hashes every file.
+
+    ``file_check`` says how many picture files are re-checked: ``"full"`` (the default, and the only value anything
+    that writes may use), ``"skip"`` (none), or a number of seconds: files are checked in order until that much
+    wall-clock time (``_clock``) has gone, and the rest are left alone. ``Analysis.files_rechecked`` /
+    ``files_not_rechecked`` say what happened; nothing is reported about a file that was not looked at.
     """
-    fingerprint = _fingerprint(project)
-    accepted = list(
-        BoxAnnotation.objects.filter(asset__project=project, status=ACCEPTED)
-        .select_related("asset")
-        .order_by("id")
-    )
+    budget = _file_budget(file_check)
+    started = _clock()
+    fingerprint = content_fingerprint(project)
+    accepted = list(accepted_boxes(project))
     assets: dict[Any, Asset] = {}
     for box in accepted:
         assets.setdefault(box.asset_id, box.asset)
@@ -132,6 +203,10 @@ def analyse(project: Project, config: splits.SplitConfig, *, use_cache: bool = F
                     validation.Problem(found.code, found.message, asset_id, str(box.id))
                 )
     for asset in assets.values():
+        if budget is not None and (budget == 0 or _clock() - started >= budget):
+            analysis.files_not_rechecked = len(assets) - analysis.files_checked
+            break
+        analysis.files_checked += 1
         found = validation.file_problem(asset.storage_key, asset.sha256, str(asset.id), cached=use_cache)
         if found:
             problems.append(found)
@@ -185,13 +260,22 @@ def preview(analysis: Analysis) -> dict[str, Any]:
 
 
 def create_version(analysis: Analysis, user) -> DatasetVersion:
-    """Freeze ``analysis`` as the next version. Caller has checked ``analysis.ready``."""
+    """Freeze ``analysis`` as the next version. Caller has checked ``analysis.ready``.
+
+    Refuses (``IncompleteAnalysis``, nothing written) an analysis that left picture files unchecked: its ``ready``
+    would be silent about a missing or changed file."""
+    if not analysis.complete:
+        raise IncompleteAnalysis(
+            f"This check did not look at every picture file ({analysis.files_not_rechecked} of "
+            f"{analysis.files_checked + analysis.files_not_rechecked} were left unchecked), so a dataset version "
+            "cannot be frozen from it. Run the full check and try again. Nothing was created."
+        )
     project = analysis.project
     images = _images_for(analysis)
     try:
         with transaction.atomic():
             Project.objects.select_for_update().get(pk=project.pk)
-            if _fingerprint(project) != analysis.fingerprint:
+            if content_fingerprint(project) != analysis.fingerprint:
                 raise VersionConflict("Boxes changed while the dataset was being checked. Please try again.")
             number = (project.dataset_versions.aggregate(top=Max("version"))["top"] or 0) + 1
             version = DatasetVersion(

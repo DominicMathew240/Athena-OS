@@ -25,7 +25,7 @@ from ..models import (
     Project,
     ReviewDecision,
 )
-from ..training import get_backend, report, training_settings
+from ..training import get_backend, operating_points, report, training_settings
 from ..training.lifecycle import INFERENCE_WORKER_KEY, LifecycleError, backend_runnable, clean_note, worker_status
 from . import schema
 
@@ -161,6 +161,10 @@ def _static(app: InferenceApp, config: dict[str, Any], model: ModelVersion) -> d
         "decision_controls": config["decision_controls"],
         "human_review_required": config["human_review_required"],
         "model": _model_block(model),
+        # Measured wording and a read-only suggested cut-off, from THIS (pinned) model's stored evaluation. See the
+        # contract in ``schema`` ("measured wording for the render model"). Nothing here is applied automatically.
+        "confidence_wording": operating_points.confidence_wording(model.evaluation),
+        "suggested_threshold": operating_points.suggested_threshold(model.evaluation),
         "model_in_use": model.stage == ModelVersion.APPROVED,
         "limits": {"max_upload_bytes": MAX_IMAGE_BYTES},
     }

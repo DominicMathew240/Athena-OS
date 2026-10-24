@@ -1,7 +1,8 @@
 # Exporting a dataset (dataset-version API)
 
-> **Status: backend JSON API only.** The console has no screen for dataset versions yet, so everything
-> below is done with HTTP calls. All example data is synthetic. Responses shown were produced by running the
+> **Status: JSON API, with a console panel for the common steps.** The console's "Make a training set" panel can save a
+> snapshot and download a zip (the "Teach the computer" button also saves one for you when the work has changed); everything
+> below is the HTTP API that panel uses, and the parts the panel does not show are done with HTTP calls. All example data is synthetic. Responses shown were produced by running the
 > API against a throwaway project of six generated PNG images; ids, hashes, and timestamps are specific to that run.
 
 A *dataset version* is an immutable, numbered snapshot of the **reviewed** bounding boxes in one image
@@ -287,6 +288,12 @@ does not change an existing version; create a new one instead.
 
 ## Not covered yet
 
-No console screen; no near-duplicate detection; no re-import of an exported dataset;
+Pictures that came from operator corrections ([improve loop](improve-loop.md)) are ordinary pictures here: their boxes are **Needs review**, so a
+snapshot taken before a person accepts them leaves the boxes out (and counts them in `excluded`), and a picture with no accepted box at all, such as one
+that only has a false alarm, is not in the snapshot. Once accepted, a correction box is listed in the manifest like any other, with `origin: "model"` and
+`model_name: "operator feedback (model v1)"` (the number is the version of the model that made the result); the link back to the check-screen result itself is
+kept in the project (`FeedbackImport`, `origin: "operator_feedback"` in `GET …/assets`), not in the manifest.
+
+The console panel shows only the common steps (the API has more); creating a version does no near-duplicate check (a separate read-only `GET …/datasets/health` reports near-copies in advance, see the [API reference](../api-reference.md#console-http-api-the-teach-flow-additions), and it has been tried only on generated pictures); no re-import of an exported dataset;
 no check against decoded image dimensions; no rights or licence review of the images (a version records only that
 a person accepted the boxes); formal review of the COCO/YOLO format conventions used here has not been done.

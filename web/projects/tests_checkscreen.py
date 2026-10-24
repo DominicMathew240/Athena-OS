@@ -187,3 +187,32 @@ class ClientContractTests(InferenceBase):
         self.assertEqual(response.status_code, 201, response.content)
         app = InferenceApp.objects.get()
         self.assertEqual(app.config["status_texts"]["needs_review"], "Please look closely")
+
+
+class MeasuredWordingContractTests(InferenceBase):
+    """The check-screen render model carries measured wording for the UI to adopt (W4-T). The JS still uses its fixed
+    bands today; these tests pin the keys the follow-up UI work reads, and their absent states."""
+
+    def test_the_contract_keys_are_in_the_preview_and_in_every_result(self) -> None:
+        app = self.make_app()
+        preview = self.client.get(self.apps_url(f"/{app['id']}/preview")).json()["preview"]
+        self.assertEqual(set(preview["confidence_wording"]), schema.CONFIDENCE_WORDING_KEYS)
+        self.assertEqual(set(preview["suggested_threshold"]), schema.SUGGESTED_THRESHOLD_KEYS)
+        self.assertEqual(preview["confidence_wording"]["note"], schema.NOT_MEASURED_NOTE)
+        self.assertFalse(preview["confidence_wording"]["measured"])  # absent state: bands is an empty list, never missing
+        self.assertEqual(preview["confidence_wording"]["bands"], [])
+        _, observation_id = self.finished_observation()
+        shown = self.result(str(InferenceApp.objects.order_by("-created_at").first().id), observation_id)
+        self.assertEqual(set(shown["confidence_wording"]), schema.CONFIDENCE_WORDING_KEYS)
+        self.assertEqual(set(shown["suggested_threshold"]), schema.SUGGESTED_THRESHOLD_KEYS)
+
+    def test_the_band_keys_match_what_the_builder_of_the_page_would_read(self) -> None:
+        from .tests_operating_points import synthetic_operating_points
+
+        evaluation = {k: v for k, v in self.model.evaluation.items() if k != "operating_points"}
+        self.model = self.set_evaluation(self.model, {**evaluation, "operating_points": synthetic_operating_points()})
+        app = self.make_app()
+        wording = self.client.get(self.apps_url(f"/{app['id']}/preview")).json()["preview"]["confidence_wording"]
+        self.assertTrue(wording["measured"])
+        for band in wording["bands"]:
+            self.assertEqual(set(band), schema.CONFIDENCE_BAND_KEYS)

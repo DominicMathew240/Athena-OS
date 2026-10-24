@@ -129,6 +129,46 @@ class ProjectScopedRoleTests(ProjectRoleBase):
             self.status(approver, "post", f"{self.base(self.project)}/models/{self.model.id}/approve", {"note": "x"}), 403
         )
 
+    def test_moving_check_screens_with_an_approval_follows_the_role_on_that_project(self) -> None:
+        from .models import InferenceApp
+
+        model = self.train_candidate_after_approved()
+        self.assertEqual(self.status(self.users["trainer"], "post", f"{self.base(self.project)}/models/{model.id}/stage", {}), 200)
+        url = f"{self.base(self.project)}/models/{model.id}/approve"
+        body = {"note": "Checked.", "repoint_apps": True}
+        approver = self.users["approver"]
+        self.give(approver, self.project, "viewer")  # an Approver elsewhere, a Viewer here
+        self.assertEqual(self.status(approver, "post", url, body), 403)
+        labeler = self.users["labeler"]
+        self.give(labeler, self.other, "approver")  # an Approver on the OTHER project only
+        self.assertEqual(self.status(labeler, "post", url, body), 403)
+        self.assertEqual(InferenceApp.objects.get(pk=self.app["id"]).model_version_id, self.model.id)
+        self.assertFalse(ModelEvent.objects.filter(model_version=model, kind__in=("approved", "apps_repointed")).exists())
+        self.give(labeler, self.project, "approver")  # a Labeler console-wide, an Approver on this project
+        response = self.send(client_for(labeler), "post", url, body)
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["repointed"][0]["app_id"], self.app["id"])
+        self.assertEqual(InferenceApp.objects.get(pk=self.app["id"]).model_version_id, model.id)
+        self.assertIn(f"[Acted as Approver, user u{labeler.pk}.]", ModelEvent.objects.get(kind="apps_repointed").note)
+
+    def test_a_screen_of_another_project_cannot_be_moved_by_an_approval_here(self) -> None:
+        from .models import InferenceApp
+
+        foreign = InferenceApp.objects.create(
+            project=self.other, name="Elsewhere", slug="elsewhere", model_version=self.model, config={}
+        )
+        model = self.train_candidate_after_approved()
+        self.send(self.as_user("trainer"), "post", f"{self.base(self.project)}/models/{model.id}/stage", {})
+        response = self.send(
+            self.as_user("approver"), "post", f"{self.base(self.project)}/models/{model.id}/approve",
+            {"note": "Checked.", "repoint_app_ids": [str(foreign.id)]},
+        )
+        self.assertEqual(response.status_code, 400, response.content)
+        foreign.refresh_from_db()
+        self.assertEqual(foreign.model_version_id, self.model.id)
+        model.refresh_from_db()
+        self.assertEqual(model.stage, "staged")
+
     def test_a_denial_names_the_role_on_the_project(self) -> None:
         user = self.users["approver"]
         self.give(user, self.project, "viewer")
@@ -428,7 +468,7 @@ class AccessScreenTests(ProjectRoleBase):
 
     def test_creating_a_project_stays_a_console_wide_action(self) -> None:
         html = self.as_user("viewer").get("/").content.decode()
-        for identifier in ("open-project-dialog", "empty-create", "checklist-create"):
+        for identifier in ("open-project-dialog", "empty-create"):
             self.assertRegex(html, rf'id="{identifier}"[^>]*data-needs-scope="console"')
 
 

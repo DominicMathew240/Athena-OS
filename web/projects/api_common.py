@@ -33,19 +33,22 @@ def image_project(project_id) -> Project:
 
 
 def json_payload(request: HttpRequest, *, allow_empty: bool = False) -> dict[str, Any]:
-    if allow_empty and not request.body and request.content_type != "application/json":
-        return {}
-    if request.content_type != "application/json":
+    # Reading the body is what can raise RequestDataTooBig, so it happens only inside the guarded block below.
+    if request.content_type != "application/json" and not allow_empty:
         raise HttpError("Send the request as JSON (Content-Type: application/json).", 415)
     try:
         body = request.body
     except RequestDataTooBig as error:
         raise HttpError("The request is too large.", 413) from error
+    if allow_empty and not body and request.content_type != "application/json":
+        return {}
+    if request.content_type != "application/json":
+        raise HttpError("Send the request as JSON (Content-Type: application/json).", 415)
     if len(body) > MAX_REQUEST_BYTES:
         raise HttpError("The request is too large.", 413)
     try:
         payload = json.loads(body or b"{}")
-    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+    except (ValueError, RecursionError) as error:  # JSONDecodeError and UnicodeDecodeError are ValueErrors; so is the 4300-digit limit
         raise HttpError("The request body is not valid JSON.", 400) from error
     if not isinstance(payload, dict):
         raise HttpError("The request body must be a JSON object.", 400)

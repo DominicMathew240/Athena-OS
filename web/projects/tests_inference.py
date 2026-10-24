@@ -7,13 +7,15 @@ import json
 import uuid
 from io import StringIO
 from pathlib import Path
+from unittest import mock
 
 from django.core.files.uploadedfile import SimpleUploadedFile
 from django.core.management import call_command
+from django.db import connection
 from django.test import Client, override_settings
 from PIL import Image
 
-from .inference import runner as inference_runner, schema
+from .inference import runner as inference_runner, schema, service as inference_service
 from .models import (
     BoxAnnotation,
     DatasetVersion,
@@ -47,11 +49,15 @@ class InferenceBase(TrainingBase):
         lifecycle.stage_model(candidate, self.user)
         return lifecycle.approve_model(candidate, self.user, "Reviewed the evaluation.")[0]
 
-    def train_candidate_after_approved(self) -> ModelVersion:
+    def train_candidate_after_approved(self, solid: bool = True) -> ModelVersion:
         from .training import runner
 
         self.assertEqual(self.start_run().status_code, 202)
-        return runner.run_training(runner.claim_next_run()).model_versions.get()
+        model = runner.run_training(runner.claim_next_run()).model_versions.get()
+        # The approval gate asks for an acknowledgement when the tiny fabricated test set reads "cannot tell";
+        # most tests are about roles and inference, not that gate, so give the model a solid evaluation.
+        # Pass solid=False to keep the real (tiny, weak) evaluation.
+        return self.set_solid_evaluation(model) if solid else model
 
     def apps_url(self, suffix: str = "", project=None) -> str:
         return self.api(f"/inference/apps{suffix}", project)
@@ -667,3 +673,460 @@ class FeedbackTests(InferenceBase):
         self.feedback({"prediction_index": 0, "verdict": "true_positive"})
         self.project.delete()
         self.assertEqual((InferenceApp.objects.count(), ObservationRecord.objects.count(), FeedbackRecord.objects.count()), (0, 0, 0))
+
+
+class MeasuredWordingTests(InferenceBase):
+    """W4-T: ``confidence_wording`` and ``suggested_threshold`` in the render model, from the pinned model's stored
+    ``operating_points``. SYNTHETIC numbers only. The JS does not use them yet; this pins the contract."""
+
+    NOTE = "Scores are the computer's own numbers; they have not been checked against pictures it has not seen."
+
+    def preview(self, app_id: str) -> dict:
+        return self.client.get(self.apps_url(f"/{app_id}/preview")).json()["preview"]
+
+    def give_model_points(self, doc=None, *, drop: bool = False) -> None:
+        from .tests_operating_points import synthetic_operating_points
+
+        evaluation = {k: v for k, v in self.model.evaluation.items() if k != "operating_points"}
+        if not drop:
+            evaluation["operating_points"] = doc or synthetic_operating_points()
+        self.model = self.set_evaluation(self.model, evaluation)
+
+    def test_a_tiny_trained_model_is_not_measured_and_nothing_is_suggested(self) -> None:
+        self.assertIn("operating_points", self.model.evaluation)  # trained through the real runner, 14 pictures
+        preview = self.preview(self.make_app()["id"])
+        self.assertEqual(preview["confidence_wording"], {"measured": False, "bands": [], "note": self.NOTE})
+        suggested = preview["suggested_threshold"]
+        self.assertEqual(set(suggested), {"value", "target_recall", "basis", "enough_data", "plain"})
+        self.assertIsNone(suggested["value"])
+        self.assertEqual((suggested["target_recall"], suggested["basis"], suggested["enough_data"]), (0.8, "validation split", False))
+        self.assertIn("Too few checking boxes to choose a threshold you can trust", suggested["plain"])
+
+    def test_an_old_model_without_the_key_says_not_measured(self) -> None:
+        self.give_model_points(drop=True)
+        preview = self.preview(self.make_app()["id"])
+        self.assertEqual(preview["confidence_wording"], {"measured": False, "bands": [], "note": self.NOTE})
+        self.assertEqual(
+            preview["suggested_threshold"]["value"], None
+        )
+        self.assertEqual(preview["suggested_threshold"]["basis"], "not measured")
+        self.assertIsNone(preview["suggested_threshold"]["target_recall"])
+        self.assertIn("not measured", preview["suggested_threshold"]["plain"])
+        self.assertIn("evaluation", preview["model"])  # the earlier keys are all still there
+        self.assertTrue(preview["model"]["evaluation"]["available"])
+
+    def test_a_block_made_without_final_test_pictures_suggests_no_value(self) -> None:
+        from .tests_operating_points import synthetic_split
+        from .training import operating_points as op
+
+        gt, pred = synthetic_split(1, 260)
+        doc = op.build_operating_points(gt, pred, None, None, ["a", "b"])
+        self.assertGreaterEqual(doc["ground_truth_boxes"], op.MIN_VALIDATION_BOXES)  # enough boxes, but nothing to check on
+        self.give_model_points(doc)
+        suggested = self.preview(self.make_app()["id"])["suggested_threshold"]
+        self.assertEqual(set(suggested), schema.SUGGESTED_THRESHOLD_KEYS)
+        self.assertIsNone(suggested["value"])
+        self.assertFalse(suggested["enough_data"])
+        self.assertIn("not been checked on pictures the model did not see", suggested["plain"])
+
+    def test_a_stored_block_with_a_cutoff_outside_zero_to_one_is_not_served_and_suggests_nothing(self) -> None:
+        from .tests_operating_points import synthetic_operating_points
+
+        doc = synthetic_operating_points()  # (the database itself refuses NaN, so a valid-JSON bad number stands in)
+        doc["suggestions"][0]["threshold"] = 1.5
+        self.give_model_points(doc)
+        preview = self.preview(self.make_app()["id"])
+        self.assertFalse(preview["confidence_wording"]["measured"])
+        self.assertIsNone(preview["suggested_threshold"]["value"])
+        self.assertIn("could not be read", preview["suggested_threshold"]["plain"])
+
+    def test_a_model_with_enough_measurements_gets_quantitative_bands_and_a_suggested_cutoff(self) -> None:
+        from .tests_operating_points import synthetic_operating_points
+
+        doc = synthetic_operating_points()
+        self.give_model_points(doc)
+        app = self.make_app()
+        preview = self.preview(app["id"])
+        wording = preview["confidence_wording"]
+        self.assertTrue(wording["measured"])
+        self.assertEqual(set(wording), {"measured", "bands", "note"})
+        self.assertEqual(len(wording["bands"]), len(doc["bucket_precision"]))
+        previous_high = 0.0
+        for band, stored in zip(wording["bands"], doc["bucket_precision"]):
+            self.assertEqual(set(band), {"low", "high", "label", "precision", "n", "enough"})
+            self.assertEqual((band["low"], band["high"], band["n"]), (stored["low"], stored["high"], stored["predictions"]))
+            self.assertEqual(band["low"], previous_high)  # bands tile 0..1 with no gap
+            previous_high = band["high"]
+            self.assertEqual(band["enough"], stored["predictions"] >= 20)
+            if band["enough"]:
+                self.assertRegex(band["label"], r"^right .* in our check$")
+            else:
+                self.assertEqual(band["label"], "too few examples to say")
+        self.assertEqual(previous_high, 1.0)
+        self.assertTrue(any(b["enough"] for b in wording["bands"]))
+        text = json.dumps(wording).lower()
+        for old in ("very sure", "fairly sure", "somewhat sure", "not very sure", "accurate", "certified", "safe"):
+            self.assertNotIn(old, text)
+        suggested = preview["suggested_threshold"]
+        self.assertEqual(suggested["value"], doc["suggestions"][0]["threshold"])
+        self.assertEqual((suggested["target_recall"], suggested["enough_data"], suggested["basis"]), (0.8, True, "validation split"))
+        self.assertEqual(suggested["plain"], doc["suggestions"][0]["plain"])
+
+    def test_the_suggestion_is_never_applied_and_the_validator_still_takes_the_same_range(self) -> None:
+        self.give_model_points()
+        app = self.make_app()
+        self.assertEqual(app["config"]["confidence_threshold"], 0.5)  # the person's (default) value, not the suggestion
+        self.assertNotEqual(self.preview(app["id"])["suggested_threshold"]["value"], 0.5)
+        self.assertEqual(self.preview(app["id"])["confidence_threshold"], 0.5)
+        for value, ok in ((0, True), (1, True), (0.37, True), (1.01, False), (-0.01, False), (True, False), (float("nan"), False)):
+            config = schema.default_config("x", ["damaged"])
+            config["confidence_threshold"] = value
+            if ok:
+                self.assertEqual(schema.validate_config(config, ["damaged"])["confidence_threshold"], float(value))
+            else:
+                with self.assertRaises(schema.ConfigError):
+                    schema.validate_config(config, ["damaged"])
+        self.assertEqual(set(schema.CONFIG_KEYS), {"task_title", "accepted_inputs", "displayed_labels", "confidence_threshold", "status_texts", "decision_controls", "human_review_required"})
+
+    def test_a_result_uses_the_wording_of_the_model_it_was_made_with(self) -> None:
+        self.give_model_points()
+        app, observation_id = self.finished_observation()
+        shown = self.result(app["id"], observation_id)
+        self.assertTrue(shown["confidence_wording"]["measured"])
+        self.assertEqual(shown["confidence_wording"], self.preview(app["id"])["confidence_wording"])
+        self.assertEqual(shown["suggested_threshold"], self.preview(app["id"])["suggested_threshold"])
+        self.assertEqual(shown["confidence_threshold"], 0.5)
+
+    def test_a_damaged_block_is_not_measured_and_does_not_break_the_page(self) -> None:
+        for junk in ({"schema": "athena.operating_points/1", "bucket_precision": "x", "suggestions": 4}, 5, [], "x"):
+            evaluation = {**self.model.evaluation, "operating_points": junk}
+            self.model = self.set_evaluation(self.model, evaluation)
+            app = self.make_app(name=f"Damaged {json.dumps(junk)[:20]}")
+            preview = self.preview(app["id"])
+            self.assertFalse(preview["confidence_wording"]["measured"])
+            self.assertIsNone(preview["suggested_threshold"]["value"])
+
+
+# ---------------------------------------------------------------------------------------
+class RepointOnApprovalTests(InferenceBase):
+    """W12-G2a: approving (or rolling back) can EXPLICITLY re-point check screens; nothing is ever silent."""
+
+    def staged_next(self) -> ModelVersion:
+        candidate = self.train_candidate_after_approved()
+        lifecycle.stage_model(candidate, self.user)
+        return candidate
+
+    def approve_with(self, model, **extra):
+        return self.post(self.api(f"/models/{model.id}/approve"), {"note": "Better recall.", **extra})
+
+    def rollback_with(self, model, **extra):
+        return self.post(self.api(f"/models/{model.id}/rollback"), {"note": "Went back.", **extra})
+
+    def pinned(self, app) -> uuid.UUID:
+        return InferenceApp.objects.get(pk=app["id"]).model_version_id
+
+    def set_labels(self, model, labels) -> None:
+        with connection.cursor() as cursor:  # a model's labels are write-once for the ORM; simulate another label list
+            cursor.execute(
+                f"UPDATE {ModelVersion._meta.db_table} SET label_names = %s WHERE id = %s",
+                [json.dumps(labels), model.pk.hex if hasattr(model.pk, "hex") else model.pk],
+            )
+        model.refresh_from_db()
+
+    def untouched_snapshot(self):
+        return (
+            list(ObservationRecord.objects.order_by("id").values()),
+            list(FeedbackRecord.objects.order_by("id").values()),
+            [(m.id, m.artifact_sha256, lifecycle.sha256_file(lifecycle.artifact_file(m))) for m in ModelVersion.objects.order_by("id")],
+        )
+
+    # -- without the flag nothing changes ------------------------------------------------------------------------
+    def test_without_the_flag_the_screens_stay_pinned_exactly_as_before(self) -> None:
+        app = self.make_app()
+        newer = self.staged_next()
+        response = self.approve_with(newer)
+        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertEqual((body["repointed"], body["repoint_skipped"]), ([], []))
+        self.assertEqual([a["id"] for a in body["apps_still_on_retired_model"]], [app["id"]])
+        self.assertIn("keep using the exact model version they were set up with", body["message"])
+        self.assertEqual(self.pinned(app), self.model.id)
+        self.assertFalse(ModelEvent.objects.filter(kind="apps_repointed").exists())
+        self.assertNotIn("re-pointed", ModelEvent.objects.get(model_version=newer, kind="approved").note)
+        self.assertEqual(self.run_image(app["id"]).status_code, 409)  # as before: the screen refuses
+        for falsy in ({"repoint_apps": False}, {"repoint_app_ids": []}):
+            again = self.staged_next()
+            self.assertEqual(self.approve_with(again, **falsy).json()["repointed"], [])
+            self.assertEqual(self.pinned(app), self.model.id)
+
+    # -- one screen, with every side condition -------------------------------------------------------------------
+    def test_one_screen_is_repointed_in_the_same_approval_and_everything_else_is_untouched(self) -> None:
+        app = self.make_app(name="Night shift")
+        first = self.run_image(app["id"]).json()["observation_id"]
+        self.assertEqual(
+            self.post(self.observation_url(app["id"], first, "/feedback"), {"prediction_index": 0, "verdict": "true_positive"}).status_code, 201
+        )
+        before = self.untouched_snapshot()
+        config_before = InferenceApp.objects.get(pk=app["id"]).config
+        newer = self.staged_next()
+        response = self.approve_with(newer, repoint_apps=True)
+        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertEqual(body["repointed"], [{"app_id": app["id"], "name": "Night shift"}])
+        self.assertEqual(body["repoint_skipped"], [])
+        self.assertEqual(body["apps_still_on_retired_model"], [])
+        self.assertEqual([a["id"] for a in body["model"]["in_use_by_apps"]], [app["id"]])
+        self.assertEqual(self.pinned(app), newer.id)
+        self.assertEqual(InferenceApp.objects.get(pk=app["id"]).config, config_before)  # same strictly validated config
+        # audit: one append-only line on the NEW model, after the approval line
+        approved = ModelEvent.objects.get(model_version=newer, kind="approved")
+        event = ModelEvent.objects.get(kind="apps_repointed")
+        self.assertGreater(event.id, approved.id)
+        self.assertEqual((event.model_version_id, event.actor_id_snapshot, event.project_id), (newer.id, self.user.pk, self.project.id))
+        data = json.loads(next(line for line in event.note.splitlines() if line.startswith("{")))
+        self.assertEqual(
+            data,
+            {"app_id": app["id"], "app_name": "Night shift", "from_model_id": str(self.model.id),
+             "from_version": self.model.version, "to_model_id": str(newer.id), "to_version": newer.version},
+        )
+        self.assertIn("Better recall.", event.note)
+        self.assertIn("Acted as Approver", event.note)
+        self.assertIn("Check screens re-pointed to this model at approval: 1. Left alone: 0.", approved.note)
+        # nothing else moved: old observations and feedback, both artifacts
+        after = self.untouched_snapshot()
+        self.assertEqual(after[0], before[0])
+        self.assertEqual(after[1], before[1])
+        self.assertEqual([row for row in after[2] if row[0] == self.model.id], [row for row in before[2] if row[0] == self.model.id])
+        for model in ModelVersion.objects.all():
+            self.assertEqual(lifecycle.sha256_file(lifecycle.artifact_file(model)), model.artifact_sha256)
+        self.assertEqual(ObservationRecord.objects.get(pk=first).model_version_id, self.model.id)
+        # the screen now runs on the new model, and says so
+        fresh = self.run_image(app["id"])
+        self.assertEqual(fresh.status_code, 202, fresh.content)
+        shown = self.result(app["id"], fresh.json()["observation_id"])
+        self.assertEqual((shown["model"]["id"], shown["result"]["state"]), (str(newer.id), "needs_review"))
+        self.assertEqual(ObservationRecord.objects.get(pk=fresh.json()["observation_id"]).model_version_id, newer.id)
+        self.assertEqual(self.result(app["id"], first)["model"]["id"], str(self.model.id))  # the old answer keeps its model
+
+    def test_several_screens_are_repointed_together_and_an_archived_one_is_left_alone(self) -> None:
+        apps = [self.make_app(name=name) for name in ("Bay A", "Bay B", "Bay C")]
+        archived = self.make_app(name="Old bay")
+        self.assertEqual(
+            self.client.patch(self.apps_url(f"/{archived['id']}"), data=json.dumps({"status": "archived"}), content_type="application/json").status_code, 200
+        )
+        newer = self.staged_next()
+        body = self.approve_with(newer, repoint_apps=True).json()
+        self.assertEqual([r["name"] for r in body["repointed"]], ["Bay A", "Bay B", "Bay C"])
+        self.assertEqual({r["app_id"] for r in body["repointed"]}, {a["id"] for a in apps})
+        self.assertEqual(body["repoint_skipped"], [])
+        for app in apps:
+            self.assertEqual(self.pinned(app), newer.id)
+            self.assertEqual(self.run_image(app["id"]).status_code, 202)
+        self.assertEqual(self.pinned(archived), self.model.id)
+        self.assertEqual(ModelEvent.objects.filter(kind="apps_repointed", model_version=newer).count(), 3)
+        self.assertIn("re-pointed to this model at approval: 3. Left alone: 0.", ModelEvent.objects.get(model_version=newer, kind="approved").note)
+
+    def test_a_screen_whose_labels_do_not_fit_is_skipped_with_a_reason_and_the_approval_still_succeeds(self) -> None:
+        self.set_labels(self.model, ["damaged", "dent"])  # the model in use knows a label the next model will not
+        fits = self.make_app(name="Fits", config={"displayed_labels": ["damaged"]})
+        stuck = self.make_app(name="Shows dents")  # shows every label of the model in use, "dent" included
+        newer = self.staged_next()
+        self.assertEqual(newer.label_names, ["damaged", "normal"])
+        # BEFORE approval the detail already tells which screens would move and which could not
+        detail = self.client.get(self.api(f"/models/{newer.id}")).json()["model"]
+        would = {row["name"]: row for row in detail["would_repoint"]}
+        self.assertEqual(set(would), {"Fits", "Shows dents"})
+        self.assertEqual((would["Fits"]["can_repoint"], would["Fits"]["reason"]), (True, None))
+        self.assertFalse(would["Shows dents"]["can_repoint"])
+        self.assertIn("dent", would["Shows dents"]["reason"])
+        response = self.approve_with(newer, repoint_apps=True)
+        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertEqual(body["repointed"], [{"app_id": fits["id"], "name": "Fits"}])
+        self.assertEqual([(r["app_id"], r["name"]) for r in body["repoint_skipped"]], [(stuck["id"], "Shows dents")])
+        self.assertEqual(body["repoint_skipped"][0]["reason"], would["Shows dents"]["reason"])  # the preview told the truth
+        self.assertEqual(set(body["repoint_skipped"][0]), {"app_id", "name", "reason"})
+        self.assertEqual((self.pinned(fits), self.pinned(stuck)), (newer.id, self.model.id))
+        self.assertEqual([a["id"] for a in body["apps_still_on_retired_model"]], [stuck["id"]])
+        self.assertEqual(ModelVersion.objects.get(pk=newer.id).stage, "approved")
+        self.assertEqual(ModelEvent.objects.filter(kind="apps_repointed").count(), 1)  # only the one that moved
+        self.assertIn("re-pointed to this model at approval: 1. Left alone: 1.", ModelEvent.objects.get(model_version=newer, kind="approved").note)
+        # the skipped screen was not half-changed
+        self.assertEqual(InferenceApp.objects.get(pk=stuck["id"]).config["displayed_labels"], ["damaged", "dent"])
+
+    def test_would_repoint_is_read_only_lists_only_active_screens_on_the_model_in_use_and_only_for_a_staged_model(self) -> None:
+        live = self.make_app(name="Live")
+        archived = self.make_app(name="Archived")
+        self.client.patch(self.apps_url(f"/{archived['id']}"), data=json.dumps({"status": "archived"}), content_type="application/json")
+        candidate = self.train_candidate_after_approved()
+        self.assertEqual(self.client.get(self.api(f"/models/{candidate.id}")).json()["model"]["would_repoint"], [])  # not staged
+        lifecycle.stage_model(candidate, self.user)
+        detail = self.client.get(self.api(f"/models/{candidate.id}")).json()["model"]
+        self.assertEqual(detail["would_repoint"], [{"app_id": live["id"], "name": "Live", "can_repoint": True, "reason": None}])
+        self.assertEqual(self.pinned(live), self.model.id)  # looking changed nothing
+        self.assertEqual(self.client.get(self.api(f"/models/{self.model.id}")).json()["model"]["would_repoint"], [])
+        self.approve_with(candidate, repoint_apps=True)
+        self.assertEqual(self.client.get(self.api(f"/models/{candidate.id}")).json()["model"]["would_repoint"], [])
+
+    # -- which screens, exactly ----------------------------------------------------------------------------------
+    def test_a_screen_on_an_older_retired_model_moves_only_when_it_is_listed_explicitly(self) -> None:
+        old = self.make_app(name="Left on v1")
+        second = self.staged_next()
+        self.assertEqual(self.approve_with(second).status_code, 200)  # no flag: "Left on v1" stays on the retired v1
+        current = self.make_app(name="On v2", model_version_id=str(second.id))
+        third = self.staged_next()
+        body = self.approve_with(third, repoint_apps=True).json()
+        self.assertEqual([r["name"] for r in body["repointed"]], ["On v2"])
+        self.assertEqual((self.pinned(current), self.pinned(old)), (third.id, self.model.id))  # v1 is older than the retired v2
+        self.assertEqual(self.client.get(self.api(f"/models/{self.model.id}")).json()["model"]["stage"], "retired")
+        # now list it explicitly: allowed, it is pinned to a model that can no longer run
+        fourth = self.staged_next()
+        body = self.approve_with(fourth, repoint_app_ids=[old["id"]]).json()
+        self.assertEqual(body["repointed"], [{"app_id": old["id"], "name": "Left on v1"}])
+        self.assertEqual((self.pinned(old), self.pinned(current)), (fourth.id, third.id))  # "On v2" was not listed
+        self.assertEqual([a["id"] for a in body["apps_still_on_retired_model"]], [current["id"]])
+
+    def test_a_listed_subset_moves_only_those_screens(self) -> None:
+        a, b, c = (self.make_app(name=f"Bay {n}") for n in "ABC")
+        newer = self.staged_next()
+        body = self.approve_with(newer, repoint_app_ids=[c["id"], a["id"], c["id"]]).json()  # order and repeats do not matter
+        self.assertEqual(sorted(r["name"] for r in body["repointed"]), ["Bay A", "Bay C"])
+        self.assertEqual((self.pinned(a), self.pinned(b), self.pinned(c)), (newer.id, self.model.id, newer.id))
+        self.assertEqual([x["id"] for x in body["apps_still_on_retired_model"]], [b["id"]])
+
+    def test_a_bad_request_is_refused_before_anything_is_written(self) -> None:
+        app = self.make_app()
+        other = Project.objects.create(name="Spare line", modality="image", task="Detect", labels=["damaged"])
+        foreign = InferenceApp.objects.create(project=other, name="Elsewhere", slug="elsewhere", model_version=self.model, config={})
+        newer = self.staged_next()
+        bad = [
+            {"repoint_apps": "yes"}, {"repoint_apps": 1}, {"repoint_apps": "true"}, {"repoint_apps": None},
+            {"repoint_app_ids": app["id"]}, {"repoint_app_ids": [1]}, {"repoint_app_ids": ["nope"]},
+            {"repoint_app_ids": [str(uuid.uuid4())]}, {"repoint_app_ids": [str(foreign.id)]},
+            {"repoint_app_ids": [str(uuid.uuid4()) for _ in range(101)]},
+            {"repoint_apps": True, "repoint_app_ids": [app["id"]]},
+        ]
+        for extra in bad:
+            with self.subTest(extra=str(extra)[:60]):
+                response = self.approve_with(newer, **extra)
+                self.assertEqual(response.status_code, 400, response.content)
+                self.assertTrue(response.json()["error"])
+        newer.refresh_from_db()
+        self.assertEqual(newer.stage, "staged")
+        self.assertEqual((self.pinned(app), InferenceApp.objects.get(pk=foreign.id).model_version_id), (self.model.id, self.model.id))
+        self.assertFalse(ModelEvent.objects.filter(model_version=newer, kind__in=("approved", "apps_repointed")).exists())
+
+    def test_the_weak_results_gate_still_comes_first_and_changes_nothing(self) -> None:
+        app = self.make_app()
+        FakeBackend.boxes = []
+        weak = self.train_candidate_after_approved(solid=False)
+        lifecycle.stage_model(weak, self.user)
+        response = self.approve_with(weak, repoint_apps=True)
+        self.assertEqual(response.status_code, 409)
+        self.assertTrue(response.json()["needs_acknowledgement"])
+        self.assertEqual(self.pinned(app), self.model.id)
+        ok = self.approve_with(weak, repoint_apps=True, acknowledge_weak_results=True)
+        self.assertEqual(ok.status_code, 200, ok.content)
+        self.assertEqual(self.pinned(app), weak.id)
+        note = ModelEvent.objects.get(model_version=weak, kind="approved").note
+        self.assertIn("Weak results acknowledged", note)
+        self.assertIn("re-pointed to this model at approval: 1.", note)
+
+    # -- all or nothing ------------------------------------------------------------------------------------------
+    def test_an_error_while_repointing_rolls_the_whole_approval_back(self) -> None:
+        apps = [self.make_app(name=name) for name in ("Bay A", "Bay B")]
+        newer = self.staged_next()
+        real, calls = inference_service.update_app, []
+
+        def flaky(app, **kwargs):
+            calls.append(app.name)
+            if len(calls) == 2:
+                raise RuntimeError("disk full")
+            return real(app, **kwargs)
+
+        with mock.patch.object(inference_service, "update_app", side_effect=flaky):
+            with self.assertRaises(RuntimeError):
+                lifecycle.approve_model(newer, self.user, "Better.", repoint_apps=True)
+        self.assertEqual(len(calls), 2)  # the first one really was re-pointed before the failure
+        newer.refresh_from_db()
+        self.model.refresh_from_db()
+        self.assertEqual((newer.stage, newer.approved_by_id, newer.previous_approved_id), ("staged", None, None))
+        self.assertEqual((self.model.stage, self.model.retired_at), ("approved", None))
+        self.assertEqual([self.pinned(a) for a in apps], [self.model.id, self.model.id])
+        self.assertFalse(ModelEvent.objects.filter(kind__in=("approved", "retired", "apps_repointed"), model_version=newer).exists())
+        self.assertFalse(ModelEvent.objects.filter(kind="retired").exists())
+        # and the very same approval works afterwards
+        self.assertEqual(self.approve_with(newer, repoint_apps=True).status_code, 200)
+        self.assertEqual([self.pinned(a) for a in apps], [newer.id, newer.id])
+
+    # -- rollback goes the other way -----------------------------------------------------------------------------
+    def test_rollback_without_the_flag_leaves_the_screens_on_the_retired_model_as_before(self) -> None:
+        app = self.make_app()
+        newer = self.staged_next()
+        self.approve_with(newer, repoint_apps=True)
+        body = self.rollback_with(newer).json()
+        self.assertEqual((body["repointed"], body["repoint_skipped"]), ([], []))
+        self.assertEqual([a["id"] for a in body["apps_still_on_retired_model"]], [app["id"]])
+        self.assertIn("will not run until re-pointed", body["message"])
+        self.assertEqual(self.pinned(app), newer.id)
+        self.assertEqual(ModelEvent.objects.filter(kind="apps_repointed").count(), 1)  # only the approval's
+
+    def test_rollback_can_repoint_the_screens_back_to_the_restored_model(self) -> None:
+        app = self.make_app(name="Night shift")
+        other = self.make_app(name="Day shift")
+        newer = self.staged_next()
+        self.approve_with(newer, repoint_apps=True)
+        response = self.rollback_with(newer, repoint_apps=True)
+        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertEqual([(r["app_id"], r["name"]) for r in body["repointed"]], [(other["id"], "Day shift"), (app["id"], "Night shift")])
+        self.assertEqual((body["repoint_skipped"], body["apps_still_on_retired_model"]), ([], []))
+        self.assertEqual(body["model"]["id"], str(self.model.id))
+        self.assertEqual((self.pinned(app), self.pinned(other)), (self.model.id, self.model.id))
+        events = ModelEvent.objects.filter(kind="apps_repointed", model_version=self.model)
+        self.assertEqual(events.count(), 2)
+        data = json.loads(next(line for line in events.first().note.splitlines() if line.startswith("{")))
+        self.assertEqual((data["from_model_id"], data["to_model_id"]), (str(newer.id), str(self.model.id)))
+        restored = ModelEvent.objects.get(kind="rollback_restored")
+        self.assertLess(restored.id, events.first().id)
+        self.assertIn("re-pointed to this model by the rollback: 2. Left alone: 0.", restored.note)
+        self.assertEqual(self.run_image(app["id"]).status_code, 202)
+        self.assertEqual(
+            self.result(app["id"], ObservationRecord.objects.latest("created_at").id)["model"]["id"], str(self.model.id)
+        )
+
+    def test_rollback_skips_a_screen_that_does_not_fit_the_restored_model(self) -> None:
+        newer = self.staged_next()
+        self.approve_with(newer)
+        self.set_labels(newer, ["damaged", "normal", "extra"])  # the model being replaced knows a label the old one does not
+        wide = self.make_app(name="Shows extra", model_version_id=str(newer.id))
+        narrow = self.make_app(name="Narrow", model_version_id=str(newer.id), config={"displayed_labels": ["damaged"]})
+        response = self.rollback_with(newer, repoint_apps=True)
+        self.assertEqual(response.status_code, 200, response.content)
+        body = response.json()
+        self.assertEqual(body["repointed"], [{"app_id": narrow["id"], "name": "Narrow"}])
+        self.assertEqual([(r["app_id"], r["name"]) for r in body["repoint_skipped"]], [(wide["id"], "Shows extra")])
+        self.assertIn("extra", body["repoint_skipped"][0]["reason"])
+        self.assertEqual((self.pinned(narrow), self.pinned(wide)), (self.model.id, newer.id))
+        self.assertEqual(ModelVersion.objects.get(pk=self.model.id).stage, "approved")  # the rollback itself still happened
+
+    def test_an_error_while_repointing_during_a_rollback_undoes_the_rollback(self) -> None:
+        newer = self.staged_next()
+        self.approve_with(newer)
+        mover = self.make_app(name="Mover", model_version_id=str(newer.id))
+        with mock.patch.object(inference_service, "update_app", side_effect=RuntimeError("boom")):
+            with self.assertRaises(RuntimeError):
+                lifecycle.rollback_model(newer, self.user, "Back.", repoint_apps=True)
+        newer.refresh_from_db()
+        self.model.refresh_from_db()
+        self.assertEqual((newer.stage, self.model.stage), ("approved", "retired"))
+        self.assertEqual(self.pinned(mover), newer.id)
+        self.assertFalse(ModelEvent.objects.filter(kind__in=("rollback_retired", "rollback_restored", "apps_repointed")).exists())
+
+    def test_rollback_with_a_bad_request_is_refused_first(self) -> None:
+        app = self.make_app()
+        newer = self.staged_next()
+        self.approve_with(newer)
+        for extra in ({"repoint_apps": "yes"}, {"repoint_app_ids": ["nope"]}, {"repoint_apps": True, "repoint_app_ids": [app["id"]]}):
+            self.assertEqual(self.rollback_with(newer, **extra).status_code, 400, extra)
+        self.assertEqual(ModelVersion.objects.get(pk=newer.id).stage, "approved")

@@ -69,6 +69,12 @@
 .cs-slider-row input[type="range"] { width: 100%; min-height: 44px; accent-color: var(--y); margin: 0; }
 .cs-slider-end { font-size: 16px; font-weight: 700; max-width: 9ch; line-height: 1.2; }
 .cs-slider-value { margin: 2px 0 0; padding: 8px 10px; background: var(--bg); border: 1px solid var(--rule); font-size: 17px; font-weight: 600; }
+.cs-suggest { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--rule); background: var(--panel-2); }
+.cs-suggest-title { margin: 0; font-size: 17px; font-weight: 700; }
+.cs-suggest .cs-help { color: var(--fg-2); max-width: 70ch; }
+.cs-suggest .cs-actions { margin-top: 8px; }
+.cs-suggest .cs-inline-msg { min-height: 0; margin-top: 6px; }
+.cs-det-sure[data-wording="unchecked"], .cs-det-sure[data-wording="thin"] { color: var(--fg-3); font-weight: 500; }
 .cs-box-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; }
 .cs-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 12px; }
 /* Buttons keep the console's size, weight and colours; on phones and tablets they grow to 44px so they are easy to hit. */

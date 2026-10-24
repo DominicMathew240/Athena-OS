@@ -38,18 +38,23 @@ class Command(BaseCommand):
         failed = fail_orphaned_runs()
         if failed:
             self.stdout.write(f"Marked {failed} run(s) left running by a previous worker as failed.")
-        threading.Thread(target=beat, daemon=True, name="train-heartbeat").start()
+        # Report "ready" first, then start the thread that repeats it: started the other way round, the thread's
+        # first beat could still say "loading" and land after this one, hiding "ready" for up to ten seconds.
         state = "ready"
         heartbeat(state, availability)
+        threading.Thread(target=beat, daemon=True, name="train-heartbeat").start()
         usable = [name for name, ok in availability.items() if ok]
         self.stdout.write(f"Training worker ready. Backends usable here: {', '.join(usable) or 'none'}.")
-        while not stopping:
-            fail_stale_runs()
-            run = claim_next_run()
-            if run is None:
-                if options["once"]:
-                    return
-                time.sleep(options["poll"])
-                continue
-            finished = run_training(run)
-            self.stdout.write(f"Run {finished.pk}: {finished.status}.")
+        try:
+            while not stopping:
+                fail_stale_runs()
+                run = claim_next_run()
+                if run is None:
+                    if options["once"]:
+                        return
+                    time.sleep(options["poll"])
+                    continue
+                finished = run_training(run)
+                self.stdout.write(f"Run {finished.pk}: {finished.status}.")
+        finally:
+            stopping = True  # let the heartbeat thread end instead of beating on after the command returns

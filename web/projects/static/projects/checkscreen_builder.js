@@ -12,6 +12,7 @@
     model: byId("cs-model"), name: byId("cs-name"), slug: byId("cs-slug"), slugField: byId("cs-slug-field"),
     labels: byId("cs-labels"), types: byId("cs-types"),
     threshold: byId("cs-threshold"), thresholdOut: byId("cs-threshold-out"),
+    suggestText: byId("cs-suggest-text"), suggestUse: byId("cs-suggest-use"), suggestMsg: byId("cs-suggest-msg"),
     sayClear: byId("cs-say-clear"), sayFlagged: byId("cs-say-flagged"), sayReview: byId("cs-say-review"),
     decisions: byId("cs-decisions"), noteRequired: byId("cs-note-required"), human: byId("cs-human"),
     save: byId("cs-save"), saveMsg: byId("cs-save-msg"), unsaved: byId("cs-unsaved"),
@@ -94,6 +95,34 @@
     f.threshold.setAttribute("aria-valuetext", `${Math.round(t * 100)} percent. ${words}`);
   }
 
+  /* A hint from the model's own checking results, shown beside the slider. It never moves the slider by itself. */
+  function suggestedFor(modelId) {
+    if (!currentApp || !preview) return { text: "Save the screen first. A suggested setting then appears here, worked out from how the model did on its Checking pictures.", value: null };
+    if (modelId && preview.model && preview.model.id !== modelId) {
+      return { text: "You chose a different model than the one saved. Save the screen, and a suggested setting for that model appears here.", value: null };
+    }
+    const hint = preview.suggested_threshold;
+    if (!hint || typeof hint.plain !== "string") return { text: "No suggested setting is available for this model.", value: null };
+    const usable = typeof hint.value === "number" && hint.value >= 0 && hint.value <= 1 && hint.enough_data === true;
+    return { text: hint.plain, value: usable ? hint.value : null };
+  }
+  let suggestion = null;
+  function drawSuggestion() {
+    suggestion = suggestedFor(f.model.value);
+    f.suggestText.textContent = suggestion.text;
+    f.suggestUse.hidden = suggestion.value === null;
+    setMsg(f.suggestMsg, "");
+  }
+  function useSuggestion() {
+    if (!suggestion || suggestion.value === null) return;
+    const percent = Math.floor(suggestion.value * 100 + 1e-6);
+    f.threshold.value = String(percent);
+    updateThresholdText();
+    f.threshold.dispatchEvent(new Event("input", { bubbles: true })); // marks the form as changed; nothing is saved
+    const exact = Math.abs(percent - suggestion.value * 100) < 1e-6;
+    setMsg(f.suggestMsg, `The setting is now ${(percent / 100).toFixed(2)}${exact ? "" : " (the slider moves in whole percents)"}. It is not saved until you press the save button.`, "ok");
+  }
+
   function fillForm(app) {
     const cfg = app ? app.config : null;
     const appModelId = app ? app.model_version.id : null;
@@ -123,6 +152,7 @@
     f.noteRequired.checked = cfg ? cfg.decision_controls.required_note_on_override : true;
     f.human.checked = cfg ? cfg.human_review_required : true;
     updateThresholdText();
+    drawSuggestion();
     f.unsaved.hidden = true;
     touched = false;
     CS.hideAlert(saveAlert);
@@ -257,6 +287,11 @@
     byId("cs-pv-threshold").textContent = `${CS.percent(p.confidence_threshold)} sure or more (${p.confidence_threshold.toFixed(2)})`;
     byId("cs-pv-model").textContent = `Version ${p.model.version}${p.model_in_use ? "" : ` (${p.model.stage_now}: no longer approved, so this screen will not run)`}`;
     byId("cs-pv-human").textContent = p.human_review_required ? "Yes, always" : "No";
+    const wording = p.confidence_wording;
+    byId("cs-pv-wording").textContent = wording && wording.measured === true
+      ? `Each score is shown with how often that range was right in our check. ${CS.scoreNote(p)}`
+      : `Each score is shown as the computer’s own number, not checked. ${CS.scoreNote(p)}`;
+    drawSuggestion();
     const says = byId("cs-pv-says");
     CS.clear(says);
     const names = { clear: "Nothing found", flagged: "Something found", needs_review: "Look closely" };
@@ -341,9 +376,9 @@
     CS.clear(list);
     result.detections.forEach((det, i) => {
       stage.addDetection(det, i + 1);
-      list.appendChild(CS.detectionRow(det, i + 1));
+      list.appendChild(CS.detectionRow(det, i + 1, render));
     });
-    byId("cs-try-note").textContent = `${result.detections.length ? "" : "Nothing was found above the sureness setting. "}This try is saved as a record. The checking buttons and feedback are only on the real screen.`;
+    byId("cs-try-note").textContent = `${result.detections.length ? `${CS.scoreNote(render)} ` : "Nothing was found above the sureness setting. "}This try is saved as a record. The checking buttons and feedback are only on the real screen.`;
     CS.scrollTo(byId("cs-try-result"));
   }
 
@@ -357,6 +392,7 @@
 
   async function selectApp(id, keepAlerts) {
     currentApp = id === "new" ? null : apps.find((a) => a.id === id) || null;
+    preview = null; // the last screen's render model must not feed this screen's suggestion
     if (!keepAlerts) { CS.hideAlert(saveAlert); CS.hideAlert(pageAlert); }
     fillForm(currentApp);
     byId("cs-try-result").hidden = true;
@@ -384,11 +420,13 @@
   f.form.addEventListener("input", () => { setMsg(f.saveMsg, ""); markDirty(); });
   f.form.addEventListener("change", markDirty);
   f.threshold.addEventListener("input", updateThresholdText);
+  f.suggestUse.addEventListener("click", useSuggestion);
   f.appSelect.addEventListener("change", () => selectApp(f.appSelect.value, false));
   f.model.addEventListener("change", () => {
     const names = modelLabels();
     const prior = checked(f.labels).filter((n) => names.includes(n));
     drawLabels(names, prior.length ? prior : names);
+    drawSuggestion();
     markDirty();
   });
   f.human.addEventListener("change", async () => {

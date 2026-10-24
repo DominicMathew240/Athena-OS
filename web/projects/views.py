@@ -19,7 +19,7 @@ from django.views.decorators.http import require_http_methods
 from PIL import Image, UnidentifiedImageError
 
 from .forms import ProjectCreateForm, normalize_label_names
-from .models import Asset, AutoLabelJob, BoxAnnotation, Project
+from .models import Asset, AutoLabelJob, BoxAnnotation, FeedbackImport, Project
 from . import permissions
 from .permissions import access
 
@@ -30,6 +30,9 @@ MAX_IMAGE_BATCH_BYTES = 100 * 1024 * 1024
 MAX_IMAGE_PIXELS = 25_000_000
 IMAGE_FORMATS = {
     "JPEG": ("jpg", "image/jpeg"),
+    # Pillow reports a JPEG with an MPF (multi-picture) header as MPO. Phones and
+    # thermal cameras write these as ordinary .jpg files; the first frame is a normal JPEG.
+    "MPO": ("jpg", "image/jpeg"),
     "PNG": ("png", "image/png"),
     "WEBP": ("webp", "image/webp"),
 }
@@ -75,8 +78,12 @@ def _project_data(project: Project) -> dict[str, Any]:
     }
 
 
-def _asset_data(asset: Asset) -> dict[str, Any]:
+def _asset_data(asset: Asset, from_observation=None) -> dict[str, Any]:
     return {
+        # Where the picture came from. Only operator-feedback pictures are known by a link table; the rest were
+        # uploaded. ``from_observation`` is the check-screen result a feedback picture was taken from.
+        "origin": "operator_feedback" if from_observation else "upload",
+        "from_observation": str(from_observation) if from_observation else None,
         "id": str(asset.id),
         "filename": asset.filename,
         "content_type": asset.content_type,
@@ -500,7 +507,8 @@ def project_assets(request: HttpRequest, project_id) -> JsonResponse:
         return JsonResponse({"error": "Image files can only be added to image projects."}, status=400)
 
     if request.method == "GET":
-        assets = [_asset_data(asset) for asset in _assets_with_counts(project)]
+        taken_from = dict(FeedbackImport.objects.filter(asset__project=project).values_list("asset_id", "observation_id"))
+        assets = [_asset_data(asset, taken_from.get(asset.id)) for asset in _assets_with_counts(project)]
         response = JsonResponse({"assets": assets})
         response["Cache-Control"] = "no-store"
         return response

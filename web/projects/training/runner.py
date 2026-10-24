@@ -122,18 +122,99 @@ def export_dataset(run: TrainingRun, backend: TrainingBackend, dest: Path) -> li
     return test_items(version.manifest, dest)
 
 
-def test_items(manifest: dict[str, Any], dest: Path) -> list[EvalItem]:
-    """Held-out images with ground truth, in the same order/naming the writers used."""
+def _split_items(manifest: dict[str, Any], dest: Path, split: str) -> list[EvalItem]:
     grouped = writers._by_split(manifest["images"])  # noqa: SLF001 - same package, same naming rule
     items = []
-    for index, image in grouped.get("test", []):
+    for index, image in grouped.get(split, []):
         name = writers.image_name(index, image)
         boxes = [
             (box["label"], float(box["x"]), float(box["y"]), float(box["width"]), float(box["height"]))
             for box in image["boxes"]
         ]
-        items.append(EvalItem(dest / "images" / "test" / name, boxes, image["width"], image["height"]))
+        items.append(
+            EvalItem(dest / "images" / split / name, boxes, image["width"], image["height"], str(image["asset_id"]))
+        )
     return items
+
+
+def test_items(manifest: dict[str, Any], dest: Path) -> list[EvalItem]:
+    """Held-out images with ground truth, in the same order/naming the writers used."""
+    return _split_items(manifest, dest, "test")
+
+
+def val_items(manifest: dict[str, Any], dest: Path) -> list[EvalItem]:
+    """The validation ("Checking") images with ground truth, built exactly like ``test_items``. Used only to choose
+    confidence thresholds (``operating_points``); the model was not trained on the test split but may have been
+    steered by these, which is why numbers about new pictures come from the test split."""
+    return _split_items(manifest, dest, "val")
+
+
+def work_out_operating_points(
+    backend, artifact: Path, val: list[EvalItem], test: list[EvalItem], labels, log, check=None
+) -> dict | None:
+    """Thresholds and score wording from the validation split (see ``operating_points``). Optional and additive:
+    ``None`` when there are no validation pictures, the backend cannot score them, or anything goes wrong - the
+    run never fails because of it, and the evaluation then simply has no ``operating_points`` key.
+
+    ``check`` (the run's cancel and time-limit test) is called before each pass over a split and raises
+    ``TrainingCancelled`` or ``TrainingTimedOut``; those end the run instead of being swallowed here. A pass over one
+    split cannot be interrupted part-way."""
+    from . import operating_points
+
+    if not val:
+        return None
+    if check:
+        check()
+    log.add("Working out which confidence settings suit the Checking pictures")
+    log.flush(force=True)
+
+    def step(message: str) -> None:
+        if check:
+            check()
+        log.add(message)
+        log.flush(force=True)
+
+    try:
+        return operating_points.collect(
+            backend, artifact, val, test, labels, {"confidence": EVAL_CONFIDENCE, "max_boxes": 100}, step=step
+        )
+    except (TrainingCancelled, TrainingTimedOut):
+        raise
+    except Exception as exc:  # noqa: BLE001 - recorded in the run log; the held-out evaluation stands without it
+        logger.exception("Operating points failed for run %s", log.run.pk)
+        log.add(f"Could not work out suggested thresholds: {sanitize(str(exc) or exc.__class__.__name__, 200)}")
+        return None
+
+
+def work_out_comparison(
+    run: TrainingRun, backend, artifact: Path, test: list[EvalItem], labels, evaluation: dict, log, check=None
+) -> dict | None:
+    """How the new model compares with the model in use on the same Final test pictures (see ``comparison``).
+
+    Optional and additive, exactly like ``work_out_operating_points``: ``None`` (the evaluation then simply has no
+    ``comparison`` key) when there is no model in use, no test split, or the model in use cannot run here, and also
+    when anything goes wrong - the run never fails because of it. ``check`` (cancel and time limit) is called before
+    each pass and ``TrainingCancelled`` / ``TrainingTimedOut`` end the run instead of being swallowed. The only extra
+    cost is one prediction pass of the model in use over the test split."""
+    from . import comparison
+
+    if not test or not evaluation.get("available"):
+        return None
+    try:
+        return comparison.compare_with_approved(
+            run.project,
+            comparison.Candidate(backend, artifact, evaluation, list(labels), run.dataset_version.manifest),
+            test,
+            thresholds={"confidence": EVAL_CONFIDENCE, "max_boxes": 100},
+            log=log,
+            check=check,
+        )
+    except (TrainingCancelled, TrainingTimedOut):
+        raise
+    except Exception as exc:  # noqa: BLE001 - recorded in the run log; the held-out evaluation stands without it
+        logger.exception("Comparison with the model in use failed for run %s", log.run.pk)
+        log.add(f"Could not compare with the model in use: {sanitize(str(exc) or exc.__class__.__name__, 200)}")
+        return None
 
 
 # -- logging buffer --------------------------------------------------------------------------
@@ -203,6 +284,12 @@ def run_training(run: TrainingRun, backend: TrainingBackend | None = None) -> Tr
         labels = list(run.dataset_version.label_names)
         log.add(f"Dataset ready: {run.dataset_version.image_count} images, {len(items)} held-out test images")
 
+        def check_limits() -> None:
+            if _cancelled(run):
+                raise TrainingCancelled("Training was cancelled.")
+            if time.monotonic() - started > timeout:
+                raise TrainingTimedOut(f"The run exceeded the time limit of {timeout} seconds.")
+
         def progress(fraction: float, message: str) -> None:
             if time.monotonic() - started > timeout:
                 raise TrainingTimedOut(f"The run exceeded the time limit of {timeout} seconds.")
@@ -237,6 +324,17 @@ def run_training(run: TrainingRun, backend: TrainingBackend | None = None) -> Tr
                 "manifest_sha256": run.dataset_manifest_sha256,
             },
         }
+        points = work_out_operating_points(
+            backend, Path(result.artifact_path), val_items(run.dataset_version.manifest, dataset_dir), items, labels, log,
+            check=check_limits,
+        )
+        if points is not None:
+            evaluation["operating_points"] = points
+        compared = work_out_comparison(
+            run, backend, Path(result.artifact_path), items, labels, evaluation, log, check=check_limits
+        )
+        if compared is not None:
+            evaluation["comparison"] = compared
         register_candidate(run, result.artifact_path, list(result.label_names or labels), evaluation, result.metrics)
         outcome = TrainingRun.SUCCEEDED
         log.progress = 1.0

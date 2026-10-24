@@ -43,6 +43,7 @@ and `web/requirements-autolabel.txt`; the rest are transitive and may change whe
 | regex | 2026.9.29 | Apache-2.0 AND CNRI-Python |  |
 | rich | 15.0.0 | MIT |  |
 | safetensors | 0.8.0 | Apache-2.0 |  |
+| scipy | 1.18.1 | BSD-3-Clause | Copyright (c) 2001-2002 Enthought, Inc. 2003, SciPy Developers. Optional D-FINE training tool only (`web/requirements-autolabel.txt`; added 2026-10-24). Its binary wheels also bundle OpenBLAS and LAPACK (BSD) and, in the macOS arm64 wheel read for the audit, the GCC runtime library (GPL-3.0-or-later WITH GCC-exception-3.1) and libquadmath (LGPL-2.1-or-later); keep the wheel's `LICENSE.txt`. The Linux wheel was not inspected |
 | setuptools | 84.0.0 | MIT |  |
 | shellingham | 1.5.4 | ISC |  |
 | sqlparse | 0.6.0 | BSD-3-Clause | Copyright (c) 2016, Andi Albrecht |
@@ -85,6 +86,7 @@ terms apply to what you do with it.
 |---|---|---|
 | `facebook/sam-vit-base` (Segment Anything, ViT-B) | Apache-2.0 | https://huggingface.co/facebook/sam-vit-base ; https://github.com/facebookresearch/segment-anything (facebookresearch) |
 | `openai/clip-vit-base-patch32` (CLIP) | No license declared on the Hugging Face repo; the upstream code repository https://github.com/openai/CLIP is MIT, "Copyright (c) 2021 OpenAI". OpenAI's model card states that any deployed use of the model, commercial or not, is out of scope; see `docs/LICENSE_AUDIT.md` | https://huggingface.co/openai/clip-vit-base-patch32 |
+| `ustc-community/dfine-nano-coco` and `ustc-community/dfine-small-coco` (D-FINE, COCO-only checkpoints; optional D-FINE tool, added 2026-10-24) | Declared Apache-2.0 on the Hugging Face model cards (`datasets: coco`); that is the model repository's licence, not a statement about the COCO training data, and who licenses the converted weights is unverified. The D-FINE code (https://github.com/Peterande/D-FINE) is Apache-2.0. Objects365-based checkpoints are refused in code | https://huggingface.co/ustc-community/dfine-nano-coco ; https://huggingface.co/ustc-community/dfine-small-coco (pinned revisions in `web/projects/training/dfine.py`) |
 
 ### Third-party model terms
 

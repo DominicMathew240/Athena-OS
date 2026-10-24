@@ -378,7 +378,9 @@ class ProposalReviewTests(AutoLabelBase):
 
     def test_accept_above_threshold_marks_reviewer(self) -> None:
         response = self.post_json(self.review_url, {"action": "accept", "min_confidence": 0.5})
-        self.assertEqual(response.json(), {"updated": 2, "pending_boxes": 2})
+        body = response.json()
+        self.assertEqual((body["updated"], body["pending_boxes"]), (2, 2))  # the original two keys keep their meaning
+        self.assertEqual(body["left_for_review"], {"total": 2, "without_score": 0, "from_operator_feedback": 0})
         accepted = BoxAnnotation.objects.filter(status="accepted")
         self.assertEqual(accepted.count(), 2)
         for box in accepted:

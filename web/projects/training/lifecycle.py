@@ -12,6 +12,7 @@ import hashlib
 import json
 import os
 import re
+import uuid
 from pathlib import Path
 from typing import Any
 
@@ -22,14 +23,23 @@ from django.db.models import Max
 from django.utils import timezone
 
 from .. import permissions
-from ..models import DatasetVersion, InferenceApp, ModelEvent, ModelVersion, Project, TrainingRun
-from . import data_home, get_backend, models_root, training_settings
+from ..datasets import service as dataset_service, splits
+from ..models import DatasetBox, DatasetVersion, InferenceApp, ModelEvent, ModelVersion, Project, TrainingRun
+from . import data_home, get_backend, models_root, report, training_settings
+from .base import StartBlocked
 
 MAX_NOTE_CHARS = 2000
 MAX_ERROR_CHARS = 600
 WORKER_KEY = "training:worker"
 INFERENCE_WORKER_KEY = "inference:worker"
 HEARTBEAT_TTL_SECONDS = 45
+# The readiness preview (``GET .../training/readiness``, polled by the Teach panel) re-checks picture files for at most
+# this many seconds per request; the rest are left for the start, which always checks every file.
+READINESS_FILE_CHECK_SECONDS = 2
+FILES_NOT_RECHECKED_NOTE = (
+    "The picture files were not re-checked for this preview, to keep the page quick. Missing or changed files are "
+    "checked when you start."
+)
 
 
 class LifecycleError(Exception):
@@ -188,6 +198,7 @@ def readiness(project: Project, backend_name: str | None = None) -> dict[str, An
     active = project.training_runs.filter(status__in=TrainingRun.ACTIVE_STATUSES).first()
     if active:
         blockers.append("A training run is already queued or running for this project. Wait for it or cancel it.")
+    start_from, derived, one_click = _one_click_preview(project, backend_name, ok, availability, worker, dataset, active)
     return {
         "ready": not blockers,
         "blockers": blockers,
@@ -203,19 +214,90 @@ def readiness(project: Project, backend_name: str | None = None) -> dict[str, An
             "split_counts": counts,
         },
         "active_run_id": str(active.id) if active else None,
+        # Additive, for the one-click Teach start (``snapshot: "latest"``): what it would start from, the settings it
+        # would work out, and whether it could start right now. ``ready`` above is still the old explicit-dataset rule.
+        "start_from": start_from,
+        "derived": derived,
+        "one_click": one_click,
     }
 
 
-def create_run(
-    project: Project, user, *, dataset: DatasetVersion, backend_name: str, config: dict[str, Any],
-    acknowledged_terms: bool = False,
-) -> TrainingRun:
-    if dataset.project_id != project.id:
-        raise LifecycleError("That dataset version does not belong to this project.", 404)
-    if split_counts(dataset).get("train", {}).get("images", 0) == 0:
-        raise LifecycleError(
-            f"Dataset version {dataset.version} has no train images. Create a version with a larger train share.", 422
+def _one_click_preview(
+    project: Project, backend_name: str, backend_ok: bool, availability: dict[str, Any], worker: dict[str, Any],
+    latest: DatasetVersion | None, active: TrainingRun | None,
+) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any]]:
+    """Read-only: ``(start_from, derived, one_click)`` for ``GET .../training/readiness``."""
+    try:
+        backend = get_backend(backend_name)
+    except ValueError:
+        backend = None
+    start_from = backend.resolve_start(worker) if backend else None
+    analysis = dataset_service.analyse(
+        project, splits.SplitConfig.default(), use_cache=True, file_check=READINESS_FILE_CHECK_SECONDS
+    )
+    refusal = snapshot_refusal(analysis)
+    current = refusal is None and snapshot_is_current(project, latest, analysis)
+    would_create = refusal is None and not current
+    train: int | None = None
+    if analysis.accepted:
+        train = _train_images(latest) if current else planned_train_pictures(analysis)
+    test: int | None = None
+    if analysis.accepted:
+        test = _test_images(latest) if current else planned_test_pictures(analysis)
+    derived = backend.teach_preview(train, start_from["resolved"] if start_from else None) if backend else None
+    if derived is not None:
+        derived["based_on"] = None if train is None else ("latest_snapshot" if current else "new_snapshot")
+
+    blockers: list[str] = []
+    if not backend_ok:
+        blockers.append(
+            f"Backend {backend_name!r} is not available. {availability.get('message', '')} {availability.get('how_to_enable', '')}".strip()
         )
+    elif start_from is None:
+        blockers.append("This training backend cannot pick its own starting model, so it cannot be started in one click.")
+    elif start_from["resolved"] is None:
+        blockers.extend([start_from["reason_if_none"], start_from["how_to_enable"]])
+    if refusal is not None:
+        blockers.extend(analysis.blockers if analysis.accepted else [refusal.message])
+    elif train == 0:
+        blockers.append(NO_PLANNED_TRAIN_MESSAGE)  # the new snapshot's default split would leave nothing in train
+    if active:
+        blockers.append("A training run is already queued or running for this project. Wait for it or cancel it.")
+    # Not a blocker (the run can be taught), but a model with no held-out pictures has no results and so can never be
+    # staged or approved: say it where the start button is, not only on the data health page.
+    warnings = [NO_HELD_OUT_MESSAGE] if test == 0 else []
+    one_click = {
+        "supported": start_from is not None,
+        "ready": not blockers,
+        "blockers": blockers,
+        "warnings": warnings,
+        # Additive: things the preview could not do. ``ready`` is "nothing that was checked is wrong"; a note here
+        # says what was left unchecked, so a True above is never read as more than it is.
+        "notes": [] if analysis.files_rechecked else [FILES_NOT_RECHECKED_NOTE],
+        "files_rechecked": analysis.files_rechecked,
+        "snapshot": {
+            "latest_version": latest.version if latest else None,
+            "up_to_date": current,
+            "would_create_new": would_create,
+        },
+    }
+    return start_from, derived, one_click
+
+
+def _train_images(dataset: DatasetVersion) -> int:
+    return split_counts(dataset).get("train", {}).get("images", 0)
+
+
+def _test_images(dataset: DatasetVersion) -> int:
+    return split_counts(dataset).get("test", {}).get("images", 0)
+
+
+def prepare_start(
+    backend_name: str, config: dict[str, Any], *, train_pictures: int, acknowledged_terms: bool
+) -> tuple[Any, dict[str, Any], dict[str, Any]]:
+    """Every rule about *how* a run may start, before anything is written: the backend must exist and be runnable,
+    ``"auto"`` choices are resolved (never to a from-scratch start), derived settings are filled in, the config is
+    validated, the start is checked, and the licence tick is required. Returns ``(backend, config, start_check)``."""
     try:
         backend = get_backend(backend_name)
     except ValueError as error:
@@ -227,25 +309,50 @@ def create_run(
             503,
             backend=backend_name,
         )
+    worker = worker_status()
     try:
-        normalized = backend.validate_config(config)
+        prepared = backend.prepare_config(dict(config), train_pictures=train_pictures, worker=worker)
+        normalized = backend.validate_config(prepared)
+    except StartBlocked as blocked:
+        raise LifecycleError(str(blocked), 409, **blocked.details) from None
     except ValueError as error:
         raise LifecycleError(str(error), 400) from None
     # The backend knows whether this start needs the person's tick about licence terms, and whether it can run at
     # all (for example a download that is switched off). The page's tick-box is only a convenience: this is the rule.
-    check = backend.start_check(normalized, worker_status())
+    check = backend.start_check(normalized, worker)
     if check.get("blocked"):
         raise LifecycleError(check["blocked"], 409)
     if check.get("needs_acknowledgement") and acknowledged_terms is not True:
         raise LifecycleError(
-            "Tick the box to confirm you have read the licence note for the ready-made model, then start again.", 400
+            "Tick the box to confirm you have read the licence note for the ready-made model, then start again.",
+            400,
+            needs_acknowledgement=True,
         )
+    return backend, normalized, check
+
+
+def create_run(
+    project: Project, user, *, dataset: DatasetVersion, backend_name: str, config: dict[str, Any],
+    acknowledged_terms: bool = False, note_extra: str = "",
+) -> TrainingRun:
+    if dataset.project_id != project.id:
+        raise LifecycleError("That dataset version does not belong to this project.", 404)
+    if _train_images(dataset) == 0:
+        raise LifecycleError(
+            f"Dataset version {dataset.version} has no train images. Create a version with a larger train share.", 422
+        )
+    _, normalized, check = prepare_start(
+        backend_name, config, train_pictures=_train_images(dataset), acknowledged_terms=acknowledged_terms
+    )
     note = f"Dataset version {dataset.version}, backend {backend_name}."
+    if note_extra:
+        note += f" {note_extra}"
     if check.get("needs_acknowledgement"):
         mode = normalized.get("pretrained", "a ready-made model")
+        picked = ", picked automatically because it could run here" if normalized.get("pretrained_requested") else ""
         note += (
-            f" Started from a ready-made model ({mode}). The person who started it confirmed they had read its licence "
-            "note and that they will ask a lawyer before any commercial use."
+            f" Started from a ready-made model ({mode}{picked}). The person who started it "
+            "confirmed they had read its licence note and that they will ask a lawyer before any commercial use."
         )
     try:
         with transaction.atomic():
@@ -266,6 +373,171 @@ def create_run(
             "A training run is already queued or running for this project. Wait for it to finish or cancel it.", 409
         ) from None
     return run
+
+
+# -- one-click start: freeze the current work if needed, then train on it ---------------------------
+def _problem_extras(analysis: dataset_service.Analysis) -> dict[str, Any]:
+    limit = dataset_service.PROBLEM_LIMIT
+    return {
+        "blockers": analysis.blockers,
+        "excluded": analysis.excluded,
+        "problems": [problem.as_dict() for problem in analysis.problems[:limit]],
+        "problem_count": len(analysis.problems),
+        "problems_truncated": len(analysis.problems) > limit,
+    }
+
+
+def snapshot_refusal(analysis: dataset_service.Analysis) -> LifecycleError | None:
+    """The refusal ``POST .../datasets`` gives when the current work cannot be frozen (same words, same codes)."""
+    if not analysis.accepted:
+        return LifecycleError(dataset_service.NO_ACCEPTED_MESSAGE, 400, excluded=analysis.excluded)
+    if not analysis.ready:
+        return LifecycleError(
+            "Fix the problems below before creating a dataset version. Nothing was created.", 422, **_problem_extras(analysis)
+        )
+    return None
+
+
+def snapshot_is_current(project: Project, version: DatasetVersion | None, analysis: dataset_service.Analysis) -> bool:
+    """True when ``version`` already holds exactly the accepted boxes in ``analysis`` (and the same label list).
+
+    ``datasets.service.content_fingerprint`` is not stored on a version, and it includes ``updated_at`` (which an unchanged
+    box can bump), so the comparison is on content: each accepted box's id, label, geometry and picture checksum.
+    Suggested boxes never count. A version marked incomplete (pictures deleted afterwards) is never current, and
+    neither is one whose split left no pictures in train: a run can never start on it (``create_run`` refuses), so
+    the one-click start freezes the default split again instead."""
+    if version is None or version.incomplete_reason or list(version.label_names) != list(project.labels):
+        return False
+    if _train_images(version) == 0:
+        return False
+    frozen = {
+        (box_id, label, x, y, width, height, sha)
+        for box_id, label, x, y, width, height, sha in DatasetBox.objects.filter(image__version=version).values_list(
+            "source_annotation_id", "label", "x", "y", "width", "height", "image__sha256"
+        )
+    }
+    current = {
+        (box.id, box.label, box.x, box.y, box.width, box.height, box.asset.sha256) for box in analysis.accepted
+    }
+    return frozen == current
+
+
+NO_HELD_OUT_MESSAGE = (
+    "No pictures would be kept back to check the result, so you could not approve this model."
+)
+NO_PLANNED_TRAIN_MESSAGE = (
+    "The default split would leave no pictures to train on. Review and accept boxes on a few more pictures, then start again."
+)
+
+
+def snapshot_default_config(backend_name: str, config: dict[str, Any]) -> dict[str, Any]:
+    """The one-click start's defaults, under whatever the caller chose: ``pretrained: "auto"`` (best ready-made start
+    that can run) and ``quality: "quick"`` (settings worked out from the data).
+
+    They are only added for a backend that understands them, i.e. one that can pick its own starting model
+    (``resolve_start`` is not ``None``, the same test the readiness preview uses). Any other backend, and an unknown
+    one (which ``prepare_start`` refuses in plain words), is started on exactly what the caller sent, so a request that
+    never mentioned these settings is never refused for them. This is deliberately the one-click path only: a legacy
+    ``dataset_id`` request gets no ``quality`` unless it asks for one."""
+    try:
+        backend = get_backend(backend_name)
+    except ValueError:
+        return dict(config)
+    if backend.resolve_start(worker_status()) is None:
+        return dict(config)
+    return {"pretrained": "auto", "quality": "quick", **config}
+
+
+def _planned_pictures(analysis: dataset_service.Analysis, split_name: str) -> int:
+    """The same assignment the data health page and a new snapshot use (``splits.assign_splits``), counted per group."""
+    split_of = splits.assign_splits((asset.sha256 for asset in analysis.assets.values()), analysis.config)
+    return sum(1 for asset in analysis.assets.values() if split_of[asset.sha256] == split_name)
+
+
+def planned_train_pictures(analysis: dataset_service.Analysis) -> int:
+    """How many pictures the default split would put in train for ``analysis`` (no write)."""
+    return _planned_pictures(analysis, "train")
+
+
+def planned_test_pictures(analysis: dataset_service.Analysis) -> int:
+    """How many pictures the default split would keep back for the final test for ``analysis`` (no write)."""
+    return _planned_pictures(analysis, "test")
+
+
+BOXES_CHANGED_MESSAGE = "Boxes changed while this was starting. Please try again."
+
+
+def _lock_project(project: Project) -> None:
+    """Take the project's write lock for the rest of the surrounding transaction (the lock ``create_version`` takes)."""
+    Project.objects.select_for_update().get(pk=project.pk)
+
+
+def _is_running(project: Project) -> bool:
+    return project.training_runs.filter(status__in=TrainingRun.ACTIVE_STATUSES).exists()
+
+
+ALREADY_ACTIVE_MESSAGE = "A training run is already queued or running for this project. Wait for it to finish or cancel it."
+
+
+def start_run_on_latest_snapshot(
+    project: Project, user, *, backend_name: str, config: dict[str, Any], acknowledged_terms: bool = False
+) -> tuple[TrainingRun, DatasetVersion, bool]:
+    """Start a run on the current accepted work: reuse the latest dataset version when it already holds exactly that
+    work, otherwise freeze a new one (default split) first. Returns ``(run, version, newly_created)``.
+
+    Two phases. First everything slow is done with **no transaction open**: the project is re-read (a caller's
+    ``project`` may be stale), the work is analysed and, when a new snapshot is needed, every picture is hashed. Then
+    one short transaction takes the project lock and only re-checks and writes: no run already active, the project
+    and its boxes still exactly as they were analysed (otherwise 409, nothing written), then the snapshot and the run.
+    Hashing never happens under the lock, so other writers (box saves, uploads) are not held up by it.
+
+    All or nothing: any refusal after the snapshot is written (licence tick, a run already active, anything) rolls the
+    snapshot back too. On PostgreSQL ``select_for_update`` serialises racing starts; SQLite ignores it (it serialises
+    whole writes instead) - the lock is therefore unverified against a real multi-user database."""
+    if _is_running(project):  # cheap and early, so a refused start never hashes anything
+        raise LifecycleError(ALREADY_ACTIVE_MESSAGE, 409)
+    project.refresh_from_db()  # labels may have changed since the caller loaded the project
+    labels_seen = list(project.labels)
+    latest = latest_dataset(project)
+    analysis = dataset_service.analyse(project, splits.SplitConfig.default(), use_cache=True)
+    refusal = snapshot_refusal(analysis)
+    if refusal:
+        raise refusal
+    create = not snapshot_is_current(project, latest, analysis)
+    # Reusing the current snapshot trusts the check made when it was frozen (that one hashed every file); the look
+    # above answers from the stat cache, so a picture changed without its size or modified time changing is not
+    # re-hashed on this path. Creating a new snapshot always re-hashes every file (the second ``analyse`` below).
+    planned = planned_train_pictures(analysis) if create else _train_images(latest)
+    if planned == 0:
+        raise LifecycleError(NO_PLANNED_TRAIN_MESSAGE, 422)  # before anything is written
+    # Cheap rules first (backend, licence tick, a ready-made start that can run), so a request that cannot start
+    # never hashes every picture.
+    prepare_start(backend_name, config, train_pictures=planned, acknowledged_terms=acknowledged_terms)
+    if create:
+        analysis = dataset_service.analyse(project, splits.SplitConfig.default())  # creating always hashes the files
+        refusal = snapshot_refusal(analysis)
+        if refusal:
+            raise refusal
+    with transaction.atomic():
+        _lock_project(project)
+        if _is_running(project):
+            raise LifecycleError(ALREADY_ACTIVE_MESSAGE, 409)
+        project.refresh_from_db()
+        if list(project.labels) != labels_seen or dataset_service.content_fingerprint(project) != analysis.fingerprint:
+            raise LifecycleError(BOXES_CHANGED_MESSAGE, 409)
+        version = latest
+        note = ""
+        if create:
+            try:
+                version = dataset_service.create_version(analysis, user)
+            except dataset_service.VersionConflict as error:
+                raise LifecycleError(str(error), 409) from None
+            note = f"Dataset version {version.version} was frozen automatically from the accepted boxes when this run started."
+        run = create_run(
+            project, user, dataset=version, backend_name=backend_name, config=config,
+            acknowledged_terms=acknowledged_terms, note_extra=note,
+        )
+    return run, version, create
 
 
 def request_cancel(run: TrainingRun, user) -> TrainingRun:
@@ -353,8 +625,11 @@ def stage_model(model: ModelVersion, user, note: str = "") -> ModelVersion:
 def weak_results_reason(evaluation: dict[str, Any] | None) -> str | None:
     """Why a model's held-out results are too weak to approve without a deliberate acknowledgement.
 
-    ``None`` means the results do not trigger the rule. Otherwise a plain sentence (without the
-    ``acknowledge_weak_results`` instruction) that is also written to the audit trail.
+    ``None`` means the results do not trigger the rule. It fires when nothing was evaluated, when none of the test
+    boxes were found, when the plain-results verdict (``report.plain_results``) is ``not_ready`` or
+    ``cannot_tell``, and when the stored comparison with the model in use is readable, fair, and says ``worse``.
+    Otherwise a plain sentence (without the ``acknowledge_weak_results`` instruction) that is also
+    written to the audit trail.
     """
     evaluation = evaluation or {}
     if not evaluation.get("available"):
@@ -364,12 +639,31 @@ def weak_results_reason(evaluation: dict[str, Any] | None) -> str | None:
         found = overall.get("true_positives", 0)
         total = (evaluation.get("data") or {}).get("boxes", found + overall.get("false_negatives", 0))
         return f"it found none of the test boxes ({found} of {total} at an overlap of 0.5)"
+    # The plain-results verdict (the one the page shows): too few test boxes to tell, or too few found. A decided but
+    # middling "needs more examples" is a judgement call for the approver and needs only the note.
+    results = report.plain_results(evaluation)
+    plain = results["overall"]
+    if plain["verdict"] in ("not_ready", "cannot_tell"):
+        headline = plain["headline"].removesuffix(f" {report.NOT_FINAL_DECISION}").rstrip(". ")
+        return f"the results are too thin or too weak to rely on ({headline})"
+    # A fair comparison on the same test pictures that says the new model did worse than the model in use. Read
+    # through the report's checked reader, which derives the verdict again from the counts: a damaged block is
+    # "not available" (it neither triggers nor hides this), an unfair one is "cannot tell", and the stored word is never
+    # trusted. "better", "about the same" and "cannot tell" add no friction.
+    comparison = results.get("comparison") or {}
+    if comparison.get("available") is True and comparison.get("fair") is True and comparison.get("verdict") == "worse":
+        said = str(comparison.get("plain") or "").removesuffix(f" {report.NOT_FINAL_DECISION}").rstrip(". ")
+        return f"the new model did worse than the model in use on the same test pictures ({said})"
     return None
 
 
 def approve_model(
-    model: ModelVersion, user, note: str, *, acknowledge_weak_results: bool = False
+    model: ModelVersion, user, note: str, *, acknowledge_weak_results: bool = False,
+    repoint_apps: bool = False, repoint_app_ids: list[uuid.UUID] | None = None,
 ) -> tuple[ModelVersion, ModelVersion | None]:
+    """Approve a staged model (retiring the one in use). Check screens are re-pointed to it only when the caller says
+    so, in the same transaction: ``repoint_apps`` (every active screen pinned to the model being retired) or
+    ``repoint_app_ids`` (exactly those). The result is on ``model.repoint`` (``repointed`` and ``skipped``)."""
     if not getattr(user, "is_authenticated", False):
         raise LifecycleError("Sign in to approve a model.", 401)
     note = clean_note(note, required=True, what="An approval note")
@@ -421,19 +715,30 @@ def approve_model(
         model.approval_note = note
         model.previous_approved = previous
         model.save(update_fields=["stage", "approved_by", "approved_at", "approval_note", "previous_approved"])
+        moved = _repoint(
+            model.project, new=model, old=previous, user=user,
+            all_pinned=repoint_apps, app_ids=repoint_app_ids, explicit_note=note,
+        )
         audit = note
         if weak:  # the person was told and chose to go on: keep that in the audit trail
             audit = f"{note}\n[Weak results acknowledged by the approver: {weak}. Approved anyway.]"
+        if moved.asked:
+            audit = f"{audit}\n{moved.summary('at approval')}"
         audit = f"{audit}\n{permissions.audit_tag(user, model.project)}"  # role and opaque user id, never a name
         add_event(
             model.project, "approved", user=user, model=model,
             from_state=ModelVersion.STAGED, to_state=ModelVersion.APPROVED, note=audit,
         )
+        moved.write_events(note)
+    model.repoint = moved
     return model, previous
 
 
-def rollback_model(model: ModelVersion, user, note: str) -> tuple[ModelVersion, ModelVersion]:
-    """Retire the approved ``model`` and restore the model it replaced."""
+def rollback_model(
+    model: ModelVersion, user, note: str, *, repoint_apps: bool = False, repoint_app_ids: list[uuid.UUID] | None = None
+) -> tuple[ModelVersion, ModelVersion]:
+    """Retire the approved ``model`` and restore the model it replaced. As for an approval, check screens move to the
+    restored model only when asked (``repoint_apps`` / ``repoint_app_ids``); the result is on ``target.repoint``."""
     if not getattr(user, "is_authenticated", False):
         raise LifecycleError("Sign in to roll back a model.", 401)
     note = clean_note(note, required=True, what="A rollback note")
@@ -465,13 +770,142 @@ def rollback_model(model: ModelVersion, user, note: str) -> tuple[ModelVersion, 
         target.stage = ModelVersion.APPROVED
         target.retired_at = None
         target.save(update_fields=["stage", "retired_at"])
+        moved = _repoint(
+            model.project, new=target, old=model, user=user,
+            all_pinned=repoint_apps, app_ids=repoint_app_ids, explicit_note=note,
+        )
+        restored_note = f"Restored in place of model v{model.version}. {note}"
+        if moved.asked:
+            restored_note = f"{restored_note}\n{moved.summary('by the rollback')}"
         add_event(
             model.project, "rollback_restored", user=user, model=target,
-            from_state=ModelVersion.RETIRED, to_state=ModelVersion.APPROVED,
-            note=f"Restored in place of model v{model.version}. {note}\n{audit_tag}",
+            from_state=ModelVersion.RETIRED, to_state=ModelVersion.APPROVED, note=f"{restored_note}\n{audit_tag}",
         )
+        moved.write_events(note)
+    target.repoint = moved
     return model, target
 
 
 def apps_using(model: ModelVersion) -> list[InferenceApp]:
     return list(InferenceApp.objects.filter(model_version=model, status=InferenceApp.ACTIVE))
+
+
+# -- re-pointing check screens as an explicit part of a decision -----------------------------------
+MAX_REPOINT_IDS = 100
+
+
+def repoint_problem(app: InferenceApp, model: ModelVersion) -> str | None:
+    """Why ``app`` could not be switched to ``model`` (``None``: it could). The rule the builder's "switch model"
+    uses (``inference.service.update_app``) minus the one about the model already being approved, so a staged model can be
+    checked before its approval: the model's backend is installed here, and the screen's own, strictly validated
+    configuration (the labels it displays) still fits the new model's labels."""
+    from ..inference import schema
+
+    if app.project_id != model.project_id:
+        return "That model version belongs to a different project."
+    try:
+        get_backend(model.backend)
+    except ValueError:
+        return f"The backend {model.backend!r} this model needs is not installed. Install it, then try again."
+    try:
+        schema.validate_config(schema.merged(app.config, {}), model.label_names)
+    except schema.ConfigError as error:
+        return str(error)
+    return None
+
+
+def would_repoint(model: ModelVersion) -> list[dict[str, Any]]:
+    """Read-only preview for a staged model: the active check screens pinned to the model in use today, each with whether
+    approving with ``repoint_apps`` would move it and, if not, why."""
+    if model.stage != ModelVersion.STAGED:
+        return []
+    in_use = ModelVersion.objects.filter(project_id=model.project_id, stage=ModelVersion.APPROVED).exclude(pk=model.pk).first()
+    if in_use is None:
+        return []
+    rows = []
+    for app in apps_using(in_use):
+        reason = repoint_problem(app, model)
+        rows.append({"app_id": str(app.id), "name": app.name, "can_repoint": reason is None, "reason": reason})
+    return rows
+
+
+class Repointed:
+    """What one approval or rollback did to check screens: ``asked`` (the caller opted in), ``moved`` and ``skipped``."""
+
+    def __init__(self, project: Project, user, new: ModelVersion, old: ModelVersion | None, asked: bool) -> None:
+        self.project, self.user, self.new, self.old, self.asked = project, user, new, old, asked
+        self.moved: list[tuple[InferenceApp, ModelVersion | None]] = []  # (the screen, the model it was pinned to)
+        self.skipped: list[dict[str, str]] = []
+
+    @property
+    def repointed(self) -> list[dict[str, str]]:
+        return [{"app_id": str(app.id), "name": app.name} for app, _ in self.moved]
+
+    def summary(self, when: str) -> str:
+        return (
+            f"[Check screens re-pointed to this model {when}: {len(self.moved)}. "
+            f"Left alone: {len(self.skipped)}.]"
+        )
+
+    def write_events(self, note: str) -> None:
+        """One append-only line per moved screen, on the model it now runs. App names are data (JSON), never prose."""
+        tag = permissions.audit_tag(self.user, self.project)
+        for app, was in self.moved:
+            data = {
+                "app_id": str(app.id), "app_name": app.name,
+                "from_model_id": str(was.id) if was else None, "from_version": was.version if was else None,
+                "to_model_id": str(self.new.id), "to_version": self.new.version,
+            }
+            add_event(
+                self.project, "apps_repointed", user=self.user, model=self.new,
+                note=(
+                    f"A check screen was re-pointed to model v{self.new.version} at the approver's request.\n"
+                    f"{note}\n{json.dumps(data, ensure_ascii=False, sort_keys=True)}\n{tag}"
+                ),
+            )
+
+
+def _repoint(
+    project: Project, *, new: ModelVersion, old: ModelVersion | None, user, all_pinned: bool,
+    app_ids: list[uuid.UUID] | None, explicit_note: str,
+) -> Repointed:
+    """Inside the caller's transaction, after ``new`` is approved and ``old`` is retired. ``all_pinned`` moves every
+    active screen pinned to ``old``; ``app_ids`` moves exactly those (pinned to ``old`` or to a model that cannot run).
+    A screen that does not fit is left alone and reported; any other error propagates and undoes the whole decision."""
+    from ..inference import service as inference_service
+
+    moved = Repointed(project, user, new, old, asked=bool(all_pinned or app_ids))
+    if not moved.asked:
+        return moved
+    apps = InferenceApp.objects.select_for_update(of=("self",)).select_related("model_version")
+    if app_ids:
+        found = {app.id: app for app in apps.filter(project=project, pk__in=app_ids)}
+        missing = [str(pk) for pk in app_ids if pk not in found]
+        if missing:
+            raise LifecycleError(
+                "repoint_app_ids must be check screens of this project; not recognised: " + ", ".join(missing) + ". "
+                "Nothing was changed.", 400,
+            )
+        chosen = [found[pk] for pk in app_ids]
+        for app in chosen:
+            pinned = app.model_version
+            if pinned.stage == ModelVersion.APPROVED and pinned.pk != new.pk:
+                raise LifecycleError(
+                    f"The check screen {app.name!r} is using model v{pinned.version}, which is still approved, so it "
+                    "is not re-pointed by this decision. Nothing was changed.", 400,
+                )
+        chosen.sort(key=lambda app: (app.name, str(app.id)))
+    else:
+        chosen = list(apps.filter(project=project, status=InferenceApp.ACTIVE, model_version=old)) if old else []
+    for app in chosen:
+        if app.model_version_id == new.pk:
+            moved.skipped.append({"app_id": str(app.id), "name": app.name, "reason": "It already uses this model."})
+            continue
+        was = app.model_version
+        try:
+            inference_service.update_app(app, model=new)
+        except LifecycleError as error:
+            moved.skipped.append({"app_id": str(app.id), "name": app.name, "reason": error.message})
+            continue
+        moved.moved.append((app, was))
+    return moved

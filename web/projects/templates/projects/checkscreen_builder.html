@@ -75,6 +75,12 @@
           </div>
           <p class="cs-slider-value" id="cs-threshold-out"></p>
           <p class="cs-help" id="cs-threshold-help">To the left, the screen points out more things, including some that are not really there. To the right, it points out only what it is quite sure about, and may miss real things. The number is the computer’s own guess, not a measured accuracy.</p>
+          <div class="cs-suggest" id="cs-suggest" role="group" aria-labelledby="cs-suggest-title">
+            <p class="cs-suggest-title" id="cs-suggest-title">Suggested setting</p>
+            <p class="cs-help" id="cs-suggest-text"></p>
+            <div class="cs-actions"><button type="button" class="secondary" id="cs-suggest-use" hidden>Use the suggested setting</button></div>
+            <p class="cs-inline-msg" id="cs-suggest-msg" role="status"></p>
+          </div>
         </div>
       </section>
 
@@ -135,6 +141,7 @@
               <div><dt>Points something out when</dt><dd id="cs-pv-threshold"></dd></div>
               <div><dt>Model</dt><dd id="cs-pv-model"></dd></div>
               <div><dt>A person must decide</dt><dd id="cs-pv-human"></dd></div>
+              <div><dt>How scores are worded</dt><dd id="cs-pv-wording"></dd></div>
             </dl>
             <h3 class="cs-mini-h">What it will say</h3>
             <ul class="cs-says" id="cs-pv-says"></ul>

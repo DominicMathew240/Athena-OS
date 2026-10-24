@@ -14,7 +14,7 @@ import urllib.error
 from pathlib import Path
 from unittest import mock, skipUnless
 
-from django.test import SimpleTestCase, override_settings
+from django.test import TestCase, override_settings
 from PIL import Image
 
 from .training import torchvision_frcnn as tv
@@ -25,7 +25,7 @@ TORCH_INSTALLED = (
 )
 
 
-class PretrainedBase(SimpleTestCase):
+class PretrainedBase(TestCase):  # a database test: the download switch is read from the console settings too
     def setUp(self) -> None:
         self.home = tempfile.TemporaryDirectory()
         self.addCleanup(self.home.cleanup)
@@ -150,7 +150,7 @@ class FetchTests(PretrainedBase):
 
     def test_checksum_mismatch_discards_the_file(self) -> None:
         destination = Path(self.home.name) / "x" / "w.pth"
-        with mock.patch("urllib.request.urlopen", return_value=self.Response(b"tampered")):
+        with mock.patch("urllib.request.OpenerDirector.open", return_value=self.Response(b"tampered")):
             with self.assertRaisesMessage(ValueError, "did not match its published checksum"):
                 tv._fetch("https://example.invalid/w.pth", destination, "00000000")
         self.assertEqual(list(destination.parent.iterdir()), [])
@@ -158,14 +158,14 @@ class FetchTests(PretrainedBase):
     def test_matching_checksum_is_kept(self) -> None:
         data = b"good-bytes"
         destination = Path(self.home.name) / "x" / "w.pth"
-        with mock.patch("urllib.request.urlopen", return_value=self.Response(data)):
+        with mock.patch("urllib.request.OpenerDirector.open", return_value=self.Response(data)):
             tv._fetch("https://example.invalid/w.pth", destination, hashlib.sha256(data).hexdigest()[:8])
         self.assertEqual(destination.read_bytes(), data)
         self.assertEqual([p.name for p in destination.parent.iterdir()], ["w.pth"])
 
     def test_network_failure_is_a_plain_message_naming_the_way_out(self) -> None:
         destination = Path(self.home.name) / "x" / "w.pth"
-        with mock.patch("urllib.request.urlopen", side_effect=urllib.error.URLError("no route")):
+        with mock.patch("urllib.request.OpenerDirector.open", side_effect=urllib.error.URLError("no route")):
             with self.assertRaises(ValueError) as caught:
                 tv._fetch("https://example.invalid/w.pth", destination, "00000000")
         self.assertIn("Could not download the pretrained weights (no route)", str(caught.exception))
@@ -226,7 +226,7 @@ class PretrainedTrainingTests(PretrainedBase):
         os.environ[tv.DOWNLOAD_ENV] = "1"
         state, fetch = self.fake_published_weights(mode)
         dataset = self.make_dataset()
-        with fetch, mock.patch("urllib.request.urlopen", side_effect=AssertionError("network")):
+        with fetch, mock.patch("urllib.request.OpenerDirector.open", side_effect=AssertionError("network")):
             result = self.backend.train(
                 dataset, {"epochs": 1, "batch_size": 2, "seed": 1, "pretrained": mode}, lambda f, m: None, lambda: False
             )
@@ -263,7 +263,7 @@ class PretrainedTrainingTests(PretrainedBase):
 
         dataset = self.make_dataset()
         with mock.patch.object(tv, "_fetch", side_effect=AssertionError("network")), mock.patch(
-            "urllib.request.urlopen", side_effect=AssertionError("network")
+            "urllib.request.OpenerDirector.open", side_effect=AssertionError("network")
         ), mock.patch("torch.hub.load_state_dict_from_url", side_effect=AssertionError("network")):
             result = self.backend.train(dataset, {"epochs": 1, "batch_size": 2}, lambda f, m: None, lambda: False)
             self.assertEqual(result.metrics["pretrained"], {"mode": "none"})

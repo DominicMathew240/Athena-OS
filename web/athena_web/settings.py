@@ -217,6 +217,8 @@ AUTOLABEL = {
     "ALLOW_DOWNLOAD": _flag("ATHENA_AUTOLABEL_ALLOW_DOWNLOAD", True),
 }
 
+TRAINING = {"BACKENDS": ["projects.training.dfine:DFineBackend"]}  # opt-in D-FINE tool; the default backend is unchanged
+
 LOGGING = {
     "version": 1,
     "disable_existing_loggers": False,

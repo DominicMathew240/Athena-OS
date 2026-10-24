@@ -21,6 +21,7 @@ from django.core.management.base import CommandError
 from django.http import JsonResponse
 from django.test import Client, SimpleTestCase, TestCase, override_settings
 from django.urls import path
+from django.utils.html import escape
 
 from . import permissions
 from .models import AutoLabelJob, DatasetVersion, ModelEvent, ModelVersion, Project
@@ -249,8 +250,8 @@ class SuperuserAndAnonymousTests(RoleBase):
 
 # ---------------------------------------------------------------------------------------
 class ApprovalTests(RoleBase):
-    def staged(self) -> ModelVersion:
-        candidate = self.train_candidate_after_approved()
+    def staged(self, solid: bool = True) -> ModelVersion:
+        candidate = self.train_candidate_after_approved(solid=solid)
         self.assertEqual(self.send(self.as_user("trainer"), "post", f"/api/projects/{self.project.id}/models/{candidate.id}/stage", {}).status_code, 200)
         return candidate
 
@@ -294,7 +295,7 @@ class ApprovalTests(RoleBase):
         from .tests_training import FakeBackend
 
         FakeBackend.boxes = []
-        model = self.staged()
+        model = self.staged(solid=False)
         response = self.send(
             self.as_user("approver"), "post", f"/api/projects/{self.project.id}/models/{model.id}/approve",
             {"note": "Pilot only.", "acknowledge_weak_results": True},
@@ -313,7 +314,7 @@ class ApprovalTests(RoleBase):
         )
         from .training import runner
 
-        model = runner.run_training(runner.claim_next_run()).model_versions.get()
+        model = self.set_solid_evaluation(runner.run_training(runner.claim_next_run()).model_versions.get())
         self.assertEqual(model.training_run.created_by_id, starter.pk)
         self.send(self.as_user("trainer"), "post", f"/api/projects/{self.project.id}/models/{model.id}/stage", {})
         # a starter who also holds the Approver role is still refused, and so is a superuser starter
@@ -344,7 +345,7 @@ class ApprovalTests(RoleBase):
         self.assertEqual(self.send(client, "post", f"/api/projects/{self.project.id}/training/runs", {"backend": "fake-backend", "dataset_id": str(self.dataset.id)}).status_code, 202)
         from .training import runner
 
-        model = runner.run_training(runner.claim_next_run()).model_versions.get()
+        model = self.set_solid_evaluation(runner.run_training(runner.claim_next_run()).model_versions.get())
         self.send(client, "post", f"/api/projects/{self.project.id}/models/{model.id}/stage", {})
         self.assertEqual(self.approve("approver", model).status_code, 200)  # own run, rule off
 
@@ -357,6 +358,68 @@ class ApprovalTests(RoleBase):
             self.as_user("approver"), "post", f"/api/projects/{self.project.id}/models/{model.id}/rollback", {"note": "Back."}
         )
         self.assertEqual(response.status_code, 200, response.content)
+
+    # -- W12-G2a: re-pointing check screens is part of the approval decision, so it needs the Approver role too -------
+    def pinned(self, app: dict):
+        from .models import InferenceApp
+
+        return InferenceApp.objects.get(pk=app["id"]).model_version_id
+
+    def decide(self, who: str, model, action: str = "approve", **extra):
+        return self.send(
+            self.as_user(who), "post", f"/api/projects/{self.project.id}/models/{model.id}/{action}", {"note": "Reviewed.", **extra}
+        )
+
+    def test_only_an_approver_can_ask_for_the_check_screens_to_be_moved_and_a_refusal_moves_nothing(self) -> None:
+        from .models import InferenceApp
+
+        model = self.staged()
+        for who in ("viewer", "labeler", "trainer", "unassigned"):
+            for extra in ({"repoint_apps": True}, {"repoint_app_ids": [self.app["id"]]}):
+                self.assertEqual(self.decide(who, model, **extra).status_code, 403, (who, extra))
+        model.refresh_from_db()
+        self.assertEqual((model.stage, self.pinned(self.app)), ("staged", self.model.id))
+        self.assertFalse(ModelEvent.objects.filter(model_version=model, kind__in=("approved", "apps_repointed")).exists())
+        response = self.decide("approver", model, repoint_apps=True)
+        self.assertEqual(response.status_code, 200, response.content)
+        self.assertEqual(response.json()["repointed"], [{"app_id": self.app["id"], "name": self.app["name"]}])
+        self.assertEqual(self.pinned(self.app), model.id)
+        event = ModelEvent.objects.get(kind="apps_repointed")
+        self.assertEqual(event.actor_id_snapshot, self.users["approver"].pk)
+        self.assertIn(f"[Acted as Approver, user u{self.users['approver'].pk}.]", event.note)
+        # the rollback (also an Approver decision) moves them back, and only for an Approver
+        for who in ("viewer", "labeler", "trainer", "unassigned"):
+            self.assertEqual(self.decide(who, model, "rollback", repoint_apps=True).status_code, 403, who)
+        self.assertEqual(self.pinned(self.app), model.id)
+        back = self.decide("superuser", model, "rollback", repoint_apps=True)
+        self.assertEqual(back.status_code, 200, back.content)
+        self.assertEqual(self.pinned(self.app), self.model.id)
+        self.assertEqual(InferenceApp.objects.filter(model_version=self.model).count(), 1)
+
+    @override_settings(ATHENA_APPROVAL_REQUIRES_SECOND_PERSON=True)
+    def test_the_second_person_rule_still_applies_when_check_screens_are_moved(self) -> None:
+        from .training import runner
+
+        self.assertEqual(
+            self.send(self.as_user("trainer"), "post", f"/api/projects/{self.project.id}/training/runs", {"backend": "fake-backend", "dataset_id": str(self.dataset.id)}).status_code,
+            202,
+        )
+        model = self.set_solid_evaluation(runner.run_training(runner.claim_next_run()).model_versions.get())
+        self.send(self.as_user("trainer"), "post", f"/api/projects/{self.project.id}/models/{model.id}/stage", {})
+        # the person who started the run is refused even with the flag; nothing moved
+        starter = self.users["trainer"]
+        self.assertEqual(model.training_run.created_by_id, starter.pk)
+        from . import access_admin
+
+        access_admin.set_project_role(self.project, starter, "approver", actor=self.users["superuser"])
+        refused = self.decide("trainer", model, repoint_apps=True)
+        self.assertEqual(refused.status_code, 403)
+        self.assertIn("someone else has to approve it", refused.json()["error"])
+        self.assertEqual((self.pinned(self.app), ModelEvent.objects.filter(kind="apps_repointed").count()), (self.model.id, 0))
+        model.refresh_from_db()
+        self.assertEqual(model.stage, "staged")
+        self.assertEqual(self.decide("approver", model, repoint_apps=True).status_code, 200)  # a different person
+        self.assertEqual(self.pinned(self.app), model.id)
 
     def test_model_json_names_who_started_the_run_with_an_opaque_id(self) -> None:
         body = self.as_user("viewer").get(f"/api/projects/{self.project.id}/models/{self.model.id}").json()["model"]
@@ -406,6 +469,7 @@ class EveryRouteDeclaresItsRole(RoleBase):
         "api/access/changes": {"GET": ADMIN},
         "api/access/people/<int:user_id>/console": {"GET": ADMIN, "PUT": ADMIN},
         "api/access/people/<int:user_id>/projects": {"GET": ADMIN, "PUT": ADMIN, "DELETE": ADMIN},
+        "api/console/training-downloads": {"GET": TRAIN, "PUT": ADMIN},
         "api/projects": {"POST": LABEL},
         "api/projects/<uuid:project_id>": {"PATCH": LABEL, "DELETE": TRAIN},
         "api/projects/<uuid:project_id>/assets": {"POST": LABEL},
@@ -418,6 +482,7 @@ class EveryRouteDeclaresItsRole(RoleBase):
         "api/projects/<uuid:project_id>/autolabel/<uuid:job_id>/cancel": {"POST": LABEL},
         "api/projects/<uuid:project_id>/annotations/review": {"POST": LABEL},
         "api/projects/<uuid:project_id>/datasets": {"POST": LABEL},
+        "api/projects/<uuid:project_id>/datasets/health": {},
         "api/projects/<uuid:project_id>/datasets/readiness": {},
         "api/projects/<uuid:project_id>/datasets/<uuid:dataset_id>": {},
         "api/projects/<uuid:project_id>/datasets/<uuid:dataset_id>/": {},
@@ -431,6 +496,7 @@ class EveryRouteDeclaresItsRole(RoleBase):
         "api/projects/<uuid:project_id>/models": {},
         "api/projects/<uuid:project_id>/models/<uuid:model_id>": {},
         "api/projects/<uuid:project_id>/models/<uuid:model_id>/evaluation": {},
+        "api/projects/<uuid:project_id>/models/<uuid:model_id>/results/plain": {},
         "api/projects/<uuid:project_id>/models/<uuid:model_id>/stage": {"POST": TRAIN},
         "api/projects/<uuid:project_id>/models/<uuid:model_id>/approve": {"POST": APPROVE},
         "api/projects/<uuid:project_id>/models/<uuid:model_id>/rollback": {"POST": APPROVE},
@@ -444,6 +510,8 @@ class EveryRouteDeclaresItsRole(RoleBase):
         "api/projects/<uuid:project_id>/inference/apps/<uuid:app_id>/observations/<uuid:observation_id>/feedback": {"POST": LABEL},
         "api/projects/<uuid:project_id>/inference/apps/<uuid:app_id>/observations/<uuid:observation_id>/decision": {"POST": LABEL},
         "api/projects/<uuid:project_id>/inference/apps/<uuid:app_id>/feedback/export": {},
+        "api/projects/<uuid:project_id>/feedback/corrections": {},
+        "api/projects/<uuid:project_id>/feedback/corrections/import": {"POST": LABEL},
         "projects/<uuid:project_id>/check-screen/setup": {},
         "check/<slug:slug>": {},
     }
@@ -519,8 +587,87 @@ class EveryRouteDeclaresItsRole(RoleBase):
             permissions.access(POST="administer")
 
 
+class PerViewMessageTests(RoleBase):
+    """``access(messages={action: sentence})``: a view words its own refusal (hygiene H7)."""
+
+    def test_the_view_s_own_sentence_replaces_the_generic_one_for_that_action_only(self) -> None:
+        with override_settings(ROOT_URLCONF="projects.tests_roles"):
+            for role in ROLE_CASES:
+                with self.subTest(role=role):
+                    client = self.as_user(role)
+                    response = client.put("/api/messaged", data="{}", content_type="application/json")
+                    self.assertEqual(response.status_code, 403)
+                    body = response.json()
+                    self.assertEqual(body["error"], MESSAGED)
+                    self.assertEqual((body["required_role"], body["your_role"]), ("administrator", role))
+                    self.assertEqual(response["Cache-Control"], "no-store")
+            # the other action on the same view keeps the standard wording
+            for role in ("viewer", "labeler"):
+                response = self.as_user(role).get("/api/messaged")
+                self.assertEqual(response.status_code, 403)
+                self.assertEqual(response.json()["error"], permissions.denial_message(role, TRAIN))
+            self.assertEqual(self.as_user("trainer").get("/api/messaged").status_code, 200)
+            self.assertEqual(
+                self.as_user("superuser").put("/api/messaged", data="{}", content_type="application/json").status_code, 200
+            )
+
+    def test_signed_out_callers_still_get_the_401_sentence(self) -> None:
+        with override_settings(ROOT_URLCONF="projects.tests_roles"):
+            response = Client().put("/api/messaged", data="{}", content_type="application/json")
+        self.assertEqual(response.status_code, 401)
+        self.assertEqual(response.json()["error"], "Sign in to continue.")
+
+    def test_a_person_who_followed_a_link_gets_the_sentence_on_the_page_too(self) -> None:
+        from django.test import RequestFactory
+
+        request = RequestFactory().put("/some-page", HTTP_ACCEPT="text/html")
+        request.user = self.users["viewer"]
+        page = permissions.access(PUT=ADMIN, messages={ADMIN: MESSAGED})(_declared)(request)
+        self.assertEqual(page.status_code, 403)
+        self.assertIn("text/html", page["Content-Type"])
+        self.assertIn(escape(MESSAGED), page.content.decode())  # the page escapes it (the apostrophe)
+        plain = permissions.access(PUT=ADMIN)(_declared)(request)  # without the option: the standard sentence
+        self.assertIn(permissions.ADMIN_MESSAGE, plain.content.decode())
+        self.assertNotIn(MESSAGED, plain.content.decode())
+
+    def test_the_declaration_the_middleware_and_the_route_walk_read_is_unchanged(self) -> None:
+        self.assertEqual(_messaged.athena_access, {"GET": TRAIN, "PUT": ADMIN})
+        self.assertEqual(permissions.access(POST="label")(_forgotten).athena_access, {"POST": "label", "GET": VIEW})
+
+    def test_a_bad_message_table_is_a_programming_error(self) -> None:
+        for bad in ({"administer": "x"}, {ADMIN: ""}, {ADMIN: 3}, {ADMIN: None}, {403: "x"}, ["x"], "x"):
+            with self.subTest(bad=bad), self.assertRaises(ValueError):
+                permissions.access(PUT="admin", messages=bad)
+
+    def test_settings_views_uses_it_and_the_wrapper_is_gone(self) -> None:
+        from . import settings_views
+
+        self.assertFalse(hasattr(settings_views, "_own_refusal"))
+        self.assertEqual(settings_views.training_downloads.athena_access, {"GET": TRAIN, "PUT": ADMIN})
+        self.assertEqual(settings_views.ADMIN_ONLY, "Only an administrator can change this setting.")
+        for role in ROLE_CASES:
+            response = self.as_user(role).put(
+                "/api/console/training-downloads", data="{}", content_type="application/json"
+            )
+            self.assertEqual(response.status_code, 403)
+            self.assertEqual(response.json()["error"], "Only an administrator can change this setting.")
+        # the access screen keeps the role-screen sentence
+        response = self.as_user("approver").put(
+            f"/api/access/people/{self.users['viewer'].pk}/console", data="{}", content_type="application/json"
+        )
+        self.assertEqual(response.json()["error"], permissions.ADMIN_MESSAGE)
+
+
 def _forgotten(request):
     return JsonResponse({"oops": True})
+
+
+MESSAGED = "This one needs an administrator, and this is the view's own sentence."
+
+
+@permissions.access(GET=TRAIN, PUT=ADMIN, messages={ADMIN: MESSAGED})
+def _messaged(request):
+    return JsonResponse({"fine": True})
 
 
 @permissions.access()
@@ -528,7 +675,7 @@ def _declared(request):
     return JsonResponse({"fine": True})
 
 
-urlpatterns = [path("api/forgotten", _forgotten), path("api/declared", _declared)]
+urlpatterns = [path("api/forgotten", _forgotten), path("api/declared", _declared), path("api/messaged", _messaged)]
 
 
 # ---------------------------------------------------------------------------------------

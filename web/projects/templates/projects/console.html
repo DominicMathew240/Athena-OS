@@ -39,15 +39,10 @@
         {% else %}You can label, teach, and approve models for use.{% endif %}
         {% if not athena_access.assigned %}No role has been assigned to you, so this console treats you as a {{ athena_access.role_title }}.{% endif %}
         {% if athena_access.approval_requires_second_person %}A model can only be approved by someone other than the person who started its teaching.{% endif %}</p>{% endif %}
-      <div class="notice" id="action-notice" role="status" aria-live="polite"><span id="action-message"></span></div>
-      <section class="status-row" aria-label="Workspace overview">
-        <div class="status-cell"><span>PROJECTS</span><strong class="flip" id="project-count">00</strong></div>
-        <div class="status-cell"><span>SUGGESTING BOXES</span><strong class="flip" id="autolabel-badge">Checking…</strong></div>
-        <div class="status-cell"><span>THE COMPUTER'S SUGGESTIONS</span><strong class="flip">You approve each</strong></div>
-      </section>
+      <div class="notice" id="action-notice" role="status" aria-live="polite"><span id="action-message"></span><button class="notice-close" id="action-notice-close" type="button" aria-label="Dismiss this message">×</button></div>
       <section aria-labelledby="browse-heading">
-        <h2 class="section-title" id="browse-heading">All projects</h2>
-        <div class="toolbar">
+        <h2 class="section-title" id="browse-heading">All projects <span class="count-note" id="project-count" data-ready="false"></span></h2>
+        <div class="toolbar" id="project-toolbar">
           <div class="filters" role="group" aria-label="Show projects by kind of file">
             <button class="filter" type="button" aria-pressed="true" data-filter="all">All</button>
             <button class="filter" type="button" aria-pressed="false" data-filter="visual">Pictures &amp; video</button>
@@ -64,7 +59,7 @@
             <tbody id="dataset-rows"></tbody>
           </table>
           <div class="mobile-list" id="mobile-rows" role="list" aria-label="Projects in this workspace"></div>
-          <div class="no-results" id="empty-state" hidden><p id="empty-copy"></p><button class="secondary" id="empty-create" type="button" data-needs="label" data-needs-scope="console">Create your first project</button></div>
+          <div class="no-results" id="empty-state" hidden><p id="empty-copy"></p><button class="primary" id="empty-create" type="button" data-needs="label" data-needs-scope="console">Create your first project</button></div>
         </div>
       </section>
 
@@ -79,7 +74,7 @@
         <nav class="jump" id="jump-nav" aria-label="Jump to a part of this project" hidden>
           <a href="#checklist-panel" data-panel="checklist-panel">Get started</a>
           <a href="#labels-panel" data-panel="labels-panel">Labels</a>
-          <a href="#image-assets-panel" data-panel="image-assets-panel">Pictures</a>
+          <a href="#image-assets-panel" data-panel="image-assets-panel"><span class="jump-label">Pictures</span><span class="jump-count" id="jump-corrections" hidden></span></a>
           <a href="#dataset-panel" data-panel="dataset-panel">Make a training set</a>
           <a href="#train-panel" data-panel="train-panel">Teach the computer</a>
           {% if check_setup_url %}<a href="#apps-panel" data-panel="apps-panel">Check screens</a>{% endif %}
@@ -88,7 +83,6 @@
         <section class="panel checklist-panel" id="checklist-panel" aria-labelledby="checklist-heading">
           <div class="panel-head"><h3 id="checklist-heading">Get started</h3><span class="progress-note" id="checklist-progress"></span></div>
           <p class="panel-intro" id="checklist-intro">Follow these steps in order. The list updates itself as you work.</p>
-          <div class="checklist-start" id="checklist-start" hidden><p>You have no project open yet. Start by creating one.</p><button class="primary" id="checklist-create" type="button" data-needs="label" data-needs-scope="console">Create a project</button></div>
           <ol class="checklist" id="checklist" data-check-url-template="{{ check_setup_url }}"></ol>
         </section>
 
@@ -109,7 +103,7 @@
           <h3 id="image-assets-heading">Pictures</h3>
           <p class="panel-intro">Add JPEG, PNG, or WebP pictures to this project. Each one is checked and then stored on this Athena server.</p>
           <p class="gate-note" data-gate-note="label" hidden></p>
-          <form class="asset-upload" id="image-upload-form" data-needs="label" aria-label="Add pictures">
+          <form class="asset-upload" id="image-upload-form" data-needs="label" aria-label="Add pictures to this project">
             <label for="image-upload">Choose pictures <span class="asset-help">Up to 20 pictures at a time (100 MB in total). Each picture can be up to 20 MB.</span><input id="image-upload" name="images" type="file" accept="image/jpeg,image/png,image/webp" multiple></label>
             <button class="primary" id="upload-images" type="submit">Add pictures</button>
             <label class="inline-check" id="autolabel-after-upload-field" for="autolabel-after-upload" hidden><input id="autolabel-after-upload" type="checkbox" aria-describedby="autolabel-after-upload-help"><span>Suggest boxes automatically after upload<span class="field-help" id="autolabel-after-upload-help">Off unless you tick it. When it is on, the computer starts looking for items in the new pictures as soon as they are added. That can take about 2 minutes for a few pictures and slows teaching while it runs. The first time you use it, the computer may also need to load its helper models, which can take longer. You always review what it suggests; nothing counts until you accept it.</span></span></label>
@@ -125,14 +119,27 @@
             <div class="autolabel-progress" id="autolabel-progress" hidden><progress id="autolabel-bar" max="1" value="0" aria-labelledby="autolabel-progress-text"></progress><span id="autolabel-progress-text"></span></div>
             <div class="autolabel-review" id="autolabel-review" data-needs="label" hidden>
               <p id="autolabel-review-text"></p>
+              <p class="autolabel-feedback-note" id="autolabel-feedback-note" hidden></p>
               <div class="autolabel-review-actions">
                 <label for="autolabel-accept-threshold">Accept suggestions the computer is at least this sure about<select id="autolabel-accept-threshold"><option value="0.9">90% sure</option><option value="0.7">70% sure</option><option value="0.5">50% sure</option><option value="0">Any suggestion</option></select></label>
                 <button class="secondary" id="autolabel-accept" type="button">Accept these suggestions</button>
                 <button class="secondary danger" id="autolabel-reject" type="button">Reject all suggestions</button>
               </div>
             </div>
+            <p class="autolabel-outcome" id="autolabel-outcome" role="status" aria-live="polite" tabindex="-1"></p>
+          </section>
+          <section class="corrections" id="corrections-panel" aria-labelledby="corrections-heading">
+            <h4 id="corrections-heading" tabindex="-1">Corrections from check screens</h4>
+            <p class="corrections-count" id="corrections-count">Looking for corrections…</p>
+            <ul class="corrections-skipped" id="corrections-skipped" aria-label="Pictures that cannot be added" hidden></ul>
+            <ul class="corrections-skipped corrections-leftout" id="corrections-leftout" aria-label="Pictures added with some boxes left out" hidden></ul>
+            <p class="asset-help" id="corrections-help" hidden>These pictures come in with the computer’s boxes marked Needs review. Nothing is used for teaching until a person accepts the boxes. The model in use is not changed.</p>
+            <p class="gate-note" data-gate-note="label" hidden></p>
+            <div class="corrections-actions"><button class="secondary" id="corrections-import" type="button" data-needs="label" aria-describedby="corrections-help" hidden>Add corrected pictures for review</button></div>
+            <div class="corrections-result" id="corrections-result" role="status" aria-live="polite" tabindex="-1"></div>
           </section>
           <p class="asset-status" id="asset-status" role="status" aria-live="polite"></p>
+          <div class="asset-filter" id="asset-filter" role="group" aria-label="Choose which pictures to show" hidden><button class="asset-filter-toggle" id="asset-filter-feedback" type="button" aria-pressed="false">Show only pictures from check screens</button></div>
           <div class="asset-list" id="asset-list"></div>
           <p class="asset-help">These pictures have not been checked for usage rights. Do not treat them as cleared for sharing or for training a model.</p>
         </section>
@@ -185,82 +192,109 @@
           <p class="asset-help">Athena does not check whether you have the right to use these pictures for training. Make sure you do before you share a download.</p>
         </section>
 
-        <section class="panel train-panel" id="train-panel" aria-labelledby="train-heading" data-me="u{{ request.user.pk }}" hidden>
+        <section class="panel train-panel" id="train-panel" aria-labelledby="train-heading" data-me="u{{ request.user.pk }}" data-admin="{{ athena_access.can_administer|yesno:"1,0" }}" hidden>
           <div class="panel-head"><h3 id="train-heading" tabindex="-1">Teach the computer</h3><span class="progress-note" id="train-note"></span></div>
-          <p class="panel-intro">Here the computer learns from one of your snapshots, and then you decide whether to trust what it learned. It always goes in this order:</p>
+          <p class="panel-intro">The computer learns from your labelled pictures, then it is checked on pictures it has never seen. Finishing never switches a model on by itself. A model is used only after a person approves it.</p>
           <p class="gate-note" data-gate-note="train" hidden></p>
-          <ol class="train-flow" aria-label="How teaching works">
-            <li><strong>You</strong> choose a snapshot and press “Start teaching”.</li>
-            <li>The computer <strong>learns</strong> from the pictures in the Training group. This can take a while.</li>
-            <li>It is <strong>checked</strong> on the Final test pictures it has never seen, and you get a plain report.</li>
-            <li><strong>You decide.</strong> Finishing never switches a model on by itself. A model is used only after a person approves it.</li>
-          </ol>
 
-          <section class="train-step" aria-labelledby="tr-ready-heading">
-            <div class="panel-head"><h4 id="tr-ready-heading">Is everything ready?</h4><button class="secondary" id="tr-recheck" type="button">Check again</button></div>
-            <p class="dataset-headline" id="tr-headline" role="status" aria-live="polite" data-state="blocked">Checking what is ready…</p>
-            <ul class="dataset-facts" id="tr-facts" aria-label="What is ready and what is missing"></ul>
-            <details class="train-licence" id="tr-licence" hidden>
-              <summary>Licence of the teaching tool</summary>
-              <div id="tr-licence-body"></div>
-            </details>
+          <section class="train-step train-check" aria-labelledby="tr-ready-heading">
+            <h4 id="tr-ready-heading">Are your pictures ready?</h4>
+            <p class="dataset-headline" id="tr-headline" role="status" aria-live="polite" data-state="blocked">Checking your pictures…</p>
+            <ul class="dataset-facts" id="tr-facts" aria-label="What could be better about your pictures"></ul>
           </section>
 
-          <form class="train-step" id="tr-form" data-needs="train" novalidate aria-labelledby="tr-start-heading">
-            <h4 id="tr-start-heading">Start teaching</h4>
+          <form class="train-step train-teach" id="tr-form" data-needs="train" novalidate aria-label="Start teaching">
             <fieldset class="train-fieldset" id="tr-fields">
               <legend class="visually-hidden">Choices for this round of teaching</legend>
-              <div class="train-choices">
-                <label for="tr-snapshot">Which snapshot should it learn from?<select id="tr-snapshot"></select><span class="field-help" id="tr-snapshot-help"></span></label>
-                <label for="tr-tool">Which teaching tool should it use?<select id="tr-tool"></select><span class="field-help" id="tr-tool-help"></span></label>
-              </div>
-              <details class="dataset-advanced" id="tr-start-from" hidden>
-                <summary>Advanced: start from a ready-made model</summary>
-                <p class="asset-help">Most people can leave this closed and start from scratch. A ready-made model has already learned from a very large collection of pictures made by other people, so it usually needs far fewer of your pictures. It also comes with its own terms of use, and it has to be downloaded the first time.</p>
-                <p class="gate-note" id="tr-start-from-why" hidden></p>
-                <fieldset class="start-from-options" id="tr-start-from-options">
-                  <legend>How should the computer start?</legend>
-                  <div class="start-choice" data-value="none">
-                    <label class="start-choice-label" for="tr-pre-none"><input id="tr-pre-none" type="radio" name="tr-start-from" value="none" checked aria-describedby="tr-pre-none-text tr-pre-none-state"><span data-field="title">Start from scratch</span></label>
-                    <p class="field-help" id="tr-pre-none-text" data-field="summary"></p>
-                    <p class="field-help" id="tr-pre-none-state" data-field="state"></p>
-                  </div>
-                  <div class="start-choice" data-value="imagenet_backbone">
-                    <label class="start-choice-label" for="tr-pre-imagenet_backbone"><input id="tr-pre-imagenet_backbone" type="radio" name="tr-start-from" value="imagenet_backbone" aria-describedby="tr-pre-imagenet_backbone-text tr-pre-imagenet_backbone-state"><span data-field="title">Start from a general picture model (ImageNet)</span></label>
-                    <p class="field-help" id="tr-pre-imagenet_backbone-text" data-field="summary"></p>
-                    <p class="field-help" id="tr-pre-imagenet_backbone-state" data-field="state"></p>
-                  </div>
-                  <div class="start-choice" data-value="coco">
-                    <label class="start-choice-label" for="tr-pre-coco"><input id="tr-pre-coco" type="radio" name="tr-start-from" value="coco" aria-describedby="tr-pre-coco-text tr-pre-coco-state"><span data-field="title">Start from a general object model (COCO)</span></label>
-                    <p class="field-help" id="tr-pre-coco-text" data-field="summary"></p>
-                    <p class="field-help" id="tr-pre-coco-state" data-field="state"></p>
-                  </div>
-                </fieldset>
-                <section class="start-licence" id="tr-pre-licence" aria-labelledby="tr-pre-licence-title" hidden>
-                  <h5 id="tr-pre-licence-title">Before you use a ready-made model</h5>
-                  <p id="tr-pre-licence-plain"></p>
-                  <p class="start-lawyer"><strong>Ask a lawyer before commercial use.</strong> Athena cannot tell you whether you may use this model for your work.</p>
-                  <details class="snapshot-details"><summary>The teaching tool’s own licence note, word for word</summary><p id="tr-pre-licence-raw"></p></details>
-                  <p class="asset-help">How the starting points compare on test pictures is measured in the “Model quality” guide (<code>docs/guides/model-quality.md</code> in the Athena folder). Read the limits in that guide before you rely on any number.</p>
-                  <label class="inline-check" for="tr-pre-ack"><input id="tr-pre-ack" type="checkbox" aria-describedby="tr-pre-licence-plain"><span>I have read this. I understand that a ready-made model has its own terms, and I will ask a lawyer before using the result commercially.</span></label>
-                </section>
-              </details>
-              <details class="dataset-advanced" id="tr-advanced">
-                <summary>Advanced: change how it learns</summary>
-                <p class="asset-help">The starting values are safe for most projects, so you can leave this closed. More rounds usually take longer. Once you press “Start teaching”, these values are locked for that run and shown under “Teaching progress”.</p>
-                <div class="dataset-split-grid">
-                  <label for="tr-rounds" data-setting="epochs">Rounds of learning<span class="field-help">How many times the computer goes through all the Training pictures. Whole number from 1 to 100.</span><input id="tr-rounds" type="number" inputmode="numeric" min="1" max="100" step="1" aria-describedby="tr-rounds-msg"><span class="field-msg" id="tr-rounds-msg" aria-live="polite"></span></label>
-                  <label for="tr-batch" data-setting="batch_size">Pictures looked at together<span class="field-help">Lower this if teaching fails or runs out of memory. Whole number from 1 to 16.</span><input id="tr-batch" type="number" inputmode="numeric" min="1" max="16" step="1" aria-describedby="tr-batch-msg"><span class="field-msg" id="tr-batch-msg" aria-live="polite"></span></label>
-                  <label for="tr-size" data-setting="image_size" hidden>Picture size while learning (pixels)<span class="field-help">Larger pictures can show small items better but take longer. Whole number from 32 to 2048.</span><input id="tr-size" type="number" inputmode="numeric" min="32" max="2048" step="1" aria-describedby="tr-size-msg"><span class="field-msg" id="tr-size-msg" aria-live="polite"></span></label>
+              <fieldset class="train-quality" id="tr-quality" hidden>
+                <legend>How long should it learn?</legend>
+                <div class="quality-choices">
+                  <label class="quality-choice" for="tr-quality-quick"><input id="tr-quality-quick" type="radio" name="tr-quality" value="quick" checked aria-describedby="tr-quality-note" autocomplete="off"><span class="quality-text"><strong>Quick</strong><span id="tr-quality-quick-time"></span></span></label>
+                  <label class="quality-choice" for="tr-quality-better"><input id="tr-quality-better" type="radio" name="tr-quality" value="better" aria-describedby="tr-quality-note" autocomplete="off"><span class="quality-text"><strong>Better</strong><span id="tr-quality-better-time"></span></span></label>
                 </div>
-                <button class="secondary" id="tr-reset" type="button">Go back to the safe values</button>
-              </details>
+                <p class="field-help" id="tr-quality-note"></p>
+              </fieldset>
+              <div class="train-ack" id="tr-ack-box" hidden>
+                <label class="inline-check" for="tr-ack"><input id="tr-ack" type="checkbox" autocomplete="off"><span>This ready-made model has its own terms of use. I accept them, and I will ask a lawyer before using the result commercially.</span></label>
+                <details class="snapshot-details"><summary>Read the details</summary><div class="train-ack-body" id="tr-ack-body"></div></details>
+              </div>
             </fieldset>
-            <p class="asset-help" id="tr-lock-note" hidden></p>
             <p class="form-error" id="tr-error" role="alert"></p>
-            <div class="form-actions dataset-actions"><button class="primary" id="tr-start" type="submit" aria-describedby="tr-start-help">Start teaching</button></div>
-            <p class="asset-help" id="tr-start-help"></p>
+            <div class="form-actions train-teach-actions"><button class="primary" id="tr-start" type="submit" aria-describedby="tr-start-help">Teach the computer</button></div>
+            <p class="train-plan" id="tr-start-help" aria-live="polite"></p>
+            <p class="asset-help" id="tr-lock-note" hidden></p>
           </form>
+          <details class="snapshot-details train-steps" id="tr-steps" hidden>
+            <summary>Show the administrator steps</summary>
+            <p class="train-where"><strong>Run on the computer that hosts Athena, not in this browser.</strong> The full setup steps are in <code>web/DEPLOYMENT.md</code> in the Athena folder.</p>
+            <div class="train-admin-note" id="tr-admin-note"></div>
+          </details>
+          <p class="train-recheck"><button class="secondary" id="tr-recheck" type="button">Check again</button><span class="train-recheck-note" id="tr-recheck-note" role="status" aria-live="polite"></span></p>
+
+          <details class="admin-fold train-admin" id="tr-admin">
+            <summary>Details for your administrator</summary>
+            <p class="asset-help">These are for whoever looks after this computer. The setup steps are in <code>web/DEPLOYMENT.md</code> in the Athena folder; run them on the computer that hosts Athena, not in this browser. “Teach with exactly these settings” uses exactly what is chosen here: it picks no ready-made start for you and works out no settings for you.</p>
+            <p class="asset-help train-downloads-note" id="tr-downloads-note" hidden></p>
+            <section class="train-licence" id="tr-licence" aria-labelledby="tr-licence-heading" hidden>
+              <h5 id="tr-licence-heading">Licence of the teaching tool</h5>
+              <div id="tr-licence-body"></div>
+            </section>
+            <form class="train-exact" id="tr-exact-form" data-needs="train" novalidate aria-labelledby="tr-exact-heading">
+              <h5 id="tr-exact-heading">Choose exactly what to teach with</h5>
+              <fieldset class="train-fieldset" id="tr-admin-fields">
+                <legend class="visually-hidden">Exact choices for this round of teaching</legend>
+                <div class="train-choices">
+                  <label for="tr-snapshot">Which snapshot (saved copy) should it learn from?<select id="tr-snapshot"></select><span class="field-help" id="tr-snapshot-help"></span></label>
+                  <label for="tr-tool">Which teaching tool should it use?<select id="tr-tool"></select><span class="field-help" id="tr-tool-help"></span></label>
+                </div>
+                <div class="train-start-from" id="tr-start-from" hidden>
+                  <h5>Start from a ready-made model</h5>
+                  <p class="asset-help">A ready-made model has already learned from a very large collection of pictures made by other people, so it usually needs far fewer of your pictures. It also comes with its own terms of use, and it has to be downloaded the first time.</p>
+                  <p class="gate-note" id="tr-start-from-why" hidden></p>
+                  <fieldset class="start-from-options" id="tr-start-from-options">
+                    <legend>How should the computer start?</legend>
+                    <div class="start-choice" data-value="none">
+                      <label class="start-choice-label" for="tr-pre-none"><input id="tr-pre-none" type="radio" name="tr-start-from" value="none" checked aria-describedby="tr-pre-none-text tr-pre-none-state" autocomplete="off"><span data-field="title">Start from scratch</span></label>
+                      <p class="field-help" id="tr-pre-none-text" data-field="summary"></p>
+                      <p class="field-help" id="tr-pre-none-state" data-field="state"></p>
+                    </div>
+                    <div class="start-choice" data-value="imagenet_backbone">
+                      <label class="start-choice-label" for="tr-pre-imagenet_backbone"><input id="tr-pre-imagenet_backbone" type="radio" name="tr-start-from" value="imagenet_backbone" aria-describedby="tr-pre-imagenet_backbone-text tr-pre-imagenet_backbone-state" autocomplete="off"><span data-field="title">Start from a general picture model (ImageNet)</span></label>
+                      <p class="field-help" id="tr-pre-imagenet_backbone-text" data-field="summary"></p>
+                      <p class="field-help" id="tr-pre-imagenet_backbone-state" data-field="state"></p>
+                    </div>
+                    <div class="start-choice" data-value="coco">
+                      <label class="start-choice-label" for="tr-pre-coco"><input id="tr-pre-coco" type="radio" name="tr-start-from" value="coco" aria-describedby="tr-pre-coco-text tr-pre-coco-state" autocomplete="off"><span data-field="title">Start from a general object model (COCO)</span></label>
+                      <p class="field-help" id="tr-pre-coco-text" data-field="summary"></p>
+                      <p class="field-help" id="tr-pre-coco-state" data-field="state"></p>
+                    </div>
+                  </fieldset>
+                  <section class="start-licence" id="tr-pre-licence" aria-labelledby="tr-pre-licence-title" hidden>
+                    <h5 id="tr-pre-licence-title">Before you use a ready-made model</h5>
+                    <p id="tr-pre-licence-plain"></p>
+                    <p class="start-lawyer"><strong>Ask a lawyer before commercial use.</strong> Athena cannot tell you whether you may use this model for your work.</p>
+                    <p class="asset-help">The teaching tool’s own licence note, word for word: <span id="tr-pre-licence-raw"></span></p>
+                    <p class="asset-help">How the starting points compare on test pictures is measured in the “Model quality” guide (<code>docs/guides/model-quality.md</code> in the Athena folder). Read the limits in that guide before you rely on any number.</p>
+                    <label class="inline-check" for="tr-pre-ack"><input id="tr-pre-ack" type="checkbox" aria-describedby="tr-pre-licence-plain" autocomplete="off"><span>I have read this. I understand that a ready-made model has its own terms, and I will ask a lawyer before using the result commercially.</span></label>
+                  </section>
+                </div>
+                <div class="train-settings" id="tr-advanced">
+                  <h5>Change how it learns</h5>
+                  <p class="asset-help">The starting values suit most projects. More rounds usually take longer. Once teaching starts, these values are locked for that run and shown under “Teaching progress”.</p>
+                  <div class="dataset-split-grid">
+                    <label for="tr-rounds" data-setting="epochs">Rounds of learning<span class="field-help">How many times the computer goes through all the Training pictures. Whole number from 1 to 100.</span><input id="tr-rounds" type="number" inputmode="numeric" min="1" max="100" step="1" aria-describedby="tr-rounds-msg"><span class="field-msg" id="tr-rounds-msg" aria-live="polite"></span></label>
+                    <label for="tr-batch" data-setting="batch_size">Pictures looked at together<span class="field-help">Lower this if teaching fails or runs out of memory. Whole number from 1 to 16.</span><input id="tr-batch" type="number" inputmode="numeric" min="1" max="16" step="1" aria-describedby="tr-batch-msg"><span class="field-msg" id="tr-batch-msg" aria-live="polite"></span></label>
+                    <label for="tr-size" data-setting="image_size" hidden>Picture size while learning (pixels)<span class="field-help">Larger pictures can show small items better but take longer. Whole number from 32 to 2048.</span><input id="tr-size" type="number" inputmode="numeric" min="32" max="2048" step="1" aria-describedby="tr-size-msg"><span class="field-msg" id="tr-size-msg" aria-live="polite"></span></label>
+                    <label for="tr-model-size" data-setting="size" hidden>Size of the ready-made model<span class="field-help">The smaller one teaches faster. The larger one takes longer, and is a bigger download the first time.</span><select id="tr-model-size" autocomplete="off"><option value="nano">Smaller (nano)</option><option value="small">Larger (small)</option></select></label>
+                  </div>
+                  <button class="secondary" id="tr-reset" type="button">Go back to the starting values</button>
+                </div>
+              </fieldset>
+              <p class="form-error" id="tr-exact-error" role="alert"></p>
+              <div class="form-actions train-exact-actions"><button class="secondary" id="tr-start-exact" type="submit" aria-describedby="tr-exact-help">Teach with exactly these settings</button></div>
+              <p class="asset-help" id="tr-exact-help"></p>
+            </form>
+          </details>
 
           <section class="train-step" id="tr-run" aria-labelledby="tr-run-heading" hidden>
             <h4 id="tr-run-heading" tabindex="-1">Teaching progress</h4>
@@ -270,16 +304,18 @@
               <p class="train-run-text" id="tr-run-text"></p>
               <p class="asset-help" id="tr-run-detail"></p>
               <div class="train-next" id="tr-next" hidden></div>
-              <div class="form-actions train-run-actions"><button class="secondary" id="tr-see-results" type="button" hidden>See the results</button><button class="secondary danger" id="tr-cancel" type="button" data-needs="train" hidden>Stop teaching</button></div>
-              <div class="train-locked"><h5 id="tr-locked-heading">Settings used for this run</h5><p class="asset-help">These cannot be changed once teaching has started.</p><dl id="tr-locked" aria-labelledby="tr-locked-heading"></dl></div>
-              <details class="train-log" id="tr-log-box"><summary>Details for your administrator</summary><pre id="tr-log" tabindex="0" aria-label="Progress notes from the teaching helper program"></pre></details>
+              <div class="form-actions train-run-actions"><button class="secondary" id="tr-see-results" type="button" hidden>See the results</button><button class="secondary" id="tr-run-again" type="button" hidden>Check again</button><button class="secondary danger" id="tr-cancel" type="button" data-needs="train" hidden>Stop teaching</button></div>
+              <details class="train-log"><summary>Details for your administrator</summary>
+                <div class="train-locked"><h5 id="tr-locked-heading">Settings used for this run</h5><p class="asset-help">These cannot be changed once teaching has started.</p><dl id="tr-locked" aria-labelledby="tr-locked-heading"></dl></div>
+                <pre id="tr-log" tabindex="0" aria-label="Progress notes from the teaching helper program"></pre></details>
             </div>
           </section>
           <p class="visually-hidden" id="tr-announce" role="status" aria-live="polite"></p>
 
           <section class="train-step" aria-labelledby="tr-models-heading">
             <h4 id="tr-models-heading">Your taught models</h4>
-            <p class="asset-help">Every model starts as a <strong>Candidate</strong>. A person moves it to <strong>Ready for trial</strong> once they have read its results, and then <strong>approves</strong> it. Approving a new model <strong>retires</strong> the one before it, but that one stays saved so you can go back to it. Nothing here deletes a model.</p>
+            <p class="asset-help">A new model is a <strong>Candidate</strong>: one nobody has approved yet. A person moves it to <strong>Ready for trial</strong> once they have read its results, and then <strong>approves</strong> it. Approving a new model <strong>retires</strong> the one before it, but that one stays saved so you can go back to it. Nothing here deletes a model.</p>
+            <p class="tr-flash" id="tr-models-flash" role="status" aria-live="polite" tabindex="-1"></p>
             <p class="asset-status" id="tr-models-status" role="status" aria-live="polite"></p>
             <ol class="model-list" id="tr-model-list" aria-labelledby="tr-models-heading"></ol>
           </section>
@@ -335,7 +371,9 @@
     <div class="dialog-head"><div><h2 id="annotation-title">Mark items in this picture</h2><p id="annotation-filename">Draw a box around each item</p></div><button class="dialog-close" id="close-annotation-dialog" type="button" aria-label="Close this picture and go back to the project">×</button></div>
     <div class="annotation-content">
       <p class="gate-note" data-gate-note="label" hidden></p>
-      <details class="annotation-help" id="annotation-help-details" open><summary>How to mark items</summary><p class="asset-help" id="annotation-workspace-help">Pick a label, then drag across the picture to draw a box around an item. Drag inside a box to move it; drag a corner square to resize it. With a box selected, the arrow keys move it by 1% and Shift+arrow resizes it. Press Ctrl/Cmd+Z to undo and Shift+Ctrl/Cmd+Z to redo while the picture is focused. Undo history lasts until you close this window. You can also type a box position in the form below. Every change is saved as you make it.</p></details>
+      <details class="annotation-help" id="annotation-help-details" open><summary>How to mark items</summary><p class="asset-help" id="annotation-workspace-help">Pick a label, then drag across the picture to draw a box around an item. Every change is saved as you make it.</p>
+        <details class="annotation-keys"><summary>Moving, resizing and undoing</summary><p class="asset-help" id="annotation-keys-help">Drag inside a box to move it; drag a corner square to resize it. With a box selected, the arrow keys move it by 1% and Shift+arrow resizes it. Press Ctrl/Cmd+Z to undo and Shift+Ctrl/Cmd+Z to redo while the picture is focused. Undo history lasts until you close this window. You can also type a box position in the form below.</p></details></details>
+      <p class="annotation-mark-note" id="annotation-mark-note" role="status" hidden></p>
       <div class="annotation-toolbar">
         <label for="annotation-label">Label for the next box<select id="annotation-label" data-needs="label"></select></label>
         <div class="annotation-view-tools" role="group" aria-label="Undo, redo and zoom">
@@ -367,7 +405,7 @@
         </form>
       </details>
       <div class="annotation-workspace">
-        <div class="annotation-stage-scroll" id="annotation-stage-scroll" role="region" tabindex="0" aria-label="Zoomable image annotation workspace" aria-describedby="annotation-workspace-help"><div class="annotation-stage" id="annotation-stage"><img id="annotation-image" alt="The picture you are marking"><canvas id="annotation-canvas" tabindex="0" aria-label="Drawing area for boxes. Select a box, then use the arrow keys to move it, or Shift plus the arrow keys to resize it."></canvas></div></div>
+        <div class="annotation-stage-scroll" id="annotation-stage-scroll" role="region" tabindex="0" aria-label="Zoomable image annotation workspace" aria-describedby="annotation-workspace-help annotation-keys-help"><div class="annotation-stage" id="annotation-stage"><img id="annotation-image" alt="The picture you are marking"><canvas id="annotation-canvas" tabindex="0" aria-label="Drawing area for boxes. Select a box, then use the arrow keys to move it, or Shift plus the arrow keys to resize it."></canvas></div></div>
         <aside class="annotation-side" aria-labelledby="annotation-list-heading"><h3 id="annotation-list-heading">Boxes in this picture</h3><div class="annotation-list" id="annotation-list"></div></aside>
       </div>
       <p class="annotation-status" id="annotation-status" role="status" aria-live="polite"></p>
@@ -381,6 +419,7 @@
       <label for="decision-note"><span id="decision-note-label">Your note</span><span class="field-help" id="decision-note-help"></span><textarea id="decision-note" rows="4" maxlength="2000" aria-describedby="decision-note-help decision-count"></textarea></label>
       <p class="field-help" id="decision-count"></p>
       <label class="inline-check decision-ack" id="decision-ack-row" for="decision-ack" hidden><input id="decision-ack" type="checkbox"><span id="decision-ack-text"></span></label>
+      <label class="inline-check decision-ack decision-repoint" id="decision-repoint-row" for="decision-repoint" hidden><input id="decision-repoint" type="checkbox"><span id="decision-repoint-text"></span></label>
       <p class="form-error" id="decision-error" role="alert"></p>
       <div class="form-actions"><button class="secondary" id="decision-cancel" type="button">Cancel, change nothing</button><button class="primary" id="decision-confirm" type="submit">Confirm</button></div>
     </form>

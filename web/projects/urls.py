@@ -1,6 +1,7 @@
 from django.urls import path
 
 from . import access_views, autolabel_views, dataset_views, inference_pages, inference_views, training_views, views
+from . import feedback_views, results_views, settings_views
 
 urlpatterns = [
     path("", views.dashboard, name="dashboard"),
@@ -11,6 +12,8 @@ urlpatterns = [
     path("api/access/changes", access_views.access_changes, name="access-changes"),
     path("api/access/people/<int:user_id>/console", access_views.access_console_role, name="access-console-role"),
     path("api/access/people/<int:user_id>/projects", access_views.access_project_role, name="access-project-role"),
+    # Whether the teaching helper may download ready-made models (administrators change it; Trainers can read it)
+    path("api/console/training-downloads", settings_views.training_downloads, name="console-training-downloads"),
     path("api/projects", views.project_collection, name="project-list-create"),
     path("api/projects/<uuid:project_id>", views.project_detail, name="project-detail"),
     path("api/projects/<uuid:project_id>/assets", views.project_assets, name="project-assets"),
@@ -164,4 +167,13 @@ urlpatterns = [
         name="checkscreen-setup",
     ),
     path("check/<slug:slug>", inference_pages.checkscreen_operator, name="checkscreen-operator"),
+    # Operator feedback pulled into the project as reviewable pictures (Needs-review boxes only)
+    path("api/projects/<uuid:project_id>/feedback/corrections", feedback_views.feedback_corrections, name="feedback-corrections"),
+    path(
+        "api/projects/<uuid:project_id>/feedback/corrections/import",
+        feedback_views.feedback_corrections_import,
+        name="feedback-corrections-import",
+    ),
+    path("api/projects/<uuid:project_id>/datasets/health", dataset_views.project_dataset_health, name="project-dataset-health"),
+    path("api/projects/<uuid:project_id>/models/<uuid:model_id>/results/plain", results_views.model_results_plain, name="model-results-plain"),
 ]
