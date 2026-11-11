@@ -152,7 +152,7 @@ async function selectProject(id, { reveal = false } = {}) {
     confirmLabel: "Open it anyway"
   }))) return;
   const changed = id !== selectedId;
-  if (changed) showPanel("checklist-panel"); // a different project starts at "Get started"
+  if (changed) showPanel("checklist-panel"); // a different project starts at "Overview"
   selectedId = id;
   Athena.useProject(id); // a role given for this project replaces the console-wide one while it is open
   rememberProjectInAddress(id);
@@ -3803,9 +3803,11 @@ function trOneClickReasons(one) {
 
 function trOneClickPlan(one) {
   const start = TR_START_WORDS[one.start_from.resolved] || "a ready-made model";
+  // Say which saved copy (snapshot) the teaching uses, and when it will make a new one. Saved copies already made never change.
+  const savedVersion = Number(one.dataset?.version) || 0;
   const copy = one.derived.based_on === "latest_snapshot"
-    ? "learn from your latest saved copy of your labelled pictures"
-    : "make a saved copy of your labelled pictures first";
+    ? `learn from your latest saved copy of your labelled pictures${savedVersion ? ` (snapshot ${savedVersion})` : ""}`
+    : `make a saved copy of your labelled pictures first${savedVersion ? ` (snapshot ${savedVersion + 1}; the ones you already saved stay as they are)` : ""}`;
   const words = trMinutesWords(one.derived[trQualityChoice()]?.estimated_minutes);
   const time = words ? `take ${words} on a computer like our test machine (an estimate)` : "take a time that cannot be estimated here";
   const wait = trState.workerOnline === false ? " Teaching is not switched on yet, so it will wait in line until an administrator switches it on." : "";
@@ -5688,6 +5690,72 @@ function checklistSteps(project) {
 
 const stepBadge = { done: "Done", next: "Do this next", todo: "To do", blocked: "Not yet", soon: "Coming soon" };
 
+/* ---- Overview: one recommended next step and four counts, both read from the project as the server reports it. The
+   recommendation is the first step of the list below that is still to do, so it can never disagree with the list. ---- */
+const overviewEl = document.getElementById("overview");
+const nextStepEl = document.getElementById("next-step");
+const nextStepTitle = document.getElementById("next-step-title");
+const nextStepWhy = document.getElementById("next-step-why");
+const nextStepGate = document.getElementById("next-step-gate");
+const nextStepAction = document.getElementById("next-step-action");
+const projectCounts = document.getElementById("project-counts");
+// Which role each step needs (the same words the server answers with): steps 1 to 5 change the project, 6 and 7 teach and set up screens.
+const STEP_NEEDS = ["label", "label", "label", "label", "label", "train", "train"];
+
+function renderOverview(project, steps, waitingCorrections) {
+  checklistIntro.hidden = false;
+  if (!project || project.modality !== "image") { overviewEl.hidden = true; return; }
+  overviewEl.hidden = false;
+  const nextIndex = steps.findIndex(step => step.state === "next");
+  const next = nextIndex >= 0 ? steps[nextIndex] : null;
+  let title, why, action = null, need = "", state;
+  if (next) {
+    title = next.title; why = next.detail; action = next.action; need = STEP_NEEDS[nextIndex] || ""; state = "next";
+  } else if (waitingCorrections) {
+    title = "Corrections are waiting";
+    why = `${plural(waitingCorrections, "picture with corrections is", "pictures with corrections are")} waiting from your check screens. Add them to this project, then check the boxes. Nothing is used for teaching until a person accepts the boxes.`;
+    action = { label: "Open the corrections", run: openCorrections }; need = "label"; state = "attention";
+  } else {
+    title = "Every step is done";
+    why = "You can keep adding pictures and boxes, save a new snapshot, and teach a new model at any time. A new model is never used until a person approves it.";
+    state = "done";
+  }
+  nextStepEl.dataset.state = state;
+  checklistIntro.hidden = state !== "next"; // when everything is done, the card already says what the intro would
+  nextStepTitle.textContent = state === "next" ? `Next: ${title}` : title;
+  nextStepWhy.textContent = why;
+  nextStepAction.replaceChildren();
+  const reason = need ? Athena.reasonFor(need) : "";
+  nextStepGate.textContent = reason;
+  nextStepGate.hidden = !reason;
+  if (action) {
+    let control;
+    if (action.href) {
+      control = dsNode("a", "primary link-button", action.label);
+      control.href = action.href;
+    } else {
+      control = dsNode("button", "primary", action.label);
+      control.type = "button";
+      control.addEventListener("click", action.run);
+    }
+    if (need) Athena.gate(control, need);
+    nextStepAction.append(control);
+  }
+  const review = project.pending_pictures || 0;
+  const facts = [
+    ["Pictures", (project.image_count || 0).toLocaleString(), ""],
+    ["Pictures to review", review.toLocaleString(), review ? "review" : ""],
+    ["Snapshots saved", (project.dataset_count || 0).toLocaleString(), ""],
+    ["Approved models", (project.approved_model_count || 0).toLocaleString(), ""]
+  ];
+  projectCounts.replaceChildren(...facts.map(([label, value, tone]) => {
+    const group = dsNode("div", "count");
+    if (tone) group.dataset.tone = tone;
+    group.append(dsNode("dt", "", label), dsNode("dd", "", value));
+    return group;
+  }));
+}
+
 function renderChecklist(project) {
   checklistEl.replaceChildren();
   const addStep = (number, step) => {
@@ -5716,13 +5784,13 @@ function renderChecklist(project) {
     if (step.action) {
       const button = document.createElement("button");
       button.type = "button";
-      button.className = step.state === "next" ? "primary" : "secondary";
+      button.className = "secondary"; // the next-step card above holds the one blue button for this part
       button.textContent = step.action.label;
       button.setAttribute("aria-label", `${step.action.label} (step ${number}: ${step.title})`);
       if (step.action.href) {
         const link = document.createElement("a");
         link.href = step.action.href;
-        link.className = `${step.state === "next" ? "primary" : "secondary"} link-button`;
+        link.className = "secondary link-button";
         link.textContent = step.action.label;
         link.setAttribute("aria-label", `${step.action.label} (step ${number}: ${step.title})`);
         Athena.gate(link, "train"); // the only link here opens the check-screen setup page
@@ -5734,6 +5802,7 @@ function renderChecklist(project) {
     }
     checklistEl.append(item);
   };
+  if (!project || project.modality !== "image") { overviewEl.hidden = true; checklistIntro.hidden = false; }
   if (!project) {
     checklistProgress.textContent = "";
     checklistIntro.textContent = "Here is what you will do. For example, to find dented cans on a production line: make a project called “Dented cans”, add photos of cans, name the label “dent”, and draw a box around each dent.";
@@ -5769,6 +5838,7 @@ function renderChecklist(project) {
     ? (lastDone ? `Every step is done. ${keepGoing}` : `Steps 1 to 6 are done. ${keepGoing}${checklistEl.dataset.checkUrlTemplate ? " Step 7 is where people check what the approved model finds." : " The last step is coming soon."}`)
     : "Follow these steps in order. The list updates itself as you work.";
   const waitingCorrections = corrections.projectId === project.id ? correctionsWaiting() : 0;
+  renderOverview(project, steps, waitingCorrections);
   if (waitingCorrections) {
     checklistIntro.textContent = checklistIntro.textContent.replace("Every step is done.", "Every numbered step is done, and corrections from check screens are waiting for you.");
     addCorrectionsItem(waitingCorrections);
@@ -5819,7 +5889,7 @@ updateCustomModalityField();
 void loadAutolabelStatus();
 loadProjects();
 
-/* ---- One part of the project at a time. The project used to be one very long page; now "Get started" is the home
+/* ---- One part of the project at a time. The project used to be one very long page; now "Overview" is the home
    screen and each other part (Labels, Pictures, ...) opens on its own. A part shows only while it belongs to the
    open project, and Back / Next buttons at the bottom of each part walk through them in order. */
 
@@ -5853,7 +5923,7 @@ function syncPanels() {
       panel.append(steps);
     }
     steps.replaceChildren();
-    steps.hidden = index === 0; // "Get started" is the home screen: its own buttons lead on
+    steps.hidden = index === 0; // "Overview" is the home screen: its own buttons lead on
     const add = (panelTarget, text) => {
       const button = document.createElement("button");
       button.type = "button";
@@ -5862,6 +5932,7 @@ function syncPanels() {
       button.addEventListener("click", () => goToPanel(panelTarget.id));
       steps.append(button);
     };
+    if (index > 1) add(panels[0], `Overview: what to do next`); // from any part, one click back to the recommended next step
     if (index > 0) add(panels[index - 1], `Back: ${panelName(panels[index - 1])}`);
     if (index > 0 && index < panels.length - 1) add(panels[index + 1], `Next: ${panelName(panels[index + 1])}`);
   });

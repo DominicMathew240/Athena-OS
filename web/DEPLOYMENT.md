@@ -263,7 +263,7 @@ in `PRETRAINED_FILES`, `_weights_path` and `cached_weights_ok` in `web/projects/
 panel shows is `AUTO_NONE_STEPS` in the same file (it points back to this section by title).
 
 **Optional second tool: D-FINE (`dfine-coco`).** An administrator can pick it in the Teach panel's "Details for your administrator" fold; the
-yellow button keeps using the default torchvision tool (`DEFAULT_BACKEND` is unchanged, and the choice of a default ready-made base is the
+blue button keeps using the default torchvision tool (`DEFAULT_BACKEND` is unchanged, and the choice of a default ready-made base is the
 owner's open licence decision). It is registered in `web/athena_web/settings.py` (`TRAINING["BACKENDS"]`), so the console lists it, but it is
 usable only where its extra packages are installed:
 

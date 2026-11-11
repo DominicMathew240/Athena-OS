@@ -1,8 +1,8 @@
 /* The access screen (access.html). Builds on console.css. */
-.access-status { margin: 12px 0 0; padding: 9px 12px; border: 1px solid var(--rule-2); background: var(--panel); font-size: 15px; line-height: 1.45; }
+.access-status { margin: 12px 0 0; padding: 9px 12px; border: 1px solid var(--rule-2); background: var(--panel); font-size: 15px; line-height: 1.45; border-radius: var(--r-card); }
 .access-status:empty { display: none; }
 .access-status[data-tone="error"] { border-color: var(--bad-line); color: var(--bad); background: var(--bad-tint); }
-.access-status[data-tone="ok"] { border-color: var(--ok); }
+.access-status[data-tone="ok"] { border-color: var(--ok); background: var(--ok-tint); }
 .access-panel { margin-top: 16px; }
 .role-key { display: grid; gap: 6px; margin: 0 0 8px; }
 .role-key-row { display: grid; grid-template-columns: 110px minmax(0, 1fr); gap: 10px; align-items: baseline; }
@@ -11,12 +11,12 @@
 .access-find { display: flex; flex-wrap: wrap; align-items: end; gap: 12px 18px; margin: 0 0 12px; }
 .access-find label { display: grid; gap: 5px; font-size: 15px; font-weight: 700; min-width: min(100%, 260px); }
 .access-find input, .access-find select, .person select, .project-add select {
-  min-height: 40px; padding: 7px 10px; border: 1px solid var(--field-line); border-radius: 0; background: var(--field); color: var(--fg);
+  min-height: 40px; padding: 7px 10px; border: 1px solid var(--field-line); border-radius: var(--r-field); background: var(--field); color: var(--fg);
   font-size: var(--field-size); font-weight: 400; max-width: 100%;
 }
 .access-find .field-help { margin: 0; }
 .people { display: grid; gap: 12px; margin: 0; padding: 0; list-style: none; }
-.person { padding: 12px 14px; border: 1px solid var(--rule-2); background: var(--panel-2); }
+.person { padding: 14px 16px; border: 1px solid var(--rule-2); background: var(--panel); border-radius: var(--r-card); }
 .person-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 10px; margin-bottom: 8px; }
 .person-name { margin: 0; font-size: 16px; overflow-wrap: anywhere; }
 .person-row, .project-role, .project-add { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 10px; }
@@ -34,7 +34,7 @@
 .access-more { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; margin-top: 10px; }
 .access-more .field-help { margin: 0; }
 .access-panel code { font: 14px var(--f-mono); }
-.downloads-state { margin: 0 0 6px; padding: 9px 12px; border: 1px solid var(--rule-2); background: var(--panel-2); font-size: 17px; font-weight: 700; line-height: 1.4; }
+.downloads-state { margin: 0 0 6px; padding: 10px 14px; border: 1px solid var(--rule-2); background: var(--panel-2); font-size: 17px; font-weight: 650; line-height: 1.4; border-radius: var(--r-card); }
 .downloads-state[data-tone="on"] { border-color: var(--ok); }
 .downloads-state[data-tone="error"] { border-color: var(--bad-line); color: var(--bad); background: var(--bad-tint); }
 .access-panel > .field-help { margin: 6px 0 0; max-width: 75ch; }
@@ -47,10 +47,10 @@
 .downloads-choice > * + * { margin-top: 8px; }
 .downloads-choice legend { padding: 0; margin-bottom: 6px; width: 100%; max-width: 100%; box-sizing: border-box; white-space: normal; overflow-wrap: anywhere; font-size: 16px; font-weight: 700; } /* WebKit keeps a legend as wide as it was at the widest window */
 .downloads-choice .inline-check { cursor: pointer; font-size: 16px; }
-.downloads-choice .inline-check input { flex: none; width: 22px; height: 22px; margin: 0; accent-color: var(--y); }
+.downloads-choice .inline-check input { flex: none; width: 22px; height: 22px; margin: 0; accent-color: var(--accent); }
 .downloads-on-only { margin-left: 30px; }
 .downloads-note { display: grid; gap: 5px; font-size: 15px; font-weight: 700; }
-.downloads-note textarea { min-height: 64px; padding: 7px 10px; border: 1px solid var(--field-line); border-radius: 0; background: var(--field); color: var(--fg); font-weight: 400; resize: vertical; max-width: 100%; }
+.downloads-note textarea { min-height: 64px; padding: 7px 10px; border: 1px solid var(--field-line); border-radius: var(--r-field); background: var(--field); color: var(--fg); font-weight: 400; resize: vertical; max-width: 100%; }
 .downloads-note .field-help { font-weight: 400; }
 .downloads-form .form-actions { display: flex; flex-wrap: wrap; justify-content: flex-start; gap: 10px; }
 .downloads-form .form-actions button { min-height: 44px; }

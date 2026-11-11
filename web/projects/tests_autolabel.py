@@ -376,6 +376,18 @@ class ProposalReviewTests(AutoLabelBase):
         ).json()["project"]
         self.assertEqual((fresh["image_count"], fresh["accepted_boxes"], fresh["pending_boxes"]), (0, 0, 0))
 
+    def test_project_listing_counts_pictures_with_boxes_waiting_for_review(self) -> None:
+        # Two pictures, four suggested boxes between them: the box count is 4, the picture count is 2.
+        listed = self.client.get("/api/projects").json()["projects"][0]
+        self.assertEqual((listed["pending_boxes"], listed["pending_pictures"]), (4, 2))
+        BoxAnnotation.objects.filter(asset=self.assets[0], status=BoxAnnotation.STATUS_SUGGESTED).delete()
+        listed = self.client.get("/api/projects").json()["projects"][0]
+        self.assertEqual(listed["pending_pictures"], 1)
+        fresh = self.post_json(
+            "/api/projects", {"name": "New", "modality": "image", "task": "t", "labels": ["a"]}
+        ).json()["project"]
+        self.assertEqual(fresh["pending_pictures"], 0)
+
     def test_accept_above_threshold_marks_reviewer(self) -> None:
         response = self.post_json(self.review_url, {"action": "accept", "min_confidence": 0.5})
         body = response.json()

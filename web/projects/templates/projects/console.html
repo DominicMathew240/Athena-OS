@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#09090a">
+  <meta name="theme-color" content="#f5f6f8">
   <meta name="csrf-token" content="{{ csrf_token }}">
   <title>Projects · Athena console</title>
   <link rel="icon" type="image/png" href="{% static 'projects/brand/athena-mark-32.png' %}">
@@ -13,8 +13,8 @@
   <a class="skip-link" href="#main">Skip to main content</a>
   <div class="app">
     <header class="rail">
-      <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>ATHENA<small>DATA LABELLING</small></span></div>
-      <div class="rail-heading">WORKSPACE</div>
+      <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>Athena<small>Data labelling</small></span></div>
+      <div class="rail-heading">Workspace</div>
       <nav class="nav" aria-label="Main navigation">
         <a href="/" aria-current="page">Projects</a>
         {% if athena_access.can_administer %}<a href="{% url 'access-page' %}">Access</a>{% endif %}
@@ -55,7 +55,7 @@
         </div>
         <div class="table-wrap">
           <table class="desktop-table" aria-label="Projects in this workspace">
-            <thead><tr><th scope="col">PROJECT</th><th scope="col">FILES</th><th scope="col">WHAT IT IS FOR</th><th scope="col">LABELS</th><th scope="col">WHERE YOU ARE</th><th scope="col"><span class="visually-hidden">Open</span></th></tr></thead>
+            <thead><tr><th scope="col">Project</th><th scope="col">Files</th><th scope="col">What it is for</th><th scope="col">Labels</th><th scope="col">Where you are</th><th scope="col"><span class="visually-hidden">Open</span></th></tr></thead>
             <tbody id="dataset-rows"></tbody>
           </table>
           <div class="mobile-list" id="mobile-rows" role="list" aria-label="Projects in this workspace"></div>
@@ -72,7 +72,7 @@
           <button class="delete-action" id="delete-selected-project" type="button" data-needs="train" hidden>Delete this project</button>
         </div>
         <nav class="jump" id="jump-nav" aria-label="Jump to a part of this project" hidden>
-          <a href="#checklist-panel" data-panel="checklist-panel">Get started</a>
+          <a href="#checklist-panel" data-panel="checklist-panel">Overview</a>
           <a href="#labels-panel" data-panel="labels-panel">Labels</a>
           <a href="#image-assets-panel" data-panel="image-assets-panel"><span class="jump-label">Pictures</span><span class="jump-count" id="jump-corrections" hidden></span></a>
           <a href="#dataset-panel" data-panel="dataset-panel">Make a training set</a>
@@ -81,7 +81,18 @@
         </nav>
 
         <section class="panel checklist-panel" id="checklist-panel" aria-labelledby="checklist-heading">
-          <div class="panel-head"><h3 id="checklist-heading">Get started</h3><span class="progress-note" id="checklist-progress"></span></div>
+          <div class="panel-head"><h3 id="checklist-heading">Overview</h3><span class="progress-note" id="checklist-progress"></span></div>
+          <div class="overview" id="overview" hidden>
+            <div class="next-step" id="next-step" data-state="next">
+              <div class="next-step-text">
+                <h4 id="next-step-title"></h4>
+                <p id="next-step-why"></p>
+                <p class="next-step-gate" id="next-step-gate" hidden></p>
+              </div>
+              <div class="next-step-action" id="next-step-action"></div>
+            </div>
+            <dl class="project-counts" id="project-counts" aria-label="This project at a glance"></dl>
+          </div>
           <p class="panel-intro" id="checklist-intro">Follow these steps in order. The list updates itself as you work.</p>
           <ol class="checklist" id="checklist" data-check-url-template="{{ check_setup_url }}"></ol>
         </section>
@@ -353,10 +364,10 @@
   </div>
 
   <dialog id="project-dialog" aria-labelledby="project-dialog-title">
-    <div class="dialog-head"><div><h2 id="project-dialog-title">Create a project</h2><p>Say what kind of files you have and what you want to find in them.</p></div><button class="dialog-close" id="close-project-dialog" type="button" aria-label="Close without creating a project">×</button></div>
+    <div class="dialog-head"><div><h2 id="project-dialog-title">Create a project</h2><p>Name it, say what you want to find, and choose the kind of files. For example: “Dented cans”, to find dents in photos of cans.</p></div><button class="dialog-close" id="close-project-dialog" type="button" aria-label="Close without creating a project">×</button></div>
     <form id="create-project-form" class="project-form" aria-labelledby="project-dialog-title">
       <label for="project-name">Project name<input id="project-name" name="name" required maxlength="120" autocomplete="off" placeholder="e.g. Bag scanner photos"></label>
-      <label for="project-modality">What kind of files will you add?<span class="field-help">Only pictures can be labelled right now. Other kinds can be saved as a project but have no labelling tools yet.</span><select id="project-modality" name="modality" required>
+      <label for="project-modality">What kind of files will you add?<span class="field-help">Only pictures can be labelled right now (JPEG, PNG or WebP). Other kinds can be saved as a project but have no labelling tools yet.</span><select id="project-modality" name="modality" required>
         <option value="image">Pictures (images)</option><option value="video">Video (no labelling tools yet)</option><option value="audio">Audio (no labelling tools yet)</option><option value="speech">Speech (no labelling tools yet)</option><option value="text">Text or documents (no labelling tools yet)</option><option value="table">Tables (no labelling tools yet)</option><option value="time_series">Measurements over time (no labelling tools yet)</option><option value="depth">Depth maps (no labelling tools yet)</option><option value="point_cloud">3D scans (no labelling tools yet)</option><option value="custom">Something else (no labelling tools yet)</option>
       </select></label>
       <label for="custom-modality" id="custom-modality-field" hidden>What kind of files?<input id="custom-modality" name="custom_modality" maxlength="80" autocomplete="off" placeholder="e.g. thermal camera"></label>

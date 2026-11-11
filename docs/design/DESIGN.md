@@ -1,60 +1,86 @@
 # Athena console: design contract
 
-Local prototype console, synthetic data in every screenshot. This file is the single description of how the console looks.
-Its source is the athena-forge landing page (`athena-forge/frontend/src/pages/landing.css`, "the spectrum plate", and
-`athena-forge/PRODUCT.md`, which retires the older dark-blue glow/glass/gradient look). Where the console needs something the
-landing page does not have, it is listed under "Added for a tool" below and marked as a decision, not as a Forge rule.
+Local prototype console, synthetic data in every screenshot. This file is the single description of how the console looks and why.
+It replaces the earlier dark "spectrum plate" contract (2026-10-17). The redesign plan (*Beginner-Friendly Product Redesign and
+Development Task List*, 2026-10-30) asked for a calmer, lighter, easier-to-scan console for non-technical people who use it every
+day. The Athena mark and name are kept; the palette, type and shape are new.
+
+Reference for workflow and progressive disclosure: Roboflow's project-based flow (images, labels, annotation, dataset versions,
+models, deployment). Athena keeps its own words, colours and review rules. Nothing here implies Athena has Roboflow's feature set.
 
 ## The rules
 
-1. **A near-black plate, flat.** No gradient, glow, blur, glass or shadow. Square corners everywhere (the only round things are
-   the checklist step markers and the save dot).
-2. **One action colour.** Sodium yellow `#f5c400` is the main action on a screen, the focus ring, and "look here". A screen has
-   one yellow button at a time wherever possible. Everything else is an outline.
-3. **Colour carries meaning only.** Red-orange is a problem or something that deletes, green is done/ready, and the four kinds of
-   data each own one hue (pictures `#f5c400`, thermal `#ff4b2b`, audio `#21d4c4`, tables `#9b7bff`). A status is always also a word
-   or a mark (solid, dashed, hollow square), never a colour alone.
-4. **Type.** Anybody (display: headings, buttons, 700-800) / Hanken Grotesk (text) / Martian Mono (labels, ids, numbers,
-   table heads). Self-hosted, OFL-1.1. Text fields are 16 px at every width (iOS zoom).
-5. **Rules, not boxes.** A 2 px strong rule under the page header and table heads, 1 px hairlines between things, panels have a
-   1 px edge.
-6. **One focus ring.** 3 px yellow, 3 px gap, on every control, on every surface.
-7. **No hex colour outside `:root`** in `console.css`. The only exceptions are the box outlines, halos and number tags drawn over
-   a photograph in `checkscreen.css` (fixed for legibility on any picture) and the inline `rgb()` of the dialog backdrop.
+1. **A light, quiet page.** Cool off-white page (`--bg`), white panels (`--panel`), 1 px hairlines, 6-8 px corners, no gradient,
+   glass or glow. The only shadows are on things that float over the page (dialogs, the message at the bottom).
+2. **One action colour.** The blue of the Athena mark, darkened until white text on it passes 7:1 (`--accent`). It marks the main
+   action, the focus ring, and "this is where you are" (current tab, current row, the next step). A part of the page has one
+   blue button wherever possible; everything else is white with a grey edge.
+3. **Colour carries meaning only.** Green = done or ready, red = a problem or something that deletes, amber = read this first (a
+   limit, a warning, a suggestion that still needs a person). A status is always also a word or a mark (a ring, a dashed edge, a
+   tick), never a colour alone.
+4. **One type family.** Hanken Grotesk for everything: headings (650-700), labels, buttons (600), body (400). Sentence case
+   everywhere: no upper-case labels, no letter-spacing, no display face. Martian Mono stays only for code, file names and log
+   text. Text fields are 16 px at every width (iOS zoom).
+5. **Hairlines inside a panel.** A panel has a 1 px edge and 20 px padding; inside it, hairlines and spacing separate things, and
+   a card inside a panel is used only for something the person acts on (a step, a model, a snapshot).
+6. **One focus ring.** 3 px blue, 3 px gap, on every control, on every surface.
+7. **No hex colour outside `:root`** in `console.css`, `access.css` and `checkscreen.css`. The exceptions are the box outlines,
+   halos and number tags drawn over a photograph in `checkscreen.css` (fixed for legibility on any picture), the scrollbar thumb,
+   and the `rgb()` of the dialog backdrop and shadows.
 
 ## Tokens (defined once, at the top of `console.css`)
 
 | Token | Value | Use |
 |---|---|---|
-| `--bg` / `--panel` / `--panel-2` | `#09090a` / `#121214` / `#1a1a1d` | page and rail / a panel / a row, hover or card inside a panel |
-| `--field` / `--stage` | `#0c0c0e` / `#050506` | inside a text field / behind a picture being marked |
-| `--fg` / `--fg-2` / `--fg-3` | `#f2f0ea` / `#cbc9c1` / `#94938b` | text and strong rules / reading text / help text and labels |
-| `--rule` / `--rule-2` / `--field-line` | 18% / 42% of `--fg`, `#8f8e86` | hairline / panel edge / edge of a field or quiet button |
-| `--y` / `--y-ink` / `--y-tint` | `#f5c400` / `#09090a` / 12% yellow | action, focus / text on yellow and on `--fg` / "next" and "current" highlight |
-| `--bad` / `--bad-line` / `--bad-tint` | `#ff8a6e` / `#ff4b2b` / 14% | problem text / problem edge and mark / problem background |
-| `--ok` / `--ok-tint` | `#6fd19a` / 12% | done, ready |
-| `--m-image` `--m-thermal` `--m-audio` `--m-tabular` | `#f5c400` `#ff4b2b` `#21d4c4` `#9b7bff` | the four kinds of data |
+| `--bg` / `--panel` / `--panel-2` | `#f5f6f8` / `#ffffff` / `#f1f3f6` | the page / a panel, a card, the rail / a row, a hover, a card inside a panel |
+| `--field` / `--stage` | `#ffffff` / `#1b1f27` | inside a text field / behind a picture being marked |
+| `--fg` / `--fg-2` / `--fg-3` | `#171c26` / `#3b4352` / `#5b6475` | text / reading text / help text and labels |
+| `--rule` / `--rule-2` / `--field-line` | `#e1e5ec` / `#cdd3dd` / `#7c8596` | hairline / panel edge / edge of a field or quiet button |
+| `--accent` / `--accent-hover` / `--on-accent` / `--accent-tint` | `#2447b8` / `#1c3a99` / `#ffffff` / `#e9eefc` | action, focus, current / hover / text on accent / the next step and the current row |
+| `--ok` / `--ok-tint` | `#17693f` / `#e6f4ec` | done, ready |
+| `--bad` / `--bad-line` / `--bad-tint` | `#b3261e` / `#d4382c` / `#fdecea` | problem text / problem edge and mark / problem background |
+| `--warn` / `--warn-line` / `--warn-tint` | `#7a4b00` / `#d9a520` / `#fff6dc` | read-this-first text / edge and mark / background |
+| `--m-image` `--m-thermal` `--m-audio` `--m-tabular` | `#2447b8` `#d4382c` `#0f766e` `#6d4fd1` | the four kinds of data |
+| `--r-field` / `--r-card` / `--r-pill` | 6 px / 8 px / 999 px | buttons, fields, badges / panels, cards, rows (dialogs 12 px) / chips and step markers |
+
+Contrast ratios (computed from the hex values, WCAG 2 formula): `--fg` 17.1:1 and `--fg-3` 6.0:1 on a panel; white on `--accent`
+7.9:1; `--ok` 6.7:1 and `--bad` 6.5:1 on white; `--warn` 6.9:1 on `--warn-tint`; `--field-line` 3.1:1 on a panel.
 
 ## Components
 
-- **Button**, one system at the end of `console.css`: yellow fill = the main action; outline (2 px `--fg`) = anything else; red
-  outline = removes or deletes; the small variants (30 px, 1 px) live in rows and cards; a switched-off main action is an outline
-  with muted text, not dimmed yellow. Toggle/pressed = inverse (`--fg` fill, dark text).
-- **Panel** `.panel`; **notice** (yellow tint, yellow edge); **problem** (red tint, red edge); **done** (green edge).
-- **Table**: mono heads, 2 px rule under the heads, hairlines between rows, current row yellow tint.
-- **Dialog**: panel edge, head with a 2 px rule, one yellow action.
-- **Brand**: the Athena mark (`brand/athena-mark-96.png`, copied from athena-forge) and the word ATHENA in Anybody 900.
-
-## Added for a tool (my decisions, not athena-forge rules)
-
-- The console stays **dark only**: the landing page is dark and has no light variant. A light theme would be a second token set.
-- Green (`--ok`) and the problem reds exist only because a tool needs "done" and "wrong"; the landing page has no such states.
-- The Athena mark is silver and blue and is the one blue thing on screen. It is athena-forge's brand commitment, so it is kept; swap
-  `.brand-mark` in `console.css` to change it everywhere.
+- **Button**, one system near the end of `console.css`: blue fill = the main action; white with a grey edge = anything else; red
+  text and edge = removes or deletes; the small variants (32 px) live in rows and cards; a switched-off main action is an outline
+  with muted text, not a dimmed blue. A selected filter or tab is a pale blue fill with blue text.
+- **Panel** `.panel`; **note** (amber tint and edge: `.gate-note`, `.dataset-note`, `.train-ack`, `.result-limits`); **problem**
+  (red tint and edge: `.form-error`, `.dataset-problems`); **done** (green tint and edge).
+- **Overview** (new, `#overview`): at the top of an image project, one `.next-step` card with the first step that is still to do
+  (read from the same list as the checklist underneath, never computed separately) and one blue button, then a four-count strip
+  (`.project-counts`: pictures, pictures to review, snapshots saved, approved models). A person without the needed role sees the
+  same sentence the server would refuse with, and the button is switched off. The counts are fields of the project list API
+  (`image_count`, `pending_pictures` (added with this redesign: pictures with at least one box still waiting), `dataset_count`,
+  `approved_model_count`); nothing is estimated in the browser.
+- **Table**: grey head row in the body face, hairlines between rows, current row pale blue.
+- **Dialog**: white, 12 px corners, a head with a hairline, one blue action; the backdrop is translucent ink.
+- **Project tabs** (`.jump`): quiet text tabs, the current one pale blue. Names are the existing plain-language ones (Overview,
+  Labels, Pictures, Make a training set, Teach the computer, Check screens).
+- **Brand**: the Athena mark (`brand/athena-mark-96.png`) and the name "Athena" in the body face.
 - Error pages (403, 404, 500) and the "you may not open this" page share `templates/projects/message.html`.
 
-## Checked (2026-10-17, Chromium unless stated)
+## Decisions (mine, to be confirmed by the owner)
 
-axe-core (wcag2a, wcag2aa, wcag21aa, best-practice): 0 violations on sign-in, project page, the picture dialog, check-screen
-builder, operator screen and Access, at 1440 px and 390 px. Browser smoke test: 142 checks, 0 failures. Not checked: contrast of
-text drawn on a photograph, a screen reader, Safari.
+- **Light only for now.** The plan left light versus dark open. A dark theme would be a second token set under
+  `:root[data-theme="dark"]`; it is not built because nothing in this round needs it and an unused theme rots. Revisit if
+  operators work in dim rooms.
+- **Names kept, not renamed to the plan's nouns.** The plan proposes Images / Dataset versions / Models. The console's own words
+  (Pictures, snapshot, Teach the computer) were tried with a simulated non-technical user (`docs/dogfood/`) and many tests pin
+  them. The mapping to the plan's areas is in `docs/design/journey-map.md`. Renaming is a copy decision, not a styling one.
+- **The project list and the open project still share one page.** Splitting them into two routes is the larger structural step
+  in the plan (Epic C); it is not done here.
+- **Anybody (the old display face) is no longer loaded.** Its font files and licence note stay in `fonts/` until a licence pass
+  removes them.
+- **Check-screen box colours do not follow the page.** Yellow (found by the computer), teal (added by a person) and red-orange
+  (the one being looked at) stay fixed so they read on any photograph.
+
+## Checked
+
+See `docs/dogfood/2026-10-30-light-theme-redesign.md` for what was measured (Chromium, synthetic data) and what was not.

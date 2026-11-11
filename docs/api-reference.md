@@ -737,3 +737,7 @@ Synthetic shapes from `plain_comparison` (counts hand-built with `make_block`, *
 - [Bring your own model or data type](guides/bring-your-own-model.md) — for
   readers newer to ML tooling, or working with a data type other than
   images: where training happens, and how a trained model plugs in.
+
+### `pending_pictures` on `GET /api/projects` (2026-10-30)
+
+Each project object also carries `pending_pictures`: the number of pictures with at least one box still marked Needs review (`pending_boxes` counts the boxes). The Overview shows it as "Pictures to review". It is one more conditional distinct count in the existing project query (`web/projects/views.py`, `_projects_with_counts`); query cost was not measured. Test: `tests_autolabel.py`, `test_project_listing_counts_pictures_with_boxes_waiting_for_review`.

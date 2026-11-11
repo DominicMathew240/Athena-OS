@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#09090a">
+  <meta name="theme-color" content="#f5f6f8">
   <meta name="csrf-token" content="{{ csrf_token }}">
   <title>{% block title %}Check screen{% endblock %} · Athena</title>
   <link rel="icon" type="image/png" href="{% static 'projects/brand/athena-mark-32.png' %}">
@@ -14,7 +14,7 @@
   <a class="skip-link" href="#main">Skip to main content</a>
   <header class="cs-bar">
     <div class="cs-bar-inner">
-      <span class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>ATHENA</span></span>
+      <span class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>Athena</span></span>
       <nav class="cs-bar-nav" aria-label="Account">
         {% block barnav %}{% endblock %}
         <span class="cs-user" title="Signed in as {{ request.user.get_username }}">{{ request.user.get_username }}</span>

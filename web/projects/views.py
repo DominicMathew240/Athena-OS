@@ -70,7 +70,9 @@ def _project_data(project: Project) -> dict[str, Any]:
         "image_count": getattr(project, "image_count", 0),
         "accepted_boxes": getattr(project, "accepted_boxes", 0),
         "pending_boxes": getattr(project, "pending_boxes", 0),
-        # How many frozen snapshots exist; step 5 of the Get started list ticks only when this is above zero.
+        # How many pictures have at least one box still waiting for a person (the Overview says "pictures to review").
+        "pending_pictures": getattr(project, "pending_pictures", 0),
+        # How many frozen snapshots exist; step 5 of the Overview checklist ticks only when this is above zero.
         "dataset_count": getattr(project, "dataset_count", 0),
         # Step 6 ("Teach the computer") ticks only when a person has approved a model; training alone never does.
         "approved_model_count": getattr(project, "approved_model_count", 0),
@@ -105,6 +107,7 @@ def _projects_with_counts():
         image_count=Count("assets", distinct=True),
         accepted_boxes=Count("assets__annotations", filter=accepted, distinct=True),
         pending_boxes=Count("assets__annotations", filter=suggested, distinct=True),
+        pending_pictures=Count("assets", filter=suggested, distinct=True),
         dataset_count=Count("dataset_versions", distinct=True),
         approved_model_count=Count("model_versions", filter=Q(model_versions__stage="approved"), distinct=True),
         # Django ignores Meta.ordering on grouped queries, so newest-first must be explicit.

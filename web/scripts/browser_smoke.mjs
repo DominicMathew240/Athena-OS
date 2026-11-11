@@ -267,7 +267,7 @@ async function stableCount(selector) {
   return last;
 }
 
-// The project page shows one part at a time (Get started, Labels, Pictures, ...). Open a part the way a person does.
+// The project page shows one part at a time (Overview, Labels, Pictures, ...). Open a part the way a person does.
 async function openPart(panelId) {
   await page.locator(`#jump-nav a[data-panel="${panelId}"]`).click();
   await page.waitForFunction((id) => document.getElementById(id)?.classList.contains("is-current"), panelId, { timeout: 10000 });
@@ -345,9 +345,9 @@ await step("seeded project: every panel", async () => {
   await reloadPage(); // the address alone must reopen it, on a fresh load
   await page.waitForFunction(() => document.getElementById("workspace-title")?.textContent.includes("Smoke test bags"));
   pass("the address reopens the seeded project on a fresh load");
-  // One part at a time: only "Get started" is on screen when a project opens.
+  // One part at a time: only "Overview" is on screen when a project opens.
   const parts = await page.evaluate(() => [...document.querySelectorAll(".workspace > .panel.is-current")].filter((el) => el.offsetParent !== null).map((el) => el.id));
-  expect(parts.length === 1 && parts[0] === "checklist-panel", "a project opens on \"Get started\" alone, not on one long page", `expected only the checklist part on screen, found: ${parts.join(", ") || "none"}`);
+  expect(parts.length === 1 && parts[0] === "checklist-panel", "a project opens on \"Overview\" alone, not on one long page", `expected only the checklist part on screen, found: ${parts.join(", ") || "none"}`);
   await openPart("image-assets-panel");
   await page.waitForSelector(".asset-annotate");
   for (const id of ["#dataset-panel", "#train-panel", "#image-assets-panel", "#tr-model-list"]) {
@@ -368,7 +368,7 @@ await step("seeded project: every panel", async () => {
   }
 });
 
-await step("Teach part: one yellow button, one closed administrator fold (W2-U)", async () => {
+await step("Teach part: one blue button, one closed administrator fold (W2-U)", async () => {
   await openPart("train-panel");
   const info = await page.evaluate(() => {
     const panel = document.getElementById("train-panel");
@@ -386,7 +386,7 @@ await step("Teach part: one yellow button, one closed administrator fold (W2-U)"
       form: document.getElementById("tr-form").hasAttribute("data-needs")
     };
   });
-  expect(info.primary.length === 1 && info.primary[0] === "Teach the computer", "the Teach part has exactly one yellow button, \"Teach the computer\"", `yellow buttons in the Teach part: ${JSON.stringify(info.primary)}`);
+  expect(info.primary.length === 1 && info.primary[0] === "Teach the computer", "the Teach part has exactly one blue button, \"Teach the computer\"", `blue buttons in the Teach part: ${JSON.stringify(info.primary)}`);
   expect(!info.adminOpen && info.startAboveFold, "the administrator fold is closed and sits under the Teach button", "the fold is open or sits above the Teach button");
   expect(info.drawersBeforeStart <= 1, `at most one closed drawer before the Teach button (${info.drawersBeforeStart})`, `${info.drawersBeforeStart} drawers before the Teach button`);
   expect(info.pickersInFold && !info.oldCopy, "snapshot picker, tool picker and settings are inside the fold; the old copy is gone", "settings are outside the fold or the old copy is still shown");
@@ -734,7 +734,7 @@ await step("Teach part: a project with no test pictures is warned in the plan se
         expect(!got.disabled, `${next === "server" ? "with the server's warning" : "worked out from the data check"}: the Teach button stays on (advice, not a stop)`, `${next}: button off: ${JSON.stringify(got)}`);
         expect(got.warnings.length === 1 && /No pictures would be kept back/.test(got.warnings[0]) && got.last, `${next}: one amber warning ends the plan sentence`, `${next}: ${JSON.stringify(got)}`);
         expect(/It will start from/.test(got.text) && got.text.indexOf("It will start from") < got.text.indexOf("No pictures would be kept back"), `${next}: the plan sentence comes first, the warning after it`, `${next}: ${got.text}`);
-        expect(got.border === "rgb(245, 196, 0)", `${next}: the warning line is amber`, `${next}: border ${got.border}`);
+        expect(got.border === "rgb(217, 165, 32)", `${next}: the warning line is amber`, `${next}: border ${got.border}`);
         if (next === "server") await audit("Teach part with the no-test-pictures warning");
       } else {
         expect(got.warnings.length === 0, `${next}: no warning when nothing is wrong`, `${next}: ${JSON.stringify(got)}`);
@@ -1343,11 +1343,11 @@ await step("pictures part: corrections from check screens, one outline button, t
     await page.waitForFunction(() => /waiting/.test(document.getElementById("corrections-count").textContent), null, { timeout: 15000 });
     const before = await page.evaluate(() => {
       const button = document.getElementById("corrections-import");
-      const yellow = [...document.querySelectorAll("#image-assets-panel button")].filter((b) => b.checkVisibility() && getComputedStyle(b).backgroundColor === "rgb(245, 196, 0)").map((b) => b.textContent.trim());
-      return { count: document.getElementById("corrections-count").textContent, skipped: [...document.querySelectorAll("#corrections-skipped li")].map((li) => li.textContent), button: button.textContent, cls: button.className, yellow, help: document.getElementById("corrections-help").textContent };
+      const blue = [...document.querySelectorAll("#image-assets-panel button")].filter((b) => b.checkVisibility() && getComputedStyle(b).backgroundColor === "rgb(36, 71, 184)").map((b) => b.textContent.trim());
+      return { count: document.getElementById("corrections-count").textContent, skipped: [...document.querySelectorAll("#corrections-skipped li")].map((li) => li.textContent), button: button.textContent, cls: button.className, blue, help: document.getElementById("corrections-help").textContent };
     });
     expect(/^2 pictures with corrections are waiting\. 1 cannot be added:/.test(before.count) && before.skipped.length === 1 && before.skipped[0].includes(SKIP.message), "the card counts what waits and names the picture that cannot be added, with the server's reason", `before: ${JSON.stringify(before)}`);
-    expect(before.button === "Add 2 corrected pictures for review" && before.cls === "secondary" && before.yellow.length === 1 && /Add pictures/.test(before.yellow[0]), "the new button is an outline button and Add pictures stays the part's one yellow action", `button: ${JSON.stringify(before)}`);
+    expect(before.button === "Add 2 corrected pictures for review" && before.cls === "secondary" && before.blue.length === 1 && /Add pictures/.test(before.blue[0]), "the new button is an outline button and Add pictures stays the part's one blue action", `button: ${JSON.stringify(before)}`);
     expect(/Needs review/.test(before.help) && /The model in use is not changed\./.test(before.help), "what happens next is explained once, in plain words", `help: ${before.help}`);
     await audit("pictures part with the corrections card");
     await fieldSizesAtWidths("pictures part with the corrections card");
@@ -1522,7 +1522,7 @@ async function openProjectStart() {
   await page.waitForFunction((title) => document.getElementById("workspace-title")?.textContent.includes(title), "Smoke test bags");
 }
 
-await step("G3 project start: the corrections count is on the Pictures chip and in Get started, its button opens the card above the auto-suggest area (STUBBED count)", async () => {
+await step("G3 project start: the corrections count is on the Pictures chip and in the Overview, its button opens the card above the auto-suggest area (STUBBED count)", async () => {
   let waiting = 11;
   let requests = 0;
   const onRequest = (request) => { if (request.method() === "GET" && /\/feedback\/corrections$/.test(request.url())) requests += 1; };
@@ -1546,7 +1546,7 @@ await step("G3 project start: the corrections count is on the Pictures chip and 
       const label = `@${size.width}px`;
       expect(SPACED(start.chip) === "Pictures · 11 corrections" && start.chipVisible, `${label} the Pictures chip says “Pictures · 11 corrections” in words`, `chip: ${JSON.stringify(start.chip)}`);
       expect(start.state === "attention" && /Corrections waiting/.test(start.text) && /11 waiting/.test(start.text) && /11 pictures with corrections are waiting/.test(start.text) && start.button === "Open the corrections", `${label} Get started starts with a “Corrections waiting” row: the count and a button`, `row: ${JSON.stringify(start)}`);
-      expect(!/^Every step is done\./.test(start.intro), `${label} Get started no longer says every step is done while corrections wait`, `intro: ${start.intro}`);
+      expect(!/^Every step is done\./.test(start.intro), `${label} the Overview no longer says every step is done while corrections wait`, `intro: ${start.intro}`);
       progressWaiting = start.progress;
       expect(requests === 1, `${label} the count is read once per project open (no polling)`, `requests: ${requests}`);
       await page.click("#checklist .checklist-corrections button");
@@ -1556,13 +1556,13 @@ await step("G3 project start: the corrections count is on the Pictures chip and 
         const card = document.getElementById("corrections-panel");
         const rect = card.getBoundingClientRect();
         const after = (node) => Boolean(node) && Boolean(card.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING);
-        const yellow = [...document.querySelectorAll("#image-assets-panel button")].filter((b) => b.checkVisibility() && getComputedStyle(b).backgroundColor === "rgb(245, 196, 0)").map((b) => b.textContent.trim());
-        return { focus: document.activeElement?.id, top: rect.top, bottom: rect.bottom, vh: innerHeight, prev: card.previousElementSibling?.id, autolabelAfter: after(document.getElementById("autolabel-panel")), listAfter: after(document.getElementById("asset-list")), yellow,
+        const blue = [...document.querySelectorAll("#image-assets-panel button")].filter((b) => b.checkVisibility() && getComputedStyle(b).backgroundColor === "rgb(36, 71, 184)").map((b) => b.textContent.trim());
+        return { focus: document.activeElement?.id, top: rect.top, bottom: rect.bottom, vh: innerHeight, prev: card.previousElementSibling?.id, autolabelAfter: after(document.getElementById("autolabel-panel")), listAfter: after(document.getElementById("asset-list")), blue,
           steps: [...document.querySelectorAll("#image-assets-panel > .panel-steps button")].map((b) => b.textContent) };
       });
       expect(opened.focus === "corrections-heading" && opened.top >= 0 && opened.top < opened.vh * 0.5 && opened.bottom > 120, `${label} the button opens Pictures and puts the focus and the view on the corrections card`, `opened: ${JSON.stringify(opened)}`);
       expect(opened.prev === "image-upload-form" && opened.autolabelAfter && opened.listAfter, `${label} the card sits above the auto-suggest area and the picture list`, `order: ${JSON.stringify(opened)}`);
-      expect(opened.yellow.length === 1 && /Add pictures/.test(opened.yellow[0]), `${label} the part keeps one yellow action`, `yellow: ${JSON.stringify(opened.yellow)}`);
+      expect(opened.blue.length === 1 && /Add pictures/.test(opened.blue[0]), `${label} the part keeps one blue action`, `blue: ${JSON.stringify(opened.blue)}`);
       expect(opened.steps.every((text) => !/correction/i.test(text)) && opened.steps.length > 0, `${label} Back and Next name the parts, not the count`, `steps: ${JSON.stringify(opened.steps)}`);
       await audit(`pictures part with the corrections count ${label}`);
       // nothing waiting: no badge, no row, and the card keeps its old place below the list controls
@@ -1927,8 +1927,8 @@ await step("G3 results card and approve dialog: a model that did worse than the 
       const colour = (el) => getComputedStyle(el).backgroundColor;
       return { headline: headline.textContent, state: headline.dataset.state || "", headlineBg: colour(headline), next: headline.nextElementSibling?.className, line: line?.textContent || "", lineBg: line ? colour(line) : "", compare: root.querySelector(".compare-verdict")?.textContent.trim() || "" };
     });
-    expect(/^Good enough to try/.test(worse.headline) && worse.state === "" && worse.headlineBg !== "rgba(111, 209, 154, 0.12)" && worse.next === "result-worse", "the headline is not in the green style, and the amber line comes directly under it", `worse: ${JSON.stringify(worse)}`);
-    expect(/Worse than the model in use on the same test pictures\./.test(worse.line) && worse.lineBg === "rgba(245, 196, 0, 0.12)" && /Worse$/.test(worse.compare), "the line says it in words, in the amber (yellow) tint, next to the Worse word", `line: ${JSON.stringify(worse)}`);
+    expect(/^Good enough to try/.test(worse.headline) && worse.state === "" && worse.headlineBg !== "rgb(230, 244, 236)" && worse.next === "result-worse", "the headline is not in the green style, and the amber line comes directly under it", `worse: ${JSON.stringify(worse)}`);
+    expect(/Worse than the model in use on the same test pictures\./.test(worse.line) && worse.lineBg === "rgb(255, 246, 220)" && /Worse$/.test(worse.compare), "the line says it in words, in the amber tint, next to the Worse word", `line: ${JSON.stringify(worse)}`);
     await audit("results card for a worse model");
     await fieldSizesAtWidths("results card for a worse model");
     // approve: the tick comes with the dialog, comparison first
@@ -1986,6 +1986,7 @@ await step("G3 results card: percentages are rounded down, never up (STUBBED num
   });
   try {
     await openTeachFresh();
+    await page.waitForFunction(() => document.querySelector("#tr-model-list .model-summary"), null, { timeout: 15000 }); // the list fills after the readiness check; do not read it before it has
     const summaries = await page.evaluate(() => [...document.querySelectorAll("#tr-model-list .model-summary")].map((p) => p.textContent).filter((text) => /found \d+%/.test(text)));
     expect(summaries.length > 0 && summaries.every((text) => /found 99% of the boxes people drew, and was right 50% of the time/.test(text)), "99.6% reads 99%, not 100%, and 50.4% reads 50%", `summaries: ${JSON.stringify(summaries)}`);
   } finally {

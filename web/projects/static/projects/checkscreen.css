@@ -7,20 +7,20 @@
    legibility on any picture and do not follow the page tokens (dark line + white halo; yellow = found by the computer,
    teal = added by a person, red-orange = the one being looked at). */
 /* top bar */
-.cs-bar { background: var(--bg); color: var(--fg); border-bottom: 1px solid var(--rule); }
+.cs-bar { background: var(--panel); color: var(--fg); border-bottom: 1px solid var(--rule-2); }
 .cs-bar-inner { display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap; max-width: 1360px; margin: 0 auto; padding: 10px clamp(14px, 3vw, 32px); }
 .cs-bar .brand { font-size: 20px; }
 .cs-bar .brand-mark { width: 24px; height: 24px; }
 .cs-bar-nav { display: flex; align-items: center; gap: 14px; flex-wrap: wrap; }
 .cs-bar-nav form { margin: 0; }
 .cs-user { max-width: 18ch; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--fg-2); font-size: 16px; }
-.cs-signout { min-height: 44px; padding: 8px 14px; border: 1px solid var(--fg-3); background: transparent; color: var(--fg); font-size: 16px; cursor: pointer; }
-.cs-signout:hover { background: var(--fg); color: var(--y-ink); }
+.cs-signout { min-height: 44px; padding: 8px 14px; border: 1px solid var(--field-line); border-radius: var(--r-field); background: var(--panel); color: var(--fg); font-size: 16px; font-weight: 600; cursor: pointer; }
+.cs-signout:hover { background: var(--panel-2); }
 .cs-bar .cs-link { color: var(--fg); display: inline-flex; align-items: center; min-height: 44px; padding: 0 4px; }
-.cs-bar :focus-visible { outline-color: var(--y); box-shadow: 0 0 0 2px var(--fg); }
-.cs-link { color: var(--y); text-underline-offset: 3px; }
+.cs-bar :focus-visible { outline-color: var(--accent); }
+.cs-link { color: var(--accent); text-underline-offset: 3px; }
 .cs-link:hover { text-decoration-thickness: 2px; }
-.cs-page .skip-link { position: absolute; left: -9999px; top: 8px; z-index: 10; padding: 10px 14px; background: var(--y); color: var(--y-ink); }
+.cs-page .skip-link { position: absolute; left: -9999px; top: 8px; z-index: 10; padding: 10px 14px; border-radius: var(--r-field); background: var(--accent); color: var(--on-accent); }
 .cs-page .skip-link:focus { left: 8px; }
 
 /* layout */
@@ -28,15 +28,15 @@
 .cs-main:focus-visible { outline: none; box-shadow: none; }
 .cs-wrap { max-width: 760px; margin: 0 auto; display: grid; gap: 16px; }
 .cs-wrap-wide { max-width: 1360px; }
-.cs-head { border-bottom: 2px solid var(--rule-2); padding-bottom: 14px; }
+.cs-head { border-bottom: 1px solid var(--rule-2); padding-bottom: 16px; }
 .cs-head h1 { margin: 2px 0 0; max-width: 30ch; overflow-wrap: anywhere; } /* size, weight and spacing come from the shared h1 rule in console.css */
-.cs-kicker { margin: 0; color: var(--fg-3); font: 15px/1.3 var(--f-mono); letter-spacing: .1em; text-transform: uppercase; }
+.cs-kicker { margin: 0; color: var(--fg-3); font: 600 15px/1.3 var(--f-body); }
 .cs-lead { max-width: 70ch; margin: 10px 0 0; color: var(--fg-2); }
-.cs-card { border: 1px solid var(--rule-2); background: var(--panel); padding: 14px; min-width: 0; } /* same as .panel in the console */
-.cs-card h2 { margin: 0 0 10px; font-size: 19px; line-height: 1.25; letter-spacing: -.02em; display: flex; align-items: center; gap: 10px; } /* same as .panel h2 and h3 */
-.cs-step { display: inline-grid; place-items: center; width: 28px; height: 28px; flex: none; background: var(--y); color: var(--y-ink); font: 700 16px/1 var(--f-mono); }
-.cs-disclaimer { border: 2px solid var(--y); background: var(--y-tint); padding: 12px 16px; }
-.cs-disclaimer h2 { margin: 0 0 4px; font-size: 17px; letter-spacing: .02em; }
+.cs-card { border: 1px solid var(--rule-2); border-radius: var(--r-card); background: var(--panel); padding: 20px; min-width: 0; } /* same as .panel in the console */
+.cs-card h2 { margin: 0 0 12px; font-size: 19px; line-height: 1.25; letter-spacing: -.01em; display: flex; align-items: center; gap: 10px; } /* same as .panel h2 and h3 */
+.cs-step { display: inline-grid; place-items: center; width: 28px; height: 28px; flex: none; border-radius: 50%; background: var(--accent); color: var(--on-accent); font: 700 15px/1 var(--f-body); }
+.cs-disclaimer { border: 1px solid var(--warn-line); border-radius: var(--r-card); background: var(--warn-tint); padding: 14px 18px; }
+.cs-disclaimer h2 { margin: 0 0 4px; font-size: 17px; letter-spacing: 0; }
 .cs-disclaimer p { margin: 0; color: var(--fg); }
 .cs-builder { display: grid; grid-template-columns: minmax(0, 1fr) minmax(340px, 480px); gap: 18px; align-items: start; }
 .cs-form { display: grid; gap: 16px; min-width: 0; }
@@ -50,7 +50,7 @@
 .cs-field:last-child { margin-bottom: 0; }
 .cs-field label { font-weight: 700; font-size: 17px; }
 .cs-page input[type="text"], .cs-page input[type="number"], .cs-page select, .cs-page textarea, .cs-page input[type="file"] {
-  width: 100%; min-height: 40px; padding: 7px 10px; border: 1px solid var(--field-line); border-radius: 0; background: var(--field); color: var(--fg); font-size: var(--field-size); font-weight: 400; /* same field as the console */
+  width: 100%; min-height: 40px; padding: 7px 10px; border: 1px solid var(--field-line); border-radius: var(--r-field); background: var(--field); color: var(--fg); font-size: var(--field-size); font-weight: 400; /* same field as the console */
 ;
 }
 .cs-page input[type="file"] { padding: 4px; }
@@ -60,16 +60,16 @@
 .cs-fieldset { margin: 0 0 14px; padding: 0; border: 0; min-width: 0; }
 .cs-fieldset legend { padding: 0; margin-bottom: 6px; font-weight: 700; font-size: 17px; }
 .cs-checks { display: grid; gap: 6px; }
-.cs-check { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; padding: 8px 10px; border: 1px solid var(--rule); background: var(--panel-2); cursor: pointer; }
-.cs-check:has(input:checked) { border-color: var(--rule-2); }
-.cs-check input { flex: none; width: 24px; height: 24px; margin: 0; accent-color: var(--y); }
+.cs-check { display: flex; align-items: flex-start; gap: 12px; min-height: 44px; padding: 10px 12px; border: 1px solid var(--rule); border-radius: var(--r-field); background: var(--panel-2); cursor: pointer; }
+.cs-check:has(input:checked) { border-color: var(--accent); background: var(--accent-tint); }
+.cs-check input { flex: none; width: 24px; height: 24px; margin: 0; accent-color: var(--accent); }
 .cs-check > span { min-width: 0; padding-top: 1px; }
-.cs-must .cs-check { border: 2px solid var(--rule-2); background: var(--y-tint); }
+.cs-must .cs-check { border-color: var(--warn-line); background: var(--warn-tint); }
 .cs-slider-row { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 12px; align-items: center; }
-.cs-slider-row input[type="range"] { width: 100%; min-height: 44px; accent-color: var(--y); margin: 0; }
+.cs-slider-row input[type="range"] { width: 100%; min-height: 44px; accent-color: var(--accent); margin: 0; }
 .cs-slider-end { font-size: 16px; font-weight: 700; max-width: 9ch; line-height: 1.2; }
-.cs-slider-value { margin: 2px 0 0; padding: 8px 10px; background: var(--bg); border: 1px solid var(--rule); font-size: 17px; font-weight: 600; }
-.cs-suggest { margin-top: 12px; padding: 10px 12px; border: 1px solid var(--rule); background: var(--panel-2); }
+.cs-slider-value { margin: 2px 0 0; padding: 8px 12px; background: var(--bg); border: 1px solid var(--rule); border-radius: var(--r-field); font-size: 17px; font-weight: 600; }
+.cs-suggest { margin-top: 12px; padding: 12px 14px; border: 1px solid var(--rule); border-radius: var(--r-card); background: var(--panel-2); }
 .cs-suggest-title { margin: 0; font-size: 17px; font-weight: 700; }
 .cs-suggest .cs-help { color: var(--fg-2); max-width: 70ch; }
 .cs-suggest .cs-actions { margin-top: 8px; }
@@ -83,36 +83,36 @@
 .cs-inline-msg[data-tone="error"] { color: var(--bad); font-weight: 600; }
 .cs-inline-msg[data-tone="ok"] { color: var(--ok); font-weight: 600; }
 .cs-save { display: grid; gap: 8px; justify-items: start; }
-.cs-unsaved { margin: 0 0 10px; padding: 8px 10px; border: 1px dashed var(--y); background: var(--y-tint); color: var(--fg); font-size: 16px; }
+.cs-unsaved { margin: 0 0 10px; padding: 10px 12px; border: 1px dashed var(--warn-line); border-radius: var(--r-field); background: var(--warn-tint); color: var(--fg); font-size: 16px; }
 
 /* alerts */
-.cs-alert { padding: 12px 14px; border: 1px solid var(--bad-line); background: var(--bad-tint); color: var(--bad); }
+.cs-alert { padding: 12px 14px; border: 1px solid var(--bad-line); border-radius: var(--r-card); background: var(--bad-tint); color: var(--bad); }
 .cs-alert[hidden] { display: none; }
 .cs-alert p { margin: 0; }
-.cs-alert-title { font-weight: 800; margin-bottom: 4px !important; }
+.cs-alert-title { font-weight: 700; margin-bottom: 4px !important; }
 .cs-alert[data-tone="error"] { display: block; }
 .cs-details { margin-top: 8px; font-size: 16px; }
 .cs-details summary { min-height: 44px; display: flex; align-items: center; cursor: pointer; font-weight: 700; }
 .cs-details p { word-break: break-word; font-family: var(--f-mono); font-size: 15px; }
 
 /* progress */
-.cs-progress { margin-top: 14px; padding: 12px; border: 1px solid var(--rule); background: var(--bg); }
-.cs-progress progress { width: 100%; height: 8px; accent-color: var(--y); }
+.cs-progress { margin-top: 14px; padding: 14px; border: 1px solid var(--rule); border-radius: var(--r-card); background: var(--bg); }
+.cs-progress progress { width: 100%; height: 8px; accent-color: var(--accent); }
 .cs-progress-text { margin: 8px 0 0; font-weight: 600; }
 
 /* result status */
-.cs-status { display: flex; gap: 14px; align-items: flex-start; padding: 14px; border: 2px solid var(--rule-2); background: var(--panel-2); }
-.cs-status-icon { display: inline-grid; place-items: center; width: 34px; height: 34px; flex: none; border: 2px solid currentColor; font: 800 20px/1 var(--f-mono); }
+.cs-status { display: flex; gap: 14px; align-items: flex-start; padding: 16px; border: 1px solid var(--rule-2); border-radius: var(--r-card); background: var(--panel-2); }
+.cs-status-icon { display: inline-grid; place-items: center; width: 34px; height: 34px; flex: none; border: 2px solid currentColor; border-radius: 50%; font: 700 20px/1 var(--f-body); }
 .cs-status[data-state="clear"] { background: var(--ok-tint); color: var(--ok); }
 .cs-status[data-state="flagged"] { background: var(--bad-tint); color: var(--bad); }
-.cs-status[data-state="needs_review"] { background: var(--y-tint); color: var(--fg); }
+.cs-status[data-state="needs_review"] { background: var(--warn-tint); color: var(--fg); }
 .cs-status[data-state="failed"] { background: var(--bad-tint); color: var(--bad); }
-.cs-status-text { margin: 0; font-size: clamp(22px, 3.4vw, 28px); font-weight: 800; line-height: 1.2; color: var(--fg); overflow-wrap: anywhere; }
+.cs-status-text { margin: 0; font-size: clamp(22px, 3.4vw, 28px); font-weight: 700; line-height: 1.2; color: var(--fg); overflow-wrap: anywhere; }
 .cs-status-detail { margin: 6px 0 0; color: var(--fg-2); font-size: 16px; }
-.cs-not-final { margin: 10px 0 14px; padding: 8px 12px; border: 2px solid var(--y); background: var(--panel-2); font-size: 17px; }
+.cs-not-final { margin: 10px 0 14px; padding: 10px 14px; border: 1px solid var(--warn-line); border-radius: var(--r-field); background: var(--warn-tint); font-size: 17px; }
 
 /* picture + overlay */
-.cs-stage-holder { margin: 4px 0 16px; background: var(--stage); padding: 8px; display: flex; justify-content: center; }
+.cs-stage-holder { margin: 4px 0 16px; background: var(--stage); padding: 8px; border-radius: var(--r-card); display: flex; justify-content: center; }
 .cs-stage-holder:empty { display: none; }
 .cs-stage { position: relative; display: inline-block; max-width: 100%; line-height: 0; }
 .cs-stage-img { display: block; max-width: 100%; max-height: 80vh; width: auto; height: auto; background: var(--stage); }
@@ -124,59 +124,59 @@
 g.is-active .cs-box-line { stroke: #ff4b2b; stroke-width: 4; }
 g.is-active .cs-box-halo { stroke-width: 8; }
 .cs-tags { position: absolute; inset: 0; pointer-events: none; overflow: hidden; }
-.cs-tag { position: absolute; transform: translateY(-100%); min-width: 22px; padding: 2px 6px; background: #101211; color: #fff; border: 2px solid #fff; font: 700 16px/1.2 var(--f-mono); text-align: center; }
+.cs-tag { position: absolute; transform: translateY(-100%); min-width: 22px; padding: 2px 6px; background: #101211; color: #fff; border: 2px solid #fff; font: 700 16px/1.2 var(--f-body); text-align: center; }
 .cs-tag-inside { transform: none; }
 .cs-tag-added { background: var(--m-audio); color: #101211; }
 .cs-tag.is-active { background: var(--bad-line); }
 .cs-draw-layer { position: absolute; inset: 0; pointer-events: none; }
-.cs-draw-layer.is-on { pointer-events: auto; cursor: crosshair; touch-action: none; outline: 3px dashed var(--y); outline-offset: -3px; }
+.cs-draw-layer.is-on { pointer-events: auto; cursor: crosshair; touch-action: none; outline: 3px dashed var(--accent); outline-offset: -3px; }
 
 /* findings */
 .cs-card h3 { margin: 16px 0 8px; font-size: 19px; }
 .cs-detections { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
-.cs-det { padding: 10px 12px; border: 1px solid var(--rule-2); background: var(--panel-2); }
-.cs-det[data-verdict="true_positive"] { border: 2px solid var(--ok); }
-.cs-det[data-verdict="false_positive"] { border: 2px solid var(--bad-line); }
+.cs-det { padding: 12px 14px; border: 1px solid var(--rule-2); border-radius: var(--r-card); background: var(--panel); }
+.cs-det[data-verdict="true_positive"] { border-color: var(--ok); background: var(--ok-tint); }
+.cs-det[data-verdict="false_positive"] { border-color: var(--bad-line); background: var(--bad-tint); }
 .cs-det-head { display: flex; flex-wrap: wrap; align-items: center; gap: 10px; }
-.cs-det-num { display: inline-grid; place-items: center; min-width: 28px; height: 28px; padding: 0 6px; background: var(--fg); color: var(--y-ink); font: 700 16px/1 var(--f-mono); }
+.cs-det-num { display: inline-grid; place-items: center; min-width: 28px; height: 28px; padding: 0 6px; border-radius: 50%; background: var(--fg); color: var(--on-accent); font: 700 15px/1 var(--f-body); }
 .cs-det-label { font-size: 20px; overflow-wrap: anywhere; }
 .cs-det-sure { color: var(--fg-2); font-size: 17px; font-weight: 600; }
 .cs-det-actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
 .cs-det-msg { margin-top: 6px; }
-.cs-wrong-panel { margin-top: 10px; padding: 10px; border: 1px solid var(--rule); background: var(--bg); display: grid; gap: 6px; }
+.cs-wrong-panel { margin-top: 10px; padding: 12px; border: 1px solid var(--rule); border-radius: var(--r-field); background: var(--bg); display: grid; gap: 6px; }
 .cs-wrong-panel label { font-weight: 700; font-size: 17px; }
-.cs-missed { margin: 16px 0 12px; border: 1px solid var(--rule-2); background: var(--panel-2); }
+.cs-missed { margin: 16px 0 12px; border: 1px solid var(--rule-2); border-radius: var(--r-card); background: var(--panel-2); }
 .cs-missed > summary { min-height: 48px; display: flex; align-items: center; padding: 0 14px; font-weight: 700; cursor: pointer; }
 .cs-missed-form { padding: 0 14px 14px; }
 .cs-saved-list { margin: 10px 0 0; padding-left: 20px; font-size: 17px; }
-.cs-feedback-note { margin: 14px 0 0; padding: 10px 12px; border: 1px solid var(--rule); background: var(--bg); font-size: 16px; }
+.cs-feedback-note { margin: 14px 0 0; padding: 12px 14px; border: 1px solid var(--rule); border-radius: var(--r-field); background: var(--bg); font-size: 16px; }
 
 /* decisions */
 .cs-decisions { display: flex; flex-wrap: wrap; gap: 10px; }
 .cs-page .cs-decide { display: grid; gap: 2px; justify-items: start; text-align: left; min-height: 56px; padding: 8px 13px; }
-.cs-decide-label { font-weight: 800; font-size: 16px; }
+.cs-decide-label { font-weight: 700; font-size: 16px; }
 .cs-decide-help { font-size: 15px; font-weight: 400; opacity: .95; }
-.cs-recorded { margin-top: 12px; padding: 10px 14px; border: 2px solid var(--ok); background: var(--ok-tint); color: var(--ok); }
+.cs-recorded { margin-top: 12px; padding: 12px 16px; border: 1px solid var(--ok); border-radius: var(--r-card); background: var(--ok-tint); color: var(--ok); }
 .cs-recorded p { margin: 0; }
-.cs-recorded-title { font-weight: 800; }
+.cs-recorded-title { font-weight: 700; }
 .cs-recorded .cs-help { color: var(--ok); }
 
 /* builder preview */
-.cs-mock { border: 1px solid var(--rule-2); padding: 12px; background: var(--bg); display: grid; gap: 8px; }
-.cs-mock-title { margin: 0; font-size: 24px; font-weight: 800; line-height: 1.2; overflow-wrap: anywhere; }
+.cs-mock { border: 1px solid var(--rule-2); border-radius: var(--r-card); padding: 16px; background: var(--bg); display: grid; gap: 8px; }
+.cs-mock-title { margin: 0; font-size: 24px; font-weight: 700; line-height: 1.2; overflow-wrap: anywhere; }
 .cs-facts { margin: 0; display: grid; gap: 4px; font-size: 16px; }
 .cs-facts div { display: grid; grid-template-columns: minmax(110px, 9em) minmax(0, 1fr); gap: 8px; padding: 4px 0; border-top: 1px solid var(--rule); }
 .cs-facts dt { color: var(--fg-3); }
 .cs-facts dd { margin: 0; font-weight: 600; overflow-wrap: anywhere; }
 .cs-mini-h { margin: 8px 0 4px !important; font-size: 17px !important; }
 .cs-says { list-style: none; margin: 0; padding: 0; display: grid; gap: 6px; }
-.cs-say { display: flex; gap: 10px; align-items: flex-start; padding: 8px 10px; border: 1px solid var(--rule); background: var(--panel-2); }
+.cs-say { display: flex; gap: 10px; align-items: flex-start; padding: 10px 12px; border: 1px solid var(--rule); border-radius: var(--r-field); background: var(--panel-2); }
 .cs-say .cs-status-icon { width: 28px; height: 28px; font-size: 16px; }
 .cs-say[data-state="clear"] .cs-status-icon { color: var(--ok); }
 .cs-say[data-state="flagged"] .cs-status-icon { color: var(--bad); }
 .cs-say[data-state="needs_review"] .cs-status-icon { color: var(--fg); }
-.cs-try { margin-top: 18px; padding-top: 14px; border-top: 2px solid var(--rule-2); }
-.cs-dialog { width: min(520px, calc(100vw - 28px)); padding: 20px; border: 2px solid var(--rule-2); background: var(--panel); }
+.cs-try { margin-top: 18px; padding-top: 16px; border-top: 1px solid var(--rule-2); }
+.cs-dialog { width: min(520px, calc(100vw - 28px)); padding: 24px; border: 1px solid var(--rule-2); border-radius: 12px; background: var(--panel); }
 .cs-dialog h2 { margin: 0 0 8px; font-size: 20px; }
 .cs-dialog p { margin: 0; }
 
