@@ -3,7 +3,7 @@
 # Versions below are the ones the SAM + CLIP pipeline and the torchvision reference training backend
 # were exercised with. torchvision 0.24.1 is the release built against torch 2.9.1.
 numpy==2.1.3
-torch==2.9.1
+torch==2.15.0
 torchvision==0.24.1
 transformers==5.17.0
 
