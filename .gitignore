@@ -10,3 +10,6 @@ frontend/dist/
 /sdk
 /tests
 /web
+
+__pycache__/
+*.pyc

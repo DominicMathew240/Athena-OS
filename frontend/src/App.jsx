@@ -9,7 +9,7 @@ import refinery from "./assets/landing/refinery-skyline.jpg";
 import safety from "./assets/landing/safety-worker.jpg";
 import welding from "./assets/landing/welding.jpg";
 
-const REPO = "https://github.com/DominicMathew240/Athena-OS";
+const PORTFOLIO = site.founder.url;
 const TICKER = [
   "Parking occupancy",
   "Store foot traffic",
@@ -36,9 +36,9 @@ function Brand() {
   );
 }
 
-function GithubButton({ className, children, testId }) {
+function PortfolioButton({ className, children, testId }) {
   return (
-    <a className={className} href={REPO} data-testid={testId}>
+    <a className={className} href={PORTFOLIO} data-testid={testId}>
       {children}
     </a>
   );
@@ -229,13 +229,10 @@ export default function App() {
             </a>
           </nav>
           <div className="lp-nav-cta">
-            <GithubButton className="lp-btn lp-btn--ghost" testId="landing-github-button">
-              GitHub
-            </GithubButton>
-            <GithubButton className="lp-btn lp-btn--primary" testId="landing-nav-cta-button">
-              Get the code
+            <PortfolioButton className="lp-btn lp-btn--primary" testId="landing-nav-cta-button">
+              Portfolio
               <Icon name="arrow" size={16} />
-            </GithubButton>
+            </PortfolioButton>
             <button
               className="lp-menu"
               id="lp-menu"
@@ -269,10 +266,10 @@ export default function App() {
                 rack — then tells you what to do next. No code. No data science.
               </p>
               <div className="lp-cta-row">
-                <GithubButton className="lp-btn lp-btn--primary lp-btn--lg" testId="landing-hero-cta-button">
-                  Get the code
+                <PortfolioButton className="lp-btn lp-btn--primary lp-btn--lg" testId="landing-hero-cta-button">
+                  Visit the portfolio
                   <Icon name="arrow" size={18} />
-                </GithubButton>
+                </PortfolioButton>
                 <a className="lp-btn lp-btn--line lp-btn--lg" href="#how" data-testid="landing-hero-secondary-button">
                   See how it works
                 </a>
@@ -443,10 +440,10 @@ export default function App() {
                     you can ask it.
                   </p>
                 </div>
-                <GithubButton className="lp-btn lp-btn--primary lp-case-cta" testId="landing-case-custom-cta">
-                  Get the code
+                <PortfolioButton className="lp-btn lp-btn--primary lp-case-cta" testId="landing-case-custom-cta">
+                  Visit the portfolio
                   <Icon name="arrow" size={16} />
-                </GithubButton>
+                </PortfolioButton>
               </article>
             </div>
           </div>
@@ -612,7 +609,7 @@ export default function App() {
                 <b>06</b> Who is behind this
               </p>
               <h2 className="lp-h2" id="founder-title">
-                Founder, and the model behind Inspec-Ther.
+                Founder, Athena Vision, and Inspec-Ther.
               </h2>
             </div>
             <div className="lp-about-grid">
@@ -621,22 +618,27 @@ export default function App() {
                 <h3>{site.founder.name}</h3>
                 <p>{site.founder.summary}</p>
                 <p className="lp-about-links">
-                  <a href={site.founder.url}>Public site</a>
-                  <a href={site.founder.sameAs[0]}>GitHub</a>
-                  <a href={site.founder.sameAs[1]}>LinkedIn</a>
+                  <a href={site.founder.url}>Portfolio</a>
+                </p>
+              </article>
+              <article className="lp-about-card lp-reveal">
+                <p className="lp-about-kicker">Athena Vision</p>
+                <h3>{site.athenaVision.name}</h3>
+                <p>{site.athenaVision.summary}</p>
+                <p className="lp-about-links">
+                  <a href={site.founder.url}>Portfolio</a>
                 </p>
               </article>
               <article className="lp-about-card lp-reveal">
                 <p className="lp-about-kicker">Inspec-Ther</p>
-                <h3>{site.inspecTher.model}</h3>
+                <h3>{site.inspecTher.name}</h3>
                 <p>
                   {site.inspecTher.name} is {site.inspecTher.description.replace(/\.$/, "")}.{" "}
                   {site.inspecTher.modelNote}
                 </p>
                 <p className="lp-about-links">
                   <a href={site.inspecTher.url}>{site.inspecTher.name}</a>
-                  <a href={site.inspecTher.sameAs[1]}>Build notes</a>
-                  <a href={site.inspecTher.sameAs[0]}>Product Hunt</a>
+                  <a href={site.founder.url}>Portfolio</a>
                 </p>
               </article>
             </div>
@@ -671,12 +673,12 @@ export default function App() {
             <h2 className="lp-h2" id="final-title">
               Your first report in about a minute.
             </h2>
-            <p className="lp-sub">Get the code, run it on your own server, add a photo. That&apos;s it.</p>
+            <p className="lp-sub">See the work, the models, and the products on the portfolio.</p>
             <div className="lp-cta-row">
-              <GithubButton className="lp-btn lp-btn--primary lp-btn--lg" testId="landing-final-cta-button">
-                Get the code
+              <PortfolioButton className="lp-btn lp-btn--primary lp-btn--lg" testId="landing-final-cta-button">
+                Visit the portfolio
                 <Icon name="arrow" size={18} />
-              </GithubButton>
+              </PortfolioButton>
               <a className="lp-btn lp-btn--line lp-btn--lg" href="#how" data-testid="landing-final-how">
                 See how it works
               </a>

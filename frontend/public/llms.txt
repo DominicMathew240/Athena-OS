@@ -3,8 +3,7 @@
 
 ## Start here
 - [Home](https://dominicmathew240.github.io/Athena-OS/): Public landing page (no backend, no sign-in)
-- [Source](https://github.com/DominicMathew240/Athena-OS): Apache-2.0 code for the console, SDK and CLI
-- [Founder](https://dominic.strateticsxp.com/): Ts. Dominic Mathew, Co-Founder and CTO of Stratetics Experts
+- [Portfolio](https://dominic.strateticsxp.com/): Ts. Dominic Mathew, Co-Founder and CTO of Stratetics Experts
 - [Inspec-Ther](https://inspec-ther.com/): AI-driven thermal inspection of solar PV assets
 
 ## What it does
@@ -13,8 +12,11 @@
 - Built-in open Qwen vision model, or any OpenAI-compatible endpoint
 - Optional path to label pictures and train a dedicated detector
 
+## Athena Vision
+In-house Segment and Detect models for assisted annotation: label one picture, then review AI drafts on the rest. Bounding boxes, masks, and export to COCO, YOLO or VOC. This is the vision stack behind Inspec-Ther.
+
 ## Related product
-Inspec-Ther is the solar inspection product. The in-house vision stack behind it is Athena Vision (Segment and Detect). This page is the open-source Athena OS toolkit, not the hosted Inspec-Ther app.
+Inspec-Ther is the solar inspection product. Athena Vision (Segment and Detect) is the in-house vision stack behind it. This page is the open-source Athena OS toolkit, not the hosted Inspec-Ther app.
 
 ## Access
-This site is a static page. There is no account, API or cloud service here. Self-host the console from the GitHub repository.
+This site is a static page. There is no account, API or cloud service here. See the portfolio for the work and the products.
