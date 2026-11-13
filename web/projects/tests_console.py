@@ -197,7 +197,7 @@ class ConsolePageTests(TestCase):
 class DeploymentSettingsTests(TestCase):
     """Run Django in a clean subprocess so each case sees real production settings."""
 
-    SECRET = "x7Qm2vLp9RtZ4sWn8KdYc3HbJf6GaTe1UoPiXr5MvNzEq0BhCw"
+    SECRET = "ci-only-ci-only-ci-only-ci-only-ci-only-ci-only-ci-only"
 
     def manage(self, *args: str, **env: str) -> subprocess.CompletedProcess[str]:
         base = {"PATH": os.environ.get("PATH", ""), "HOME": tempfile.gettempdir()}
