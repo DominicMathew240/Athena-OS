@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Icon } from "./icons.jsx";
 import { SCENE_ORDER, SCENES } from "./scenes.js";
+import site from "./content/site.json";
 import pipe from "./assets/landing/pipe-corrosion.jpg";
 import parking from "./assets/landing/parking-aerial.jpg";
 import store from "./assets/landing/store-entrance.jpg";
@@ -597,6 +598,29 @@ export default function App() {
                 <h3>Grow into custom models</h3>
                 <p>When a check repeats every day, label pictures and train a dedicated detector — no code.</p>
               </div>
+            </div>
+          </div>
+        </section>
+
+        <section className="lp-section lp-faq" id="faq" aria-labelledby="faq-title">
+          <div className="lp-container">
+            <div className="lp-head lp-reveal">
+              <p className="lp-eyebrow">
+                <b>06</b> Questions
+              </p>
+              <h2 className="lp-h2" id="faq-title">
+                Straight answers.
+              </h2>
+            </div>
+            <div className="lp-faq-list">
+              {site.faq.map((item) => (
+                <details key={item.q} className="lp-faq-item lp-reveal">
+                  <summary>
+                    <h3>{item.q}</h3>
+                  </summary>
+                  <p>{item.a}</p>
+                </details>
+              ))}
             </div>
           </div>
         </section>

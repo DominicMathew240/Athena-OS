@@ -1,0 +1,15 @@
+# Athena OS
+> Athena OS is open-source vision AI for operations teams. Show it a photo or a short video, ask a question in plain words, and get counts, marked areas and next steps. Self-hosted. Apache-2.0.
+
+## Start here
+- [Home](https://dominicmathew240.github.io/Athena-OS/): Public landing page (no backend, no sign-in)
+- [Source](https://github.com/DominicMathew240/Athena-OS): Apache-2.0 code for the console, SDK and CLI
+
+## What it does
+- Ask a camera photo a question in plain words
+- Ready-made checks: parking occupancy, store foot traffic, corrosion, surface defects, safety gear
+- Built-in open Qwen vision model, or any OpenAI-compatible endpoint
+- Optional path to label pictures and train a dedicated detector
+
+## Access
+This site is a static page. There is no account, API or cloud service here. Self-host the console from the GitHub repository.

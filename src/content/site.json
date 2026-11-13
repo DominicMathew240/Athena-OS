@@ -1,0 +1,32 @@
+{
+  "siteUrl": "https://dominicmathew240.github.io/Athena-OS",
+  "repoUrl": "https://github.com/DominicMathew240/Athena-OS",
+  "name": "Athena OS",
+  "headline": "Ask your cameras anything.",
+  "definition": "Athena OS is open-source vision AI for operations teams. Show it a photo or a short video, ask a question in plain words, and get counts, marked areas and next steps. Self-hosted. Apache-2.0.",
+  "description": "Athena OS is open-source vision AI for operations teams. Show it a photo, ask in plain words, get counts and next steps. Self-hosted, Apache-2.0.",
+  "features": [
+    "Ask a question in plain words about a photo or short video",
+    "Ready-made checks for parking, foot traffic, corrosion, defects and safety gear",
+    "Open-source Qwen by default, or any OpenAI-compatible AI",
+    "Runs on your own server with no Athena cloud"
+  ],
+  "faq": [
+    {
+      "q": "What is Athena OS?",
+      "a": "Athena OS is open-source vision AI for operations teams. Show it a photo or a short video and ask a question in plain words. It counts, spots and explains — then tells you what to do next."
+    },
+    {
+      "q": "Do I need to write code?",
+      "a": "No. Pick a ready-made check like parking occupancy, or write your question the way you would ask a colleague. No data science."
+    },
+    {
+      "q": "Where does it run?",
+      "a": "On your own server. Apache-2.0. Pictures can stay on your network. There is no Athena cloud on this page."
+    },
+    {
+      "q": "Which AI does it use?",
+      "a": "It ships with the open Qwen vision-language model. You can also plug in any AI that speaks the OpenAI-compatible API, including OpenAI, Gemini, OpenRouter, vLLM, Ollama and LM Studio."
+    }
+  ]
+}
