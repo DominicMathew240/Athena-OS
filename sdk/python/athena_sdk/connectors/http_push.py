@@ -285,7 +285,7 @@ class _Handler(BaseHTTPRequestHandler):
         super().setup()
         self.connection.settimeout(self.owner.read_timeout)
 
-    def log_message(self, format: str, *args: Any) -> None:  # noqa: A002
+    def log_message(self, format: str, *args: Any) -> None:
         logger.debug("%s - %s", self.address_string(), format % args)
 
     def _reply(self, status: int, body: dict[str, Any], headers: dict[str, str] | None = None) -> None:
@@ -300,7 +300,7 @@ class _Handler(BaseHTTPRequestHandler):
         self.end_headers()
         self.wfile.write(data)
 
-    def do_GET(self) -> None:  # noqa: N802
+    def do_GET(self) -> None:
         if self.path == "/healthz":
             health = self.owner.health()
             self._reply(200 if health.status != "down" else 503, {"status": health.status})
@@ -310,9 +310,9 @@ class _Handler(BaseHTTPRequestHandler):
     def _not_allowed(self) -> None:
         self._reply(405, {"error": "Use POST /v1/items."}, {"Allow": "POST"})
 
-    do_PUT = do_DELETE = do_PATCH = do_HEAD = do_OPTIONS = _not_allowed  # noqa: N815
+    do_PUT = do_DELETE = do_PATCH = do_HEAD = do_OPTIONS = _not_allowed
 
-    def do_POST(self) -> None:  # noqa: N802
+    def do_POST(self) -> None:
         owner = self.owner
         if self.path != "/v1/items":
             return self._reply(404, {"error": "Not found."})

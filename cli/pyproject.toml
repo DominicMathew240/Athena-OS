@@ -16,6 +16,9 @@ dependencies = [
 [project.scripts]
 athena = "athena_cli.main:main"
 
+[project.urls]
+Homepage = "https://github.com/DominicMathew240/Athena-OS"
+
 [tool.setuptools]
 packages = [
     "athena_cli",

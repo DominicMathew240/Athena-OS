@@ -72,7 +72,6 @@ def test_estimate_noise_floor_and_snr_short_clip_does_not_collapse_to_a_single_f
     `snr_db == 0.0` (see `_frame_size_for`'s docstring for why that would be
     a silent-misclassification bug, not just a coarser estimate)."""
     import numpy as np
-
     from examples.adapters.audio_noise_adapter import _estimate_noise_floor_and_snr
 
     rng = np.random.default_rng(0)

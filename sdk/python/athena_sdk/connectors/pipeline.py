@@ -140,7 +140,7 @@ class Pipeline:
                     if self._stop_producer.is_set():
                         break
                 return
-            except Exception as error:  # noqa: BLE001 - a connector bug must not kill the pipeline
+            except Exception as error:
                 self.counters["connector_errors"] += 1
                 self._last_error = f"connector: {error}"
                 logger.exception("connector %s failed while polling", self.connector.name)
@@ -200,7 +200,7 @@ class Pipeline:
                 continue
             try:
                 self._deliver(item)
-            except Exception as error:  # noqa: BLE001 - never let the worker die with items queued
+            except Exception as error:
                 logger.exception("unexpected delivery failure")
                 self._last_error = f"pipeline: {error}"
                 self._release(item, f"internal error: {error}")
@@ -254,7 +254,7 @@ class Pipeline:
                     self._release(item, "shutdown while waiting to retry")
                     return
                 continue
-            except Exception as error:  # noqa: BLE001 - a sink bug is treated as transient
+            except Exception as error:
                 self.ledger.attempt_failed(key, f"sink bug: {error}")
                 self._note_failure(error, False)
                 logger.exception("sink raised an unexpected error")
@@ -277,7 +277,7 @@ class Pipeline:
             try:
                 self.ledger.mark_submitted(key, receipt)
                 break
-            except Exception:  # noqa: BLE001
+            except Exception:
                 logger.exception("ledger write failed after delivery (try %d)", tries + 1)
         self.counters["submitted"] += 1
         if receipt.detail.get("sha256_match") is False:
@@ -308,7 +308,7 @@ class Pipeline:
     def _safe(self, fn: Callable[..., None], *args: Any, **kwargs: Any) -> None:
         try:
             fn(*args, **kwargs)
-        except Exception as error:  # noqa: BLE001 - the ledger protects against a re-offer duplicating
+        except Exception as error:
             self.counters["ack_errors"] += 1
             self._last_error = f"{getattr(fn, '__name__', 'callback')}: {error}"
             logger.exception("connector callback failed")
@@ -332,18 +332,18 @@ class Pipeline:
             return
         try:
             self._on_event({"event": name, "ts": utcnow().isoformat(), **fields})
-        except Exception:  # noqa: BLE001
+        except Exception:
             logger.exception("event callback failed")
 
     # -- observability -------------------------------------------------------------------
     def health(self) -> dict[str, Any]:
         try:
             source = self.connector.health()
-        except Exception as error:  # noqa: BLE001
+        except Exception as error:
             source = Health("down", f"health check raised: {error}")
         try:
             target = self.sink.health()
-        except Exception as error:  # noqa: BLE001
+        except Exception as error:
             target = Health("down", f"health check raised: {error}")
         with self._lock:
             failures, unavailable = self._consecutive_failures, self._sink_unavailable

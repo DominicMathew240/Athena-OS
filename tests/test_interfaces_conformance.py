@@ -14,6 +14,7 @@ import importlib.util
 from datetime import datetime, timezone
 
 import pytest
+
 from athena_sdk.contracts import (
     AssetStateFinding,
     DomainPolicy,
@@ -252,9 +253,8 @@ def test_yolo_reference_adapter_conforms_and_runs_end_to_end(tmp_path) -> None:
     generated image so this test needs no network access, downloaded
     weights, or external image fetch."""
     import numpy as np
-    from PIL import Image
-
     from examples.adapters.yolo_adapter import YOLOAdapter
+    from PIL import Image
 
     image_path = tmp_path / "synthetic.jpg"
     Image.fromarray(np.zeros((64, 64, 3), dtype=np.uint8)).save(image_path)

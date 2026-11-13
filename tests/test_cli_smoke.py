@@ -6,6 +6,7 @@ from __future__ import annotations
 import importlib.util
 
 import pytest
+
 from athena_cli.main import build_parser, main
 
 _NUMPY_AVAILABLE = importlib.util.find_spec("numpy") is not None

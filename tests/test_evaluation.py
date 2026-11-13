@@ -3,14 +3,14 @@
 
 from __future__ import annotations
 
+from examples.synthetic_pipeline.data import build_synthetic_records
+
 from athena_sdk.evaluation import (
     EvaluationResult,
     ExactMatchMetric,
     LabeledDataset,
     Sample,
 )
-
-from examples.synthetic_pipeline.data import build_synthetic_records
 
 
 def test_exact_match_metric() -> None:

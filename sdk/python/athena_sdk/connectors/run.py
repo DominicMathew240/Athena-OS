@@ -81,7 +81,7 @@ def main(argv: Sequence[str] | None = None) -> int:
 
     try:
         pipeline.start()
-    except Exception as error:  # noqa: BLE001 - e.g. the port is taken or a directory is unwritable
+    except Exception as error:
         emit({"event": "start_failed", "error": str(error)})
         ledger.close()
         return 3

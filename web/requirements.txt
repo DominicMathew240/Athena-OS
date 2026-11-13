@@ -4,3 +4,5 @@ whitenoise==6.9.0
 gunicorn==26.2.0
 django-storages[s3]==1.14.6
 boto3==1.43.125
+httpx==0.28.1
+cryptography==44.0.3

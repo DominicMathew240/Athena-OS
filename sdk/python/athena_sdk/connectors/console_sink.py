@@ -59,7 +59,7 @@ _FILENAME_SAFE = re.compile(r"[^A-Za-z0-9._-]+")
 
 
 class _NoRedirect(urllib.request.HTTPRedirectHandler):
-    def redirect_request(self, *args: Any, **kwargs: Any) -> None:  # noqa: D102
+    def redirect_request(self, *args: Any, **kwargs: Any) -> None:
         return None
 
 

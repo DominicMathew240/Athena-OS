@@ -1,13 +1,14 @@
 # SPDX-License-Identifier: Apache-2.0
 """Tests for open-source reference domain packs."""
 
-from datetime import datetime, timezone
 import uuid
+from datetime import datetime, timezone
+
+from examples.domain_packs.acoustic_condition_pack import AcousticConditionDomainPack
+from examples.domain_packs.solar_thermal_pack import SolarThermalDomainPack
 
 from athena_sdk.contracts import AssetStateFinding, Severity
 from athena_sdk.interfaces.domain_pack import DomainPack
-from examples.domain_packs.acoustic_condition_pack import AcousticConditionDomainPack
-from examples.domain_packs.solar_thermal_pack import SolarThermalDomainPack
 
 
 def test_solar_thermal_domain_pack_implements_interface():

@@ -9,10 +9,10 @@ import sys
 from pathlib import Path
 
 import pytest
-from athena_sdk import contracts
+from examples.synthetic_pipeline.data import build_synthetic_records
 from pydantic import ValidationError
 
-from examples.synthetic_pipeline.data import build_synthetic_records
+from athena_sdk import contracts
 
 RECORDS = build_synthetic_records()
 REPO_ROOT = Path(__file__).resolve().parent.parent

@@ -9,7 +9,6 @@ from __future__ import annotations
 from athena_sdk.client import AthenaClient, InferenceClient
 from athena_sdk.contracts import AssetStateFinding, Model, Observation
 from athena_sdk.registry import ModelRegistry
-
 from examples.synthetic_pipeline.data import build_synthetic_records
 
 

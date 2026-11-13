@@ -20,7 +20,6 @@ from pathlib import Path
 
 from athena_sdk.contracts import Modality, Observation
 from athena_sdk.interfaces import LocalRuntime
-
 from examples.adapters.audio_noise_adapter import AudioNoiseAnalysisAdapter
 from examples.audio_pipeline.data import write_synthetic_wav
 from examples.domain_packs.acoustic_condition_pack import AcousticConditionDomainPack

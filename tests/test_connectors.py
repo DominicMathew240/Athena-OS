@@ -30,6 +30,7 @@ from pathlib import Path
 from urllib.parse import parse_qs
 
 import pytest
+
 from athena_sdk.connectors import (
     AthenaConsoleSink,
     BoundedQueue,

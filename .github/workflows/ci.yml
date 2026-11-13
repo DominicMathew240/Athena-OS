@@ -25,7 +25,7 @@ jobs:
           python-version: "3.12"
 
       - name: Install ruff
-        run: pip install ruff
+        run: pip install ruff==0.16.3
 
       - name: Run ruff
         run: ruff check sdk/python cli examples tests
@@ -60,3 +60,15 @@ jobs:
 
       - name: OSS hygiene (no leaked local files)
         run: pytest -q tests/test_oss_hygiene.py
+
+  secrets:
+    name: Secret scan (working tree)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install gitleaks
+        run: |
+          curl -sSfL "https://github.com/gitleaks/gitleaks/releases/download/v8.24.3/gitleaks_8.24.3_linux_x64.tar.gz" \
+            | tar -xz gitleaks
+      - name: Scan the current tree, not git history
+        run: ./gitleaks detect --no-git --redact --source . --exit-code 1

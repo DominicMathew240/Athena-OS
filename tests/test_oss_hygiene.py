@@ -34,6 +34,18 @@ def test_forbidden_paths_are_not_tracked():
     assert leaked == [], leaked
 
 
+def test_web_requirements_declare_modules_imported_at_boot():
+    """The console imports these while loading URLs; CI installs only requirements.txt."""
+    text = (REPO / "web" / "requirements.txt").read_text()
+    names = {
+        line.split("#")[0].split("==")[0].split("[")[0].strip().lower()
+        for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    }
+    assert "httpx" in names
+    assert "cryptography" in names
+
+
 def test_env_example_exists_and_has_no_secret_values():
     path = REPO / "web" / ".env.example"
     assert path.is_file(), "web/.env.example is required for a clean install"

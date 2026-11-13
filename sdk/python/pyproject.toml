@@ -14,7 +14,7 @@ dependencies = [
 ]
 
 [project.urls]
-Homepage = "https://github.com/DominicMathew240/athena-forge/tree/main/athena-oss"
+Homepage = "https://github.com/DominicMathew240/Athena-OS"
 
 [tool.setuptools.packages.find]
 include = ["athena_sdk*"]

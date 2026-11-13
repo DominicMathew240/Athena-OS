@@ -220,7 +220,7 @@ class Sink(ABC):
         :class:`PermanentItemError`. Never decide what the item means.
         """
 
-    def find_existing(self, item: SourceItem) -> Receipt | None:  # noqa: B027 - optional hook
+    def find_existing(self, item: SourceItem) -> Receipt | None:
         """Optional: after a crash in the middle of ``submit``, report a delivery that already
         happened so the item is not delivered twice. Return ``None`` when unknown."""
         return None
@@ -286,9 +286,9 @@ def utcnow() -> datetime:
 
 __all__ = [
     "ACCEPTED_CONTENT_TYPES",
+    "FORBIDDEN_METADATA_KEYS",
     "ConnectorError",
     "DataSourceConnector",
-    "FORBIDDEN_METADATA_KEYS",
     "Health",
     "ItemError",
     "Outcome",
