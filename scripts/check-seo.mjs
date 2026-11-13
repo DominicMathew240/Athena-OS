@@ -26,6 +26,15 @@ if (answers.join("|") !== site.faq.map((f) => f.a).join("|")) {
 if (!html.includes(`<h1`) || !html.includes(site.headline)) {
   throw new Error("static fallback is missing the H1");
 }
+if (!graph["@graph"].some((n) => n["@type"] === "Person" && n.name === site.founder.name)) {
+  throw new Error("Person JSON-LD missing founder");
+}
+if (!html.includes(site.inspecTher.url) || !html.includes(site.founder.url)) {
+  throw new Error("static HTML is missing founder or Inspec-Ther links");
+}
+if (!distHtml.includes(site.founder.name) || !distHtml.includes("inspec-ther.com")) {
+  throw new Error("built HTML lost founder or Inspec-Ther");
+}
 for (const name of ["robots.txt", "llms.txt", "sitemap.xml", ".well-known/security.txt", "404.html", "og.png"]) {
   const path = join(root, "dist", name);
   try {

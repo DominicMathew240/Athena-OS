@@ -11,6 +11,29 @@
     "Open-source Qwen by default, or any OpenAI-compatible AI",
     "Runs on your own server with no Athena cloud"
   ],
+  "founder": {
+    "name": "Ts. Dominic Mathew",
+    "alternateName": "Dominic Mathew David",
+    "jobTitle": "Co-Founder & CTO",
+    "worksFor": "Stratetics Experts",
+    "url": "https://dominic.strateticsxp.com/",
+    "sameAs": [
+      "https://github.com/DominicMathew240",
+      "https://www.linkedin.com/in/dominic-mathew-david-668397259"
+    ],
+    "summary": "Ts. Dominic Mathew is Co-Founder and CTO of Stratetics Experts. He publishes Athena OS as open-source vision tooling and builds Inspec-Ther for solar inspection."
+  },
+  "inspecTher": {
+    "name": "Inspec-Ther",
+    "url": "https://inspec-ther.com/",
+    "description": "AI-driven thermal inspection of solar PV assets.",
+    "model": "Athena Vision (Segment & Detect)",
+    "modelNote": "The in-house vision stack behind Inspec-Ther is Athena Vision (Segment and Detect). This page is the open-source Athena OS toolkit, not the hosted Inspec-Ther app.",
+    "sameAs": [
+      "https://www.producthunt.com/products/inspec-ther",
+      "https://dominic.strateticsxp.com/builds/inspec-ther"
+    ]
+  },
   "faq": [
     {
       "q": "What is Athena OS?",
@@ -27,6 +50,14 @@
     {
       "q": "Which AI does it use?",
       "a": "It ships with the open Qwen vision-language model. You can also plug in any AI that speaks the OpenAI-compatible API, including OpenAI, Gemini, OpenRouter, vLLM, Ollama and LM Studio."
+    },
+    {
+      "q": "Who built Athena OS?",
+      "a": "Ts. Dominic Mathew, Co-Founder and CTO of Stratetics Experts. His public site is dominic.strateticsxp.com."
+    },
+    {
+      "q": "How does this relate to Inspec-Ther?",
+      "a": "Inspec-Ther is the solar PV thermal inspection product at inspec-ther.com. The in-house vision stack behind it is Athena Vision (Segment and Detect). Athena OS on this page is the open-source toolkit, not the hosted Inspec-Ther app."
     }
   ]
 }

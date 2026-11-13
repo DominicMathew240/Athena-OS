@@ -224,6 +224,9 @@ export default function App() {
             <a href="#open" data-testid="landing-nav-open" onClick={closeMenu}>
               Open source
             </a>
+            <a href="#founder" data-testid="landing-nav-founder" onClick={closeMenu}>
+              Founder
+            </a>
           </nav>
           <div className="lp-nav-cta">
             <GithubButton className="lp-btn lp-btn--ghost" testId="landing-github-button">
@@ -602,11 +605,49 @@ export default function App() {
           </div>
         </section>
 
+        <section className="lp-section lp-about" id="founder" aria-labelledby="founder-title">
+          <div className="lp-container">
+            <div className="lp-head lp-reveal">
+              <p className="lp-eyebrow">
+                <b>06</b> Who is behind this
+              </p>
+              <h2 className="lp-h2" id="founder-title">
+                Founder, and the model behind Inspec-Ther.
+              </h2>
+            </div>
+            <div className="lp-about-grid">
+              <article className="lp-about-card lp-reveal">
+                <p className="lp-about-kicker">Founder</p>
+                <h3>{site.founder.name}</h3>
+                <p>{site.founder.summary}</p>
+                <p className="lp-about-links">
+                  <a href={site.founder.url}>Public site</a>
+                  <a href={site.founder.sameAs[0]}>GitHub</a>
+                  <a href={site.founder.sameAs[1]}>LinkedIn</a>
+                </p>
+              </article>
+              <article className="lp-about-card lp-reveal">
+                <p className="lp-about-kicker">Inspec-Ther</p>
+                <h3>{site.inspecTher.model}</h3>
+                <p>
+                  {site.inspecTher.name} is {site.inspecTher.description.replace(/\.$/, "")}.{" "}
+                  {site.inspecTher.modelNote}
+                </p>
+                <p className="lp-about-links">
+                  <a href={site.inspecTher.url}>{site.inspecTher.name}</a>
+                  <a href={site.inspecTher.sameAs[1]}>Build notes</a>
+                  <a href={site.inspecTher.sameAs[0]}>Product Hunt</a>
+                </p>
+              </article>
+            </div>
+          </div>
+        </section>
+
         <section className="lp-section lp-faq" id="faq" aria-labelledby="faq-title">
           <div className="lp-container">
             <div className="lp-head lp-reveal">
               <p className="lp-eyebrow">
-                <b>06</b> Questions
+                <b>07</b> Questions
               </p>
               <h2 className="lp-h2" id="faq-title">
                 Straight answers.
@@ -648,7 +689,12 @@ export default function App() {
       <footer className="lp-foot">
         <div className="lp-container lp-foot-inner">
           <Brand />
-          <p>Open-source computer vision for operations teams. Code under Apache-2.0; model weights carry their own terms.</p>
+          <p>
+            Open-source computer vision for operations teams. Built by{" "}
+            <a href={site.founder.url}>{site.founder.name}</a>. The solar inspection product is{" "}
+            <a href={site.inspecTher.url}>{site.inspecTher.name}</a>. Code under Apache-2.0; model
+            weights carry their own terms.
+          </p>
         </div>
       </footer>
     </div>

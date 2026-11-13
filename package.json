@@ -6,9 +6,9 @@
   "description": "Static React landing page for Athena OS. No backend.",
   "scripts": {
     "dev": "vite",
-    "build": "vite build",
+    "build": "node scripts/write-jsonld.mjs && vite build",
     "preview": "vite preview --host 127.0.0.1 --port 4173",
-    "test": "node scripts/check-seo.mjs"
+    "test": "node scripts/write-jsonld.mjs && vite build && node scripts/check-seo.mjs"
   },
   "dependencies": {
     "react": "18.3.1",
