@@ -2,7 +2,7 @@
 # the web process never imports them.
 # Versions below are the ones the SAM + CLIP pipeline and the torchvision reference training backend
 # were exercised with. torchvision 0.24.1 is the release built against torch 2.9.1.
-numpy==2.1.3
+numpy==2.5.4
 torch==2.9.1
 torchvision==0.24.1
 transformers==5.17.0
@@ -12,7 +12,7 @@ transformers==5.17.0
 # raises "RTDetrHungarianMatcher requires the scipy library" without it. Not needed: timm, accelerate (checked), and torchvision is not touched by this backend (the D-FINE
 # training tests pass with torchvision blocked; the torchvision backend still needs it).
 # Exercised on Python 3.14.4 in a venv with numpy 2.3.2 (the version its install log shows), NOT with the numpy pin above:
-# numpy==2.1.3 has no cp314 wheel on the index used, and the other worker venv here that reports 2.1.3 on Python 3.14.4
+# numpy==2.5.4 has no cp314 wheel on the index used, and the other worker venv here that reports 2.1.3 on Python 3.14.4
 # was compiled from source on that machine (wheel tag macosx_27_0), not installed from a published wheel. On Python 3.14
 # the numpy pin above may therefore need raising (2.3.2 is the version that was seen to work). scipy 1.18.1 requires
 # numpy>=2.0,<2.8, so it fits both. Licence: BSD-3-Clause; its macOS wheels
