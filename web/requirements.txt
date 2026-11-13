@@ -1,7 +1,7 @@
 Django==6.1.2
 Pillow==12.3.0
 whitenoise==6.9.0
-gunicorn==26.2.0
+gunicorn==27.0.0
 django-storages[s3]==1.14.6
 boto3==1.43.125
 httpx==0.28.1
