@@ -71,6 +71,12 @@ const next = html.replace(
   /<script type="application\/ld\+json">\s*[\s\S]*?<\/script>/,
   `<script type="application/ld+json">\n${JSON.stringify(graph)}\n    </script>`,
 );
-if (next === html) throw new Error("JSON-LD script tag not found in index.html");
-writeFileSync(htmlPath, next);
-console.log("json-ld written");
+if (!/<script type="application\/ld\+json">/.test(html)) {
+  throw new Error("JSON-LD script tag not found in index.html");
+}
+if (next === html) {
+  console.log("json-ld already current");
+} else {
+  writeFileSync(htmlPath, next);
+  console.log("json-ld written");
+}
