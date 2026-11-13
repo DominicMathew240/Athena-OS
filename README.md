@@ -29,3 +29,13 @@ Output is `dist/`. GitHub Pages deploys that folder from this branch.
 ## Licence
 
 Apache-2.0 for the code. Fonts are SIL OFL 1.1 (`src/assets/fonts/OFL-*.txt`). Model weights are not shipped.
+
+
+## Deploy
+
+The Vite app lives in `frontend/` (a `package.json` is also at the repo root so hosts that look either place can build).
+
+- Build command: `npm run build`
+- Publish directory: `dist`
+- Node: 22
+- Root / base directory: leave empty (or set it to `frontend` and publish `dist`)

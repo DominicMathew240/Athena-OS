@@ -3,10 +3,10 @@ dist/
 .DS_Store
 *.log
 .vite/
-/web/projects
+frontend/node_modules/
+frontend/dist/
 /cli
 /examples
 /sdk
 /tests
 /web
-/scripts
