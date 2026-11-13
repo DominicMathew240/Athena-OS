@@ -1,3 +1,4 @@
+@import url("tokens.css");
 /* Athena console: one stylesheet for every page (console, access, check screens, sign-in).
    Design source: docs/design/DESIGN.md (the calm light theme, 2026-10-30). A light neutral page, white panels, one blue
    accent taken from the Athena mark for the main action and for focus, sentence-case text in one family, 1px rules and
@@ -13,48 +14,41 @@
 @font-face { font-family: "Martian Mono"; font-style: normal; font-weight: 400 600; font-stretch: 100%; font-display: swap; src: url("fonts/martian-mono-latin-ext.woff2") format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+0304, U+0308, U+0329, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
 
 :root {
-  color-scheme: light;
-  /* surfaces */
-  --bg: #f5f6f8;            /* the page */
-  --panel: #ffffff;         /* a panel, a card, the rail */
-  --panel-2: #f1f3f6;       /* a row, a hover, a card inside a panel */
-  --field: #ffffff;         /* the inside of a text field */
-  --stage: #1b1f27;         /* behind a picture being marked: a dark neutral so any photograph reads against it */
-  /* ink */
-  --fg: #171c26;            /* text */
-  --fg-2: #3b4352;          /* reading text */
-  --fg-3: #5b6475;          /* help text, labels (5.9:1 on --panel) */
-  --rule: #e1e5ec;          /* hairline between things */
-  --rule-2: #cdd3dd;        /* the edge of a panel */
-  --field-line: #7c8596;    /* the edge of a field and of a quiet button (3:1 or better on the panel and the page) */
-  /* the one action colour: the blue of the Athena mark, darkened until white text on it passes 7:1 */
-  --accent: #2447b8;        /* the main action, the focus ring, "this is where you are" */
-  --accent-hover: #1c3a99;
-  --on-accent: #ffffff;     /* text on --accent and on --fg */
-  --accent-tint: #e9eefc;   /* the current row, the next step */
-  /* meaning */
-  --bad: #b3261e;           /* problem text */
-  --bad-line: #d4382c;      /* problem edge and mark */
-  --bad-tint: #fdecea;
-  --ok: #17693f;            /* done, ready */
-  --ok-tint: #e6f4ec;
-  --warn: #7a4b00;          /* read this first: text */
-  --warn-line: #d9a520;     /* read this first: edge and mark */
-  --warn-tint: #fff6dc;
-  /* the four kinds of data (athena-forge: "each sensing modality owns one hue") */
-  --m-image: #2447b8;
-  --m-thermal: #d4382c;
-  --m-audio: #0f766e;
-  --m-tabular: #6d4fd1;
-  /* shape */
-  --r-field: 6px;           /* buttons, fields, badges */
-  --r-card: 8px;            /* panels, cards, rows, dialogs */
-  --r-pill: 999px;          /* filter chips, step markers */
-  /* type: one family. Mono is for code, file names and numbers only. */
-  --f-body: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
-  --f-display: var(--f-body);
-  --f-mono: "Martian Mono", ui-monospace, "SF Mono", Menlo, monospace;
-  --nav-width: 232px;
+  /* The older console names, mapped onto the Athena OS tokens in tokens.css (light and dark). */
+  --bg: var(--c-bg);
+  --panel: var(--c-surface);
+  --panel-2: var(--c-surface-2);
+  --field: var(--c-surface);
+  --stage: var(--c-stage);
+  --fg: var(--c-text);
+  --fg-2: var(--c-text-2);
+  --fg-3: var(--c-text-3);
+  --rule: var(--c-line);
+  --rule-2: var(--c-line-strong);
+  --field-line: var(--c-field-line);
+  --accent: var(--c-accent);
+  --accent-hover: var(--c-accent-hover);
+  --on-accent: var(--c-on-accent);
+  --accent-tint: var(--c-accent-soft);
+  --bad: var(--c-bad);
+  --bad-line: var(--c-bad-line);
+  --bad-tint: var(--c-bad-soft);
+  --ok: var(--c-ok);
+  --ok-tint: var(--c-ok-soft);
+  --warn: var(--c-warn);
+  --warn-line: var(--c-warn-line);
+  --warn-tint: var(--c-warn-soft);
+  --m-image: var(--c-accent);
+  --m-thermal: var(--c-bad-line);
+  --m-audio: var(--c-ok);
+  --m-tabular: var(--c-warn-line);
+  --r-field: var(--r-sm);
+  --r-card: var(--r-lg);
+  --r-pill: 999px;
+  --f-body: var(--font-body);
+  --f-display: var(--font-display);
+  --f-mono: var(--font-mono);
+  --nav-width: var(--sidebar-w);
   --field-size: 16px; /* every text field, at every width: anything under 16px makes iOS Safari zoom the page on focus */
   font-family: var(--f-body);
   font-synthesis: none;
@@ -63,7 +57,7 @@
   -moz-osx-font-smoothing: grayscale;
   font-variant-numeric: tabular-nums;
   accent-color: var(--accent);
-  scrollbar-color: #b8bfcb var(--bg);
+  scrollbar-color: var(--c-line-strong) var(--bg);
 }
 * { box-sizing: border-box; }
 /* Author display rules (grid/flex) would otherwise override the hidden attribute. */
@@ -96,7 +90,7 @@ a { color: var(--fg); text-underline-offset: .2em; text-decoration-thickness: 1p
 .rail-signout { min-height: 32px; padding: 5px 10px; border: 1px solid var(--field-line); background: transparent; color: var(--fg); font: inherit; cursor: pointer; }
 .main { min-width: 0; padding: 28px clamp(20px, 3vw, 44px) 32px; }
 .page-head { display: flex; justify-content: space-between; align-items: end; flex-wrap: wrap; gap: 20px; border-bottom: 1px solid var(--rule-2); padding: 0 0 18px; }
-h1 { max-width: 800px; margin: 0; font-size: clamp(25px, 2.3vw, 32px); font-weight: 700; line-height: 1.12; letter-spacing: -.015em; text-wrap: balance; }
+h1 { max-width: 800px; margin: 0; font-family: var(--f-display); font-stretch: 108%; font-size: clamp(26px, 2.4vw, 34px); font-weight: 750; line-height: 1.1; letter-spacing: -.02em; text-wrap: balance; }
 .subtitle { max-width: 70ch; margin: 8px 0 0; color: var(--fg-2); font-size: 16px; line-height: 1.5; }
 .head-actions { display: grid; justify-items: end; gap: 9px; }
 @media (prefers-reduced-motion: reduce) { *, *::before, *::after { scroll-behavior: auto !important; animation-duration: .01ms !important; animation-iteration-count: 1 !important; transition-duration: .01ms !important; } }

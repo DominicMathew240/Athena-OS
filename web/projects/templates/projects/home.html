@@ -1,0 +1,87 @@
+{% extends "projects/app_base.html" %}{% load static athena_ui %}
+{% block title %}Home{% endblock %}
+{% block content %}
+<header class="a-pagehead">
+  <div>
+    <p class="a-eyebrow" data-testid="home-greeting"><b>●</b> <span id="greeting">Welcome back</span>, {{ request.user.get_username }}</p>
+    <h1 class="a-h1">What do you want to check today?</h1>
+  </div>
+  <div class="a-pagehead-actions"><a class="a-btn" href="{% url 'inspections-page' %}" data-testid="home-all-inspections-link">{% icon "list" 18 %}All inspections</a></div>
+</header>
+
+<div class="home-top">
+  <section class="ask" aria-labelledby="ask-title" data-testid="home-ask-panel">
+    <p class="a-eyebrow"><b>01</b> Ask in your own words</p>
+    <h2 class="ask-title" id="ask-title">Describe it. Add a photo. Athena explains what it sees.</h2>
+    <form class="ask-form" id="ask-form" action="{% url 'inspect-new' %}" method="get" data-needs="label">
+      <input type="hidden" name="template" value="custom">
+      <label class="a-sr" for="ask-input">What should Athena look for?</label>
+      <div class="ask-box">
+        <textarea id="ask-input" name="q" rows="2" maxlength="2000" placeholder="e.g. Are any fire extinguishers missing from their brackets in this warehouse?" data-testid="home-ask-input"></textarea>
+        <button class="a-btn a-btn--primary" type="submit" data-testid="home-ask-submit">Continue{% icon "arrow" 18 %}</button>
+      </div>
+      <div class="ask-chips" aria-label="Example questions">
+        <button class="ask-chip" type="button" data-example="How many trucks are waiting at the loading bay?">Trucks at the loading bay</button>
+        <button class="ask-chip" type="button" data-example="Is the flare stack producing black smoke?">Black smoke from a flare</button>
+        <button class="ask-chip" type="button" data-example="Which shelves have empty gaps that need restocking?">Empty shelf gaps</button>
+        <button class="ask-chip" type="button" data-example="Are the pressure gauge needles in the green zone?">Gauge readings</button>
+      </div>
+    </form>
+  </section>
+
+  <div class="home-side">
+    <a class="a-card ai-status" href="{% url 'ai-settings' %}" data-ai-status data-testid="home-ai-status-card">
+      <span class="ai-status-icon">{% icon "cpu" 22 %}</span>
+      <span class="ai-status-text"><strong id="ai-status-name">Checking your AI model…</strong><span id="ai-status-line"><span class="dot" data-state="checking"></span>One moment</span></span>
+      {% icon "chevron" 18 %}
+    </a>
+    <section class="a-card" aria-label="Your inspections at a glance">
+      <div class="stats" id="stats" data-testid="home-stats">
+        <div class="stat"><span class="stat-value" id="stat-week" data-testid="stat-this-week">–</span><span class="stat-label">Inspections this week</span></div>
+        <div class="stat" data-tone="attention"><span class="stat-value" id="stat-attention" data-testid="stat-attention">–</span><span class="stat-label">Need attention</span></div>
+        <div class="stat" data-tone="critical"><span class="stat-value" id="stat-critical" data-testid="stat-critical">–</span><span class="stat-label">Critical</span></div>
+      </div>
+    </section>
+  </div>
+</div>
+
+<section class="section" aria-labelledby="tpl-heading">
+  <div class="section-head">
+    <div><p class="a-eyebrow"><b>02</b> Or start from a ready-made check</p><h2 class="a-h2" id="tpl-heading">Ready-made inspections</h2></div>
+    <a href="{% url 'inspect-new' %}" data-testid="home-see-all-templates">Start a new inspection{% icon "arrow" 16 %}</a>
+  </div>
+  <div class="tpl-grid a-stagger">
+    {% for t in templates %}
+    <a class="tpl" href="{% url 'inspect-new' %}?template={{ t.key }}" data-testid="template-card-{{ t.key }}">
+      <span class="tpl-icon">{% icon t.icon 22 %}</span>
+      <span class="tpl-name">{{ t.name }}</span>
+      <span class="tpl-line">{{ t.tagline }}</span>
+      <span class="tpl-industry">{{ t.industry }}</span>
+    </a>
+    {% endfor %}
+    <a class="tpl tpl--custom" href="{% url 'inspect-new' %}?template=custom" data-testid="template-card-custom">
+      <span class="tpl-icon">{% icon "sparkle" 22 %}</span>
+      <span class="tpl-name">Your own question</span>
+      <span class="tpl-line">Anything you can photograph, described in plain words.</span>
+      <span class="tpl-industry">Any industry</span>
+    </a>
+    <a class="tpl tpl--custom" href="{% url 'dashboard' %}" data-testid="template-card-detectors">
+      <span class="tpl-icon">{% icon "detector" 22 %}</span>
+      <span class="tpl-name">Train a custom detector</span>
+      <span class="tpl-line">Label your own pictures and teach a model for a fixed check screen.</span>
+      <span class="tpl-industry">Advanced</span>
+    </a>
+  </div>
+</section>
+
+<section class="section" aria-labelledby="recent-heading">
+  <div class="section-head">
+    <div><p class="a-eyebrow"><b>03</b> Latest results</p><h2 class="a-h2" id="recent-heading">Recent inspections</h2></div>
+    <a href="{% url 'inspections-page' %}" data-testid="home-recent-see-all">See all{% icon "arrow" 16 %}</a>
+  </div>
+  <div class="a-card" id="recent" data-testid="home-recent-list">
+    <div class="sk-row a-skel"></div><div class="sk-row a-skel"></div><div class="sk-row a-skel"></div>
+  </div>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{% static 'projects/home.js' %}"></script>{% endblock %}

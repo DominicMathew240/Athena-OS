@@ -31,3 +31,14 @@ web/.env
 
 # Web console
 .venv-web/
+
+# Preview data
+backend/athena_data/
+frontend/node_modules/
+.env
+.env.*
+*.env
+credentials.json
+*.pem
+*.key
+.credentials

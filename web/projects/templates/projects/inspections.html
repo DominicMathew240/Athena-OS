@@ -1,0 +1,32 @@
+{% extends "projects/app_base.html" %}{% load static athena_ui %}
+{% block title %}Inspections{% endblock %}
+{% block content %}
+<header class="a-pagehead">
+  <div>
+    <p class="a-eyebrow"><b>●</b> Your reports</p>
+    <h1 class="a-h1">Inspections</h1>
+    <p class="a-lead">Every question you asked and what Athena found. Open one to see the marked pictures and next steps.</p>
+  </div>
+  <div class="a-pagehead-actions"><a class="a-btn a-btn--primary" href="{% url 'inspect-new' %}" data-needs="label" data-testid="history-new-inspection-button">{% icon "plus" 18 %}New inspection</a></div>
+</header>
+
+<section class="a-card" aria-label="All inspections">
+  <div class="filters">
+    <div class="seg" role="group" aria-label="Show inspections by result" id="verdict-filter">
+      <button type="button" aria-pressed="true" data-verdict="" data-testid="history-filter-all">All</button>
+      <button type="button" aria-pressed="false" data-verdict="critical" data-testid="history-filter-critical">Critical</button>
+      <button type="button" aria-pressed="false" data-verdict="attention" data-testid="history-filter-attention">Needs attention</button>
+      <button type="button" aria-pressed="false" data-verdict="clear" data-testid="history-filter-clear">All clear</button>
+      <button type="button" aria-pressed="false" data-verdict="failed" data-testid="history-filter-failed">Did not finish</button>
+    </div>
+    <div class="filter-right">
+      <label class="a-sr" for="template-filter">Type of inspection</label>
+      <select class="a-select" id="template-filter" data-testid="history-template-filter"><option value="">Every type</option></select>
+      <div class="searchbox">{% icon "search" 18 %}<label class="a-sr" for="history-search">Search inspections</label><input class="a-input" id="history-search" type="search" placeholder="Search by name or question" autocomplete="off" data-testid="history-search-input"></div>
+    </div>
+  </div>
+  <div class="insp-list" id="history-list" data-testid="history-list"><div class="sk-row a-skel"></div><div class="sk-row a-skel"></div><div class="sk-row a-skel"></div></div>
+</section>
+{% endblock %}
+{% block data %}{{ templates_data|json_script:"athena-templates" }}{% endblock %}
+{% block scripts %}<script src="{% static 'projects/history.js' %}"></script>{% endblock %}

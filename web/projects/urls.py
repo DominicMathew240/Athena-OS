@@ -1,10 +1,25 @@
 from django.urls import path
 
 from . import access_views, autolabel_views, dataset_views, inference_pages, inference_views, training_views, views
-from . import feedback_views, results_views, settings_views
+from . import feedback_views, results_views, settings_views, vision_pages, vision_views
 
 urlpatterns = [
-    path("", views.dashboard, name="dashboard"),
+    path("", vision_pages.landing_or_home, name="home"),
+    path("detectors", views.dashboard, name="dashboard"),
+    path("inspect/new", vision_pages.inspect_new, name="inspect-new"),
+    path("inspections", vision_pages.inspections_page, name="inspections-page"),
+    path("inspections/<uuid:inspection_id>", vision_pages.inspection_report, name="inspection-report"),
+    path("settings/ai", vision_pages.ai_settings_page, name="ai-settings"),
+    path("api/vision/templates", vision_views.vision_templates, name="vision-templates"),
+    path("api/vision/connection", vision_views.vision_connection, name="vision-connection"),
+    path("api/vision/connection/test", vision_views.vision_connection_test, name="vision-connection-test"),
+    path("api/vision/status", vision_views.vision_status, name="vision-status"),
+    path("api/inspections", vision_views.inspection_collection, name="inspection-list"),
+    path("api/inspections/summary", vision_views.inspection_summary, name="inspection-summary"),
+    path("api/inspections/<uuid:inspection_id>", vision_views.inspection_detail, name="inspection-detail"),
+    path("api/inspections/<uuid:inspection_id>/rerun", vision_views.inspection_rerun, name="inspection-rerun"),
+    path("api/inspections/<uuid:inspection_id>/feedback", vision_views.inspection_feedback, name="inspection-feedback"),
+    path("api/inspections/<uuid:inspection_id>/images/<int:position>", vision_views.inspection_image, name="inspection-image"),
     path("api/me", views.api_me, name="me"),
     # Who holds which role (administrators only): the screen, the people, and the record of changes
     path("access", access_views.access_page, name="access-page"),

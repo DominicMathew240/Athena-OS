@@ -12,7 +12,15 @@ import os
 from pathlib import Path
 
 from django.core.exceptions import ImproperlyConfigured
-from django.utils.csp import CSP
+
+try:
+    from django.utils.csp import CSP
+
+    CSP_MIDDLEWARE = "django.middleware.csp.ContentSecurityPolicyMiddleware"
+except ImportError:  # Django before 6.0: same policy, same header, from a small compatible middleware
+    from projects.csp_compat import CSP
+
+    CSP_MIDDLEWARE = "projects.csp_compat.ContentSecurityPolicyMiddleware"
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
@@ -74,7 +82,7 @@ MIDDLEWARE = [
     "projects.middleware.ConsoleLoginRequiredMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
-    "django.middleware.csp.ContentSecurityPolicyMiddleware",
+    CSP_MIDDLEWARE,
 ]
 
 if not DEBUG:  # runserver serves static files itself in development
@@ -156,8 +164,33 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 
 STATIC_URL = "static/"
 STATIC_ROOT = Path(os.environ.get("ATHENA_STATIC_ROOT", BASE_DIR / "staticfiles"))
+# Uploaded pictures and files go to a private S3-compatible bucket (AWS, MinIO, R2, Wasabi) when one is set,
+# otherwise to this server's disk under MEDIA_ROOT. The app streams every file itself; the bucket stays private.
+_S3_BUCKET = os.environ.get("ATHENA_S3_BUCKET", "").strip()
+_S3_ACCESS_KEY = os.environ.get("ATHENA_S3_ACCESS_KEY_ID", "").strip()
+_S3_SECRET_KEY = os.environ.get("ATHENA_S3_SECRET_ACCESS_KEY", "").strip()
+STORAGE_KIND = "s3" if (_S3_BUCKET and _S3_ACCESS_KEY and _S3_SECRET_KEY) else "disk"
+if STORAGE_KIND == "s3":
+    _DEFAULT_STORAGE = {
+        "BACKEND": "storages.backends.s3.S3Storage",
+        "OPTIONS": {
+            "bucket_name": _S3_BUCKET,
+            "region_name": os.environ.get("ATHENA_S3_REGION", "").strip() or None,
+            "endpoint_url": os.environ.get("ATHENA_S3_ENDPOINT_URL", "").strip() or None,
+            "access_key": _S3_ACCESS_KEY,
+            "secret_key": _S3_SECRET_KEY,
+            "addressing_style": os.environ.get("ATHENA_S3_ADDRESSING_STYLE", "").strip() or None,
+            "signature_version": "s3v4",
+            "default_acl": None,
+            "querystring_auth": True,
+            "file_overwrite": False,
+            "location": os.environ.get("ATHENA_S3_PREFIX", "media").strip(),
+        },
+    }
+else:
+    _DEFAULT_STORAGE = {"BACKEND": "django.core.files.storage.FileSystemStorage"}
 STORAGES = {
-    "default": {"BACKEND": "django.core.files.storage.FileSystemStorage"},
+    "default": _DEFAULT_STORAGE,
     "staticfiles": {
         "BACKEND": (
             "django.contrib.staticfiles.storage.StaticFilesStorage"
@@ -218,6 +251,18 @@ AUTOLABEL = {
 }
 
 TRAINING = {"BACKENDS": ["projects.training.dfine:DFineBackend"]}  # opt-in D-FINE tool; the default backend is unchanged
+
+# --- Vision inspections (a vision-language model that explains what it sees) -----------------
+# The built-in model is an open Qwen vision model served by your own Ollama or vLLM server through
+# an OpenAI-compatible API. Each person can switch to their own endpoint and key on the AI model page.
+VISION = {
+    "BASE_URL": os.environ.get("ATHENA_VLM_BASE_URL", "").strip(),
+    "MODEL": os.environ.get("ATHENA_VLM_MODEL", "qwen2.5vl:7b").strip(),
+    "API_KEY": os.environ.get("ATHENA_VLM_API_KEY", "").strip(),
+    "LABEL": os.environ.get("ATHENA_VLM_LABEL", "Qwen vision (built-in)").strip(),
+    "TIMEOUT_SECONDS": int(os.environ.get("ATHENA_VLM_TIMEOUT", "180")),
+    "MAX_TOKENS": int(os.environ.get("ATHENA_VLM_MAX_TOKENS", "2000")),
+}
 
 LOGGING = {
     "version": 1,

@@ -1,0 +1,86 @@
+{% extends "projects/app_base.html" %}{% load static athena_ui %}
+{% block title %}AI model{% endblock %}
+{% block content %}
+<header class="a-pagehead">
+  <div>
+    <p class="a-eyebrow"><b>●</b> Settings</p>
+    <h1 class="a-h1">Your AI model</h1>
+    <p class="a-lead">Athena uses a vision-language model: an AI that looks at a picture and explains it in words. Use the built-in open-source Qwen model, or plug in your own.</p>
+  </div>
+</header>
+
+<div class="ai-grid">
+  <div class="rep-col">
+    <section class="a-card a-card--pad" aria-labelledby="choose-title">
+      <div class="block-title"><h2 class="a-h3" id="choose-title">Which AI should read your pictures?</h2><span class="a-muted a-small">Only for your account</span></div>
+      <div class="choice-grid" role="radiogroup" aria-labelledby="choose-title" id="choices">
+        <button class="choice" type="button" role="radio" aria-checked="true" data-choice="builtin" data-testid="ai-choice-builtin">
+          <span class="choice-top"><span class="choice-name">Built-in Qwen</span><span class="choice-radio" aria-hidden="true"></span></span>
+          <p>The open-source Qwen vision model, run on your organisation's own server. Nothing to set up for you.</p>
+          <span class="choice-meta"><span class="a-tag" data-testid="ai-builtin-model">{{ builtin.model|default:"not set" }}</span><span class="a-tag">{{ builtin.host|default:"no server address" }}</span></span>
+        </button>
+        <button class="choice" type="button" role="radio" aria-checked="false" data-choice="own" data-testid="ai-choice-own">
+          <span class="choice-top"><span class="choice-name">Your own AI</span><span class="choice-radio" aria-hidden="true"></span></span>
+          <p>Any service that speaks the OpenAI-compatible API: OpenAI, Gemini, OpenRouter, vLLM, Ollama, LM Studio and more.</p>
+          <span class="choice-meta" id="own-meta"><span class="a-tag">Bring your own key</span></span>
+        </button>
+      </div>
+      <div class="a-row" id="builtin-actions">
+        <button class="a-btn a-btn--sm" type="button" id="test-builtin" data-testid="ai-test-builtin-button">{% icon "plug" 16 %}Test the built-in model</button>
+        <span class="a-help">The address and model are set by your administrator on the server (ATHENA_VLM_BASE_URL and ATHENA_VLM_MODEL).</span>
+      </div>
+      <div id="builtin-result"></div>
+    </section>
+
+    <form class="a-card a-card--pad" id="own-form" novalidate aria-labelledby="own-title" data-testid="ai-own-form" hidden>
+      <div class="block-title"><h2 class="a-h3" id="own-title">Connect your own AI</h2></div>
+      <div class="a-field">
+        <span class="a-label" id="preset-label">Start from a common service</span>
+        <div class="presets" id="presets" role="group" aria-labelledby="preset-label"></div>
+      </div>
+      <div class="form-grid" id="own-fields">
+        <div class="a-field wide">
+          <label class="a-label" for="base-url">Address (API base URL)</label>
+          <input class="a-input" id="base-url" type="url" inputmode="url" autocomplete="off" spellcheck="false" placeholder="https://api.openai.com/v1" data-testid="ai-settings-endpoint-input">
+          <p class="a-help">Usually ends in <span class="a-mono">/v1</span>. Athena adds <span class="a-mono">/chat/completions</span> itself.</p>
+        </div>
+        <div class="a-field">
+          <label class="a-label" for="model-name">Model name</label>
+          <input class="a-input" id="model-name" autocomplete="off" spellcheck="false" placeholder="gpt-4o-mini" data-testid="ai-settings-model-input">
+          <p class="a-help">It must be able to see images.</p>
+        </div>
+        <div class="a-field">
+          <label class="a-label" for="display-name">Name shown in reports <span class="a-muted">(optional)</span></label>
+          <input class="a-input" id="display-name" maxlength="80" autocomplete="off" placeholder="Our OpenAI account" data-testid="ai-settings-label-input">
+        </div>
+        <div class="a-field wide">
+          <label class="a-label" for="api-key">API key</label>
+          <div class="keywrap"><input class="a-input" id="api-key" type="password" autocomplete="new-password" spellcheck="false" placeholder="sk-…" data-testid="ai-settings-key-input"><button type="button" id="key-show" aria-controls="api-key" data-testid="ai-settings-key-toggle">Show</button></div>
+          <p class="a-help" id="key-help">Leave empty for servers that need no key. Your key is stored encrypted on this Athena server and is never shown again.</p>
+        </div>
+      </div>
+      <p class="a-error" id="own-error" role="alert" data-testid="ai-settings-error"></p>
+      <div id="own-result"></div>
+      <div class="a-row">
+        <button class="a-btn a-btn--primary" type="submit" id="save-own" data-testid="ai-settings-save-button">{% icon "check" 18 %}Save and use this AI</button>
+        <button class="a-btn" type="button" id="test-own" data-testid="ai-settings-test-button">{% icon "plug" 18 %}Test connection</button>
+        <button class="a-btn a-btn--ghost a-btn--danger" type="button" id="forget-own" data-testid="ai-settings-forget-button" hidden>{% icon "trash" 18 %}Forget my AI</button>
+      </div>
+    </form>
+
+    <div class="a-note" id="active-note" data-testid="ai-active-note">{% icon "info" 20 %}<p id="active-text">Loading…</p></div>
+  </div>
+
+  <aside class="a-card a-card--pad explain" aria-labelledby="explain-title">
+    <h2 class="a-h3" id="explain-title">Why a vision-language model?</h2>
+    <div class="explain-item"><span class="tpl-icon">{% icon "scan" 18 %}</span><div><strong>It understands, not only detects</strong><p>A classic detector draws boxes and names a class. A vision-language model also says what it means and what to do.</p></div></div>
+    <div class="compare" aria-label="An example answer">
+      <div><b>Classic detector</b>rust · 0.82 · rust · 0.77</div>
+      <div><b>Athena with a VLM</b>Moderate corrosion on the pipe clamp, with paint lifting around it. Wire-brush and recoat within a month, and check the wall thickness.</div>
+    </div>
+    <div class="explain-item"><span class="tpl-icon">{% icon "lock" 18 %}</span><div><strong>Your pictures, your choice</strong><p>Pictures go only to the AI you pick. With the built-in Qwen on your own server they never leave your network.</p></div></div>
+    <div class="explain-item"><span class="tpl-icon">{% icon "server" 18 %}</span><div><strong>No lock-in</strong><p>Change model whenever you like. Old reports keep a note of which model wrote them.</p></div></div>
+  </aside>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{% static 'projects/ai_settings.js' %}"></script>{% endblock %}

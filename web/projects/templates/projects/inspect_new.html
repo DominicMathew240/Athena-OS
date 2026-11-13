@@ -1,0 +1,83 @@
+{% extends "projects/app_base.html" %}{% load static athena_ui %}
+{% block title %}New inspection{% endblock %}
+{% block content %}
+<header class="a-pagehead">
+  <div>
+    <nav class="a-crumbs" aria-label="Breadcrumb"><a href="/">Home</a>{% icon "chevron" 14 %}<span>New inspection</span></nav>
+    <h1 class="a-h1">New inspection</h1>
+    <p class="a-lead">Three steps: say what to check, add your pictures, and Athena writes a plain-language report with what it found, where, and what to do next.</p>
+  </div>
+</header>
+
+<div class="a-card connect-first" id="connect-first" role="status" hidden data-testid="connect-ai-first-banner">
+  <span class="ai-status-icon">{% icon "cpu" 22 %}</span>
+  <div class="connect-first-text">
+    <h2 class="a-h3">Connect an AI model first</h2>
+    <p>Athena needs a vision AI to read your pictures. Add your organisation's Qwen server (Ollama or vLLM), or any OpenAI-compatible AI. It takes about a minute, and you can set everything up below in the meantime.</p>
+  </div>
+  <a class="a-btn a-btn--primary" href="{% url 'ai-settings' %}" data-testid="connect-ai-first-button">{% icon "cpu" 18 %}Connect AI</a>
+</div>
+
+<form class="wiz" id="wiz" novalidate data-chosen="{{ chosen }}" data-testid="inspection-wizard">
+  <div class="wiz-steps">
+    <section class="a-card step" id="step-what" aria-labelledby="step-what-title">
+      <div class="step-head"><span class="step-num">01</span><div><h2 class="a-h2" id="step-what-title">What should Athena check?</h2><p>Pick a ready-made check, or describe your own in plain words.</p></div></div>
+      <div class="pick-grid" id="pick-grid" role="radiogroup" aria-labelledby="step-what-title" data-testid="template-picker"></div>
+      <div class="pick-detail" id="pick-detail" hidden>
+        <p class="pick-question" id="pick-question" data-testid="template-question"></p>
+        <div class="a-field">
+          <label class="a-label" for="instructions" id="instructions-label">Anything specific to look for? <span class="a-muted">(optional)</span></label>
+          <textarea class="a-textarea" id="instructions" maxlength="2000" placeholder="e.g. Focus on the flange bolts of the 6-inch line" data-testid="inspection-instructions-input">{{ prefill }}</textarea>
+          <p class="a-help" id="instructions-help">Write it the way you would ask a colleague. Athena reads it together with the pictures.</p>
+        </div>
+        <div class="examples" id="examples" hidden aria-label="Example questions">
+          <button class="example" type="button" data-example="How many people are not wearing a hard hat?">People without a hard hat</button>
+          <button class="example" type="button" data-example="Is any equipment blocking the emergency exit?">Blocked emergency exit</button>
+          <button class="example" type="button" data-example="How many pallets are on the racks, and are any damaged?">Pallets and damage</button>
+          <button class="example" type="button" data-example="Are the solar panels dirty, cracked or covered by shadows?">Solar panel condition</button>
+        </div>
+      </div>
+    </section>
+
+    <section class="a-card step" id="step-pics" aria-labelledby="step-pics-title">
+      <div class="step-head"><span class="step-num">02</span><div><h2 class="a-h2" id="step-pics-title">Add pictures</h2><p>Up to 6 photos of the same place, or one short video. Athena takes still frames from a video by itself.</p></div></div>
+      <div class="source-tabs" role="tablist" aria-label="Photos or video">
+        <button class="source-tab" type="button" role="tab" aria-selected="true" data-source="photo" data-testid="source-photo-tab">{% icon "image" 18 %}Photos</button>
+        <button class="source-tab" type="button" role="tab" aria-selected="false" data-source="video" data-testid="source-video-tab">{% icon "video" 18 %}Video</button>
+      </div>
+      <label class="drop" id="drop" data-testid="inspection-dropzone">
+        <span class="drop-icon">{% icon "upload" 24 %}</span>
+        <strong id="drop-title">Drop photos here, or click to choose</strong>
+        <span id="drop-hint">JPEG, PNG or WebP · up to 6 · 20 MB each</span>
+        <input id="file-input" type="file" accept="image/jpeg,image/png,image/webp" multiple data-testid="inspection-file-upload-input" aria-describedby="drop-hint">
+      </label>
+      <p class="a-help" id="video-status" role="status" aria-live="polite" hidden></p>
+      <div class="thumbs" id="thumbs" data-testid="inspection-thumbnails"></div>
+    </section>
+
+    <section class="a-card step" id="step-run" aria-labelledby="step-run-title">
+      <div class="step-head"><span class="step-num">03</span><div><h2 class="a-h2" id="step-run-title">Name it <span class="a-muted a-small">(optional)</span></h2><p>A short name helps you find this report later. Leave it empty and Athena names it for you.</p></div></div>
+      <div class="a-field">
+        <label class="a-sr" for="title">Inspection name</label>
+        <input class="a-input" id="title" maxlength="120" placeholder="e.g. Pipe rack B · north side" data-testid="inspection-title-input">
+      </div>
+    </section>
+  </div>
+
+  <aside class="a-card sum" aria-labelledby="sum-title" data-testid="inspection-summary">
+    <div class="sum-head"><p class="a-eyebrow">Ready to run</p><h2 class="a-h3" id="sum-title">Your inspection</h2></div>
+    <ul class="sum-list">
+      <li id="sum-what" data-ok="false">{% icon "check" 20 %}<span><strong id="sum-what-text">Choose what to check</strong><small id="sum-what-sub">Step 1</small></span></li>
+      <li id="sum-pics" data-ok="false">{% icon "check" 20 %}<span><strong id="sum-pics-text">No pictures yet</strong><small>Step 2</small></span></li>
+      <li id="sum-ai" data-ok="false">{% icon "cpu" 20 %}<span><strong id="sum-ai-text">Checking your AI model…</strong><small id="sum-ai-sub"><a href="{% url 'ai-settings' %}">Change AI model</a></small></span></li>
+    </ul>
+    <div class="sum-foot">
+      <p class="a-error" id="wiz-error" role="alert" data-testid="inspection-wizard-error"></p>
+      <button class="a-btn a-btn--primary a-btn--lg" id="run" type="submit" data-needs="label" data-testid="inspection-wizard-run-button">{% icon "zap" 18 %}Run inspection</button>
+      <p class="a-help" id="run-help">Usually 10–60 seconds. You can leave this page; the report is saved.</p>
+    </div>
+  </aside>
+</form>
+{% endblock %}
+{% block data %}{{ templates_data|json_script:"athena-templates" }}{% endblock %}
+{% block scripts %}<script src="{% static 'projects/inspect.js' %}"></script>{% endblock %}

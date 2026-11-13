@@ -1,34 +1,56 @@
-{% load static %}<!doctype html>
+{% load static athena_ui %}<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#f5f6f8">
-  <title>Sign in · Athena console</title>
+  <title>Sign in · Athena OS</title>
   <link rel="icon" type="image/png" href="{% static 'projects/brand/athena-mark-32.png' %}">
-  <link rel="stylesheet" href="{% static 'projects/console.css' %}">
+  <script src="{% static 'projects/theme.js' %}"></script>
+  <link rel="stylesheet" href="{% static 'projects/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'projects/app.css' %}">
+  <link rel="stylesheet" href="{% static 'projects/signin.css' %}">
 </head>
-<body>
-  <a class="skip-link" href="#main">Skip to main content</a>
-  <div class="signin">
-    <header class="signin-aside">
-      <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>Athena<small>Data labelling</small></span></div>
-      <div>
-        <h1>The computer suggests. You decide.</h1>
-        <p>Add pictures, mark the items you care about, and let the computer suggest boxes. Nothing it suggests counts until a person checks it.</p>
+<body class="a-body">
+  <a class="a-skip" href="#main">Skip to main content</a>
+  <div class="si">
+    <aside class="si-art" aria-label="About Athena OS">
+      <a class="si-brand" href="/" data-testid="signin-brand-link"><span class="si-mark" aria-hidden="true"></span>Athena<em>OS</em></a>
+      <figure class="si-sample" data-testid="signin-sample-report">
+        <p class="si-q">“How many bays are free, and is anyone parked badly?”</p>
+        <p class="si-verdict"><span aria-hidden="true"></span>Needs attention</p>
+        <p class="si-head">14 of 62 bays are free. One van is blocking the fire lane by the north entrance.</p>
+        <ul class="si-counts">
+          <li><strong>14</strong>Free bays</li>
+          <li><strong>48</strong>Taken</li>
+          <li><strong>1</strong>Badly parked</li>
+        </ul>
+      </figure>
+      <div class="si-copy">
+        <h1>Your sites, in plain words.</h1>
+        <p>Add a photo or a short video, ask a question, and get an answer with context and next steps. No code, no data science.</p>
       </div>
-    </header>
-    <main class="signin-main" id="main" tabindex="-1">
-      <h2>Sign in</h2>
-      <form class="signin-form" method="post" action="{% url 'login' %}" aria-label="Sign in">
-        {% csrf_token %}
-        {% if form.errors %}<p class="form-error" data-open="true" role="alert">{% if form.non_field_errors %}{{ form.non_field_errors.0 }} If you keep having trouble, ask your administrator.{% else %}Type both your username and your password, then press Sign in.{% endif %}</p>{% endif %}
-        <label for="id_username">Username<input id="id_username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus value="{{ form.username.value|default:'' }}"></label>
-        <label for="id_password">Password<input id="id_password" name="password" type="password" autocomplete="current-password" required></label>
-        <input type="hidden" name="next" value="{{ next }}">
-        <button class="primary" type="submit">Sign in</button>
-      </form>
-      <p class="field-help">Don’t have an account? Ask your administrator to create one for you.</p>
+    </aside>
+    <main class="si-main" id="main" tabindex="-1">
+      <div class="si-panel">
+        <p class="a-eyebrow">Welcome back</p>
+        <h2 class="si-title">Sign in to Athena</h2>
+        <form class="si-form" method="post" action="{% url 'login' %}" aria-label="Sign in" data-testid="signin-form">
+          {% csrf_token %}
+          {% if form.errors %}<p class="a-error" role="alert" data-testid="signin-error">{% if form.non_field_errors %}{{ form.non_field_errors.0 }} If you keep having trouble, ask your administrator.{% else %}Type both your username and your password, then press Sign in.{% endif %}</p>{% endif %}
+          <div class="a-field">
+            <label class="a-label" for="id_username">Username</label>
+            <input class="a-input" id="id_username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" required autofocus value="{{ form.username.value|default:'' }}" data-testid="signin-username-input">
+          </div>
+          <div class="a-field">
+            <label class="a-label" for="id_password">Password</label>
+            <input class="a-input" id="id_password" name="password" type="password" autocomplete="current-password" required data-testid="signin-password-input">
+          </div>
+          <input type="hidden" name="next" value="{{ next }}">
+          <button class="a-btn a-btn--primary a-btn--lg si-submit" type="submit" data-testid="signin-submit-button">Sign in{% icon "arrow" 18 %}</button>
+        </form>
+        <p class="a-help si-foot">Don’t have an account? Ask your administrator to create one for you.</p>
+        <a class="si-back" href="/" data-testid="signin-back-link">{% icon "chevron" 14 %}Back to the Athena home page</a>
+      </div>
     </main>
   </div>
 </body>

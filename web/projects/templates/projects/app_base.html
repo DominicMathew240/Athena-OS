@@ -1,0 +1,28 @@
+{% load static athena_ui %}<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>{% block title %}Athena OS{% endblock %} · Athena OS</title>
+  <link rel="icon" type="image/png" href="{% static 'projects/brand/athena-mark-32.png' %}">
+  <script src="{% static 'projects/theme.js' %}"></script>
+  <link rel="stylesheet" href="{% static 'projects/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'projects/app.css' %}">
+</head>
+<body class="a-body" {% include 'projects/_access_attrs.html' %}>
+  <a class="a-skip" href="#main">Skip to main content</a>
+  <div class="a-shell">
+    {% include "projects/_sidebar.html" %}
+    <main class="a-main" id="main" tabindex="-1">
+      <noscript><p class="a-note a-note--warn">This page needs JavaScript. Turn it on in your browser and reload.</p></noscript>
+      <div class="a-wrap">{% block content %}{% endblock %}</div>
+    </main>
+  </div>
+  {% icon_data %}
+  {% block data %}{% endblock %}
+  <script src="{% static 'projects/ui_common.js' %}"></script>
+  <script src="{% static 'projects/app.js' %}"></script>
+  {% block scripts %}{% endblock %}
+</body>
+</html>

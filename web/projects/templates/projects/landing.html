@@ -1,0 +1,248 @@
+{% load static athena_ui %}<!doctype html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Athena OS: show it a photo or a video, ask a question in plain words, and get an answer with context. Count parking spaces, people in and out of a store, corrosion and defects. Open source, self-hosted.">
+  <title>Athena OS · Ask your cameras anything</title>
+  <link rel="icon" type="image/png" href="{% static 'projects/brand/athena-mark-32.png' %}">
+  <link rel="stylesheet" href="{% static 'projects/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'projects/landing.css' %}">
+</head>
+<body class="lp">
+  <a class="lp-skip" href="#main">Skip to main content</a>
+  <header class="lp-nav" id="lp-nav" data-testid="landing-nav">
+    <div class="lp-container lp-nav-inner">
+      <a class="lp-brand" href="/" aria-label="Athena OS home" data-testid="landing-brand"><span class="lp-mark" aria-hidden="true"></span><span>Athena<em>OS</em></span></a>
+      <nav class="lp-links" id="lp-links" aria-label="Page sections">
+        <a href="#how" data-testid="landing-nav-how">How it works</a>
+        <a href="#use-cases" data-testid="landing-nav-use-cases">Use cases</a>
+        <a href="#your-ai" data-testid="landing-nav-ai">Your AI</a>
+        <a href="#open" data-testid="landing-nav-open">Open source</a>
+      </nav>
+      <div class="lp-nav-cta">
+        <a class="lp-btn lp-btn--ghost" href="{% url 'login' %}" data-testid="landing-signin-button">Sign in</a>
+        <a class="lp-btn lp-btn--primary" href="{% url 'login' %}?next=/inspect/new" data-testid="landing-nav-cta-button">Start inspecting{% icon "arrow" 16 %}</a>
+        <button class="lp-menu" id="lp-menu" type="button" aria-expanded="false" aria-controls="lp-links" aria-label="Open the menu" data-testid="landing-menu-toggle">{% icon "menu" 22 %}</button>
+      </div>
+    </div>
+  </header>
+
+  <main id="main">
+    <section class="lp-hero" aria-labelledby="hero-title">
+      <div class="lp-container lp-hero-grid">
+        <div class="lp-hero-copy">
+          <p class="lp-kicker"><span class="lp-live" aria-hidden="true"></span>Vision AI for people who run sites, not servers</p>
+          <h1 class="lp-h1" id="hero-title" data-testid="landing-hero-title">Ask your cameras <em>anything.</em></h1>
+          <p class="lp-lead">Show Athena a photo or a short video and ask a question in plain words. It counts, spots and <strong>explains</strong> — free parking bays, people walking into your store, corrosion on a pipe rack — then tells you what to do next. No code. No data science.</p>
+          <div class="lp-cta-row">
+            <a class="lp-btn lp-btn--primary lp-btn--lg" href="{% url 'login' %}?next=/inspect/new" data-testid="landing-hero-cta-button">Start an inspection{% icon "arrow" 18 %}</a>
+            <a class="lp-btn lp-btn--line lp-btn--lg" href="#how" data-testid="landing-hero-secondary-button">See how it works</a>
+          </div>
+          <ul class="lp-proof" aria-label="At a glance">
+            <li>{% icon "cpu" 16 %}Runs on open-source <strong>Qwen</strong>, or your own AI</li>
+            <li>{% icon "server" 16 %}Self-hosted · Apache-2.0</li>
+          </ul>
+        </div>
+
+        <div class="lp-demo" data-testid="landing-hero-demo">
+          <div class="lp-demo-bar">
+            <span class="lp-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <div class="lp-demo-tabs" role="tablist" aria-label="Example inspections">
+              <button type="button" role="tab" aria-selected="true" data-scene="corrosion" data-testid="landing-demo-tab-corrosion">Corrosion</button>
+              <button type="button" role="tab" aria-selected="false" data-scene="parking" data-testid="landing-demo-tab-parking">Parking</button>
+              <button type="button" role="tab" aria-selected="false" data-scene="footfall" data-testid="landing-demo-tab-footfall">Foot traffic</button>
+            </div>
+            <span class="lp-demo-live">LIVE · QWEN-VL</span>
+          </div>
+          <div class="lp-demo-stage">
+            <div class="lp-demo-frame" id="demo-frame">
+              <img id="demo-img" src="{% static 'projects/landing/pipe-corrosion.jpg' %}" alt="Corroded pipes with a rusted clamp" width="1400" height="933">
+              <span class="lp-scan" aria-hidden="true"></span>
+            </div>
+            <div class="lp-report" id="demo-report" aria-live="polite">
+              <p class="lp-report-q" id="demo-q">“Is there corrosion, and how bad is it?”</p>
+              <span class="lp-verdict" id="demo-verdict" data-v="attention">Needs attention</span>
+              <p class="lp-report-h" id="demo-h">Severe scaling at the pipe clamp, with coating breaking down on both pipes. Plan a repair this month.</p>
+              <div class="lp-report-counts" id="demo-counts"></div>
+              <ol class="lp-report-list" id="demo-list"></ol>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <div class="lp-ticker" aria-label="Things people check with Athena">
+      <div class="lp-ticker-track">
+        <span>Parking occupancy</span><span>Store foot traffic</span><span>Corrosion grading</span><span>Weld defects</span><span>Hard hats &amp; vests</span><span>Oil leaks</span><span>Blocked fire exits</span><span>Empty shelves</span><span>Gauge readings</span><span>Flare smoke</span><span>Loading-bay queues</span><span>Cracked panels</span>
+        <span aria-hidden="true">Parking occupancy</span><span aria-hidden="true">Store foot traffic</span><span aria-hidden="true">Corrosion grading</span><span aria-hidden="true">Weld defects</span><span aria-hidden="true">Hard hats &amp; vests</span><span aria-hidden="true">Oil leaks</span><span aria-hidden="true">Blocked fire exits</span><span aria-hidden="true">Empty shelves</span><span aria-hidden="true">Gauge readings</span><span aria-hidden="true">Flare smoke</span><span aria-hidden="true">Loading-bay queues</span><span aria-hidden="true">Cracked panels</span>
+      </div>
+    </div>
+
+    <section class="lp-section lp-why" aria-labelledby="why-title">
+      <div class="lp-container">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow"><b>01</b> Why Athena</p>
+          <h2 class="lp-h2" id="why-title">A detector tells you <span>what</span>.<br>Athena tells you <em>why it matters.</em></h2>
+        </div>
+        <div class="lp-compare">
+          <article class="lp-compare-card lp-reveal" data-testid="landing-compare-detector">
+            <p class="lp-compare-tag">A normal detector (CNN)</p>
+            <div class="lp-compare-img lp-compare-img--plain">
+              <img src="{% static 'projects/landing/pipe-corrosion.jpg' %}" alt="" loading="lazy" width="1400" height="933">
+              <span class="lp-cbox" data-b="1"><i>rust 0.82</i></span><span class="lp-cbox" data-b="2"><i>rust 0.77</i></span><span class="lp-cbox" data-b="3"><i>rust 0.61</i></span>
+            </div>
+            <ul class="lp-list lp-list--muted">
+              <li>Boxes and a class name. You work out what it means.</li>
+              <li>Needs thousands of labelled pictures before day one.</li>
+              <li>One model per problem, retrained by a specialist.</li>
+            </ul>
+          </article>
+          <article class="lp-compare-card lp-compare-card--athena lp-reveal" data-testid="landing-compare-athena">
+            <p class="lp-compare-tag"><span class="lp-live" aria-hidden="true"></span>Athena with a vision-language model</p>
+            <div class="lp-compare-img">
+              <img src="{% static 'projects/landing/pipe-corrosion.jpg' %}" alt="" loading="lazy" width="1400" height="933">
+              <span class="lp-abox" data-b="1" data-sev="high"><i>1</i></span><span class="lp-abox" data-b="2" data-sev="medium"><i>2</i></span><span class="lp-abox" data-b="3" data-sev="low"><i>3</i></span>
+            </div>
+            <p class="lp-quote">“<strong>Severe scaling on the pipe clamp</strong> (1) — likely trapped moisture under the band. Coating has broken down on the left pipe (2) and is flaking on the right (3). Wire-brush and recoat, then measure wall thickness at the clamp.”</p>
+            <ul class="lp-list">
+              <li>Plain-language answers with context and next steps.</li>
+              <li>Works from the first picture, with a template or your own question.</li>
+              <li>One assistant for every kind of check.</li>
+            </ul>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-section lp-cases" id="use-cases" aria-labelledby="cases-title">
+      <div class="lp-container">
+        <div class="lp-head lp-head--split lp-reveal">
+          <div><p class="lp-eyebrow"><b>02</b> Use cases</p><h2 class="lp-h2" id="cases-title">Ready-made checks for the jobs you already do.</h2></div>
+          <p class="lp-sub">Pick one and add a photo — or skip the templates and simply type your question. Every check returns counts, marked areas and next steps.</p>
+        </div>
+        <div class="lp-bento">
+          <article class="lp-case lp-case--hero lp-reveal" data-testid="landing-case-oil-gas">
+            <img src="{% static 'projects/landing/refinery-skyline.jpg' %}" alt="A refinery at dusk" loading="lazy" width="1600" height="1068">
+            <div class="lp-case-body">
+              <span class="lp-case-tag">Oil &amp; gas · utilities</span>
+              <h3>Corrosion, leaks &amp; coating damage</h3>
+              <p>Grade rust on pipe racks, flanges and tanks as light, moderate or severe — and get the repair steps an inspector would write.</p>
+              <p class="lp-case-q">“Is there corrosion under the insulation on line 12?”</p>
+            </div>
+          </article>
+          <article class="lp-case lp-reveal" data-testid="landing-case-parking">
+            <img src="{% static 'projects/landing/parking-aerial.jpg' %}" alt="A car park seen from above" loading="lazy" width="1200" height="800">
+            <div class="lp-case-body"><span class="lp-case-tag">Facilities</span><h3>Parking occupancy</h3><p>Free, taken and badly parked — counted from a camera or drone photo.</p></div>
+          </article>
+          <article class="lp-case lp-reveal" data-testid="landing-case-footfall">
+            <img src="{% static 'projects/landing/store-entrance.jpg' %}" alt="People at a store entrance" loading="lazy" width="1000" height="641">
+            <div class="lp-case-body"><span class="lp-case-tag">Retail</span><h3>People in &amp; out</h3><p>Who is walking in, who is leaving, and how long the queue is.</p></div>
+          </article>
+          <article class="lp-case lp-reveal" data-testid="landing-case-ppe">
+            <img src="{% static 'projects/landing/safety-worker.jpg' %}" alt="A worker in a helmet and high-visibility vest" loading="lazy" width="1000" height="1500">
+            <div class="lp-case-body"><span class="lp-case-tag">Construction · plants</span><h3>Safety gear</h3><p>Helmets, vests and glasses — and the hazards around people.</p></div>
+          </article>
+          <article class="lp-case lp-reveal" data-testid="landing-case-defects">
+            <img src="{% static 'projects/landing/welding.jpg' %}" alt="Welding sparks on a metal part" loading="lazy" width="1000" height="667">
+            <div class="lp-case-body"><span class="lp-case-tag">Manufacturing</span><h3>Surface &amp; weld defects</h3><p>Cracks, dents, porosity and spatter, with size and location.</p></div>
+          </article>
+          <article class="lp-case lp-case--text lp-reveal" data-testid="landing-case-custom">
+            <span class="lp-case-icon">{% icon "sparkle" 24 %}</span>
+            <div class="lp-case-body"><span class="lp-case-tag">Anything else</span><h3>Your own question</h3><p>“Are the gauge needles in the green?” “Which shelves need restocking?” If you can photograph it, you can ask it.</p></div>
+            <a class="lp-btn lp-btn--primary lp-case-cta" href="{% url 'login' %}?next=/inspect/new%3Ftemplate%3Dcustom" data-testid="landing-case-custom-cta">Ask your own question{% icon "arrow" 16 %}</a>
+          </article>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-section lp-how" id="how" aria-labelledby="how-title">
+      <div class="lp-container">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow"><b>03</b> How it works</p>
+          <h2 class="lp-h2" id="how-title">From photo to report in three steps.</h2>
+        </div>
+        <ol class="lp-steps">
+          <li class="lp-step lp-reveal" data-testid="landing-step-1">
+            <span class="lp-step-n">01</span>
+            <h3>Say what to check</h3>
+            <p>Choose a ready-made check like <em>Parking occupancy</em>, or write your question the way you would ask a colleague.</p>
+            <div class="lp-mini lp-mini--chips" aria-hidden="true"><span data-on="true">Corrosion check</span><span>Parking</span><span>Safety gear</span><span>Your own question…</span></div>
+          </li>
+          <li class="lp-step lp-reveal" data-testid="landing-step-2">
+            <span class="lp-step-n">02</span>
+            <h3>Add photos or a video</h3>
+            <p>Drop in up to six photos, or a short clip. Athena takes the still frames it needs by itself.</p>
+            <div class="lp-mini lp-mini--drop" aria-hidden="true"><span></span><span></span><span></span><b>+</b></div>
+          </li>
+          <li class="lp-step lp-reveal" data-testid="landing-step-3">
+            <span class="lp-step-n">03</span>
+            <h3>Read the report</h3>
+            <p>A verdict, counts, numbered areas on the picture, and practical next steps. Print it, share it, or rate it.</p>
+            <div class="lp-mini lp-mini--report" aria-hidden="true"><b>NEEDS ATTENTION</b><i></i><i></i><i></i></div>
+          </li>
+        </ol>
+      </div>
+    </section>
+
+    <section class="lp-section lp-ai" id="your-ai" aria-labelledby="ai-title">
+      <div class="lp-container lp-ai-grid">
+        <div class="lp-reveal">
+          <p class="lp-eyebrow"><b>04</b> Your AI, your rules</p>
+          <h2 class="lp-h2" id="ai-title">Open-source Qwen by default. Any AI you like, when you want.</h2>
+          <p class="lp-sub">Athena ships with the open Qwen vision-language model running on your own server, so pictures never leave your network. Each person can also plug in their own AI with an address and a key — anything that speaks the OpenAI-compatible API.</p>
+          <ul class="lp-pills" aria-label="Works with">
+            <li>Qwen-VL</li><li>OpenAI</li><li>Google Gemini</li><li>OpenRouter</li><li>vLLM</li><li>Ollama</li><li>LM Studio</li><li>Alibaba Cloud</li>
+          </ul>
+        </div>
+        <div class="lp-ai-cards lp-reveal" aria-hidden="true">
+          <div class="lp-ai-card lp-ai-card--on">
+            <div class="lp-ai-top"><strong>Built-in Qwen</strong><span class="lp-ai-badge">Default</span></div>
+            <p>qwen2.5vl:7b · on your own server</p>
+            <span class="lp-ai-status"><i></i>Answering · 1.8 s</span>
+          </div>
+          <div class="lp-ai-card">
+            <div class="lp-ai-top"><strong>Your own AI</strong><span class="lp-ai-badge lp-ai-badge--line">Optional</span></div>
+            <div class="lp-ai-field"><span>Address</span><code>https://api.openai.com/v1</code></div>
+            <div class="lp-ai-field"><span>Model</span><code>gpt-4o-mini</code></div>
+            <div class="lp-ai-field"><span>API key</span><code>••••••••••••3f9a</code></div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-section lp-open" id="open" aria-labelledby="open-title">
+      <div class="lp-container">
+        <div class="lp-head lp-reveal">
+          <p class="lp-eyebrow"><b>05</b> Built to be trusted</p>
+          <h2 class="lp-h2" id="open-title">Open source. On your servers. A person decides.</h2>
+        </div>
+        <div class="lp-trust">
+          <div class="lp-trust-item lp-reveal"><span>{% icon "code" 22 %}</span><h3>Open source</h3><p>Apache-2.0. Read every line, change what you need, no licence fees.</p></div>
+          <div class="lp-trust-item lp-reveal"><span>{% icon "server" 22 %}</span><h3>Self-hosted</h3><p>One server, your data. Works without any Athena cloud service.</p></div>
+          <div class="lp-trust-item lp-reveal"><span>{% icon "shield" 22 %}</span><h3>A person decides</h3><p>Reports are a careful first look. People confirm, rate and act on them.</p></div>
+          <div class="lp-trust-item lp-reveal"><span>{% icon "detector" 22 %}</span><h3>Grow into custom models</h3><p>When a check repeats every day, label pictures and train a dedicated detector — no code.</p></div>
+        </div>
+      </div>
+    </section>
+
+    <section class="lp-final" aria-labelledby="final-title">
+      <div class="lp-container lp-final-inner lp-reveal">
+        <h2 class="lp-h2" id="final-title">Your first report in about a minute.</h2>
+        <p class="lp-sub">Sign in, pick a check, add a photo. That's it.</p>
+        <div class="lp-cta-row"><a class="lp-btn lp-btn--primary lp-btn--lg" href="{% url 'login' %}?next=/inspect/new" data-testid="landing-final-cta-button">Start an inspection{% icon "arrow" 18 %}</a><a class="lp-btn lp-btn--line lp-btn--lg" href="{% url 'login' %}" data-testid="landing-final-signin">Sign in</a></div>
+        <p class="lp-fine">No account yet? Ask whoever runs Athena at your organisation to create one.</p>
+      </div>
+    </section>
+  </main>
+
+  <footer class="lp-foot">
+    <div class="lp-container lp-foot-inner">
+      <a class="lp-brand" href="/"><span class="lp-mark" aria-hidden="true"></span><span>Athena<em>OS</em></span></a>
+      <p>Open-source computer vision for operations teams. Code under Apache-2.0; model weights carry their own terms.</p>
+    </div>
+  </footer>
+  {% icon_data %}
+  <script src="{% static 'projects/landing.js' %}"></script>
+</body>
+</html>

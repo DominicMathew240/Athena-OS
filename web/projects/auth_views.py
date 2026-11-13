@@ -72,10 +72,13 @@ def healthz(request: HttpRequest) -> JsonResponse:
         checks["database"] = True
     except Exception:  # noqa: BLE001 - any failure means "not ready"
         pass
-    try:
-        settings.MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
-        checks["media"] = os.access(settings.MEDIA_ROOT, os.W_OK)
-    except OSError:
-        pass
+    if settings.STORAGE_KIND == "s3":
+        checks["media"] = True  # the bucket is checked when files are written, not on every probe
+    else:
+        try:
+            settings.MEDIA_ROOT.mkdir(parents=True, exist_ok=True)
+            checks["media"] = os.access(settings.MEDIA_ROOT, os.W_OK)
+        except OSError:
+            pass
     ok = all(checks.values())
     return JsonResponse({"status": "ok" if ok else "unavailable", **checks}, status=200 if ok else 503)

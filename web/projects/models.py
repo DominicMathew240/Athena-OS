@@ -825,3 +825,77 @@ class ConsoleSettingEvent(_AppendOnlyModel):
 
     def __str__(self) -> str:
         return f"{self.key} {self.before} -> {self.after}"
+
+
+class AIConnection(models.Model):
+    """A person's own vision-language model: any OpenAI-compatible endpoint. One per person.
+
+    With ``use_own`` off (or no row at all) that person's inspections use the built-in model from ``settings.VISION``.
+    The API key is stored encrypted (``projects.vision.secrets``) and is never sent back to a browser.
+    """
+
+    user = models.OneToOneField(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="ai_connection")
+    use_own = models.BooleanField(default=False)
+    label = models.CharField(max_length=80, blank=True)
+    base_url = models.CharField(max_length=300, blank=True)
+    model = models.CharField(max_length=160, blank=True)
+    api_key_encrypted = models.TextField(blank=True)
+    key_hint = models.CharField(max_length=8, blank=True)
+    updated_at = models.DateTimeField(default=timezone.now)
+
+    def __str__(self) -> str:
+        return f"{self.user_id} {self.base_url} {self.model}"
+
+
+class Inspection(models.Model):
+    """One question asked about one to six pictures (or frames of a short video), and the model's answer."""
+
+    STATUS_QUEUED, STATUS_RUNNING, STATUS_DONE, STATUS_FAILED = "queued", "running", "done", "failed"
+    STATUS_CHOICES = [(s, s.capitalize()) for s in (STATUS_QUEUED, STATUS_RUNNING, STATUS_DONE, STATUS_FAILED)]
+    ACTIVE_STATUSES = (STATUS_QUEUED, STATUS_RUNNING)
+    VERDICT_CHOICES = [("clear", "All clear"), ("attention", "Needs attention"), ("critical", "Critical")]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="inspections")
+    template = models.CharField(max_length=40)
+    title = models.CharField(max_length=120)
+    instructions = models.TextField(blank=True)
+    source = models.CharField(max_length=10, default="photo")  # "photo" or "video"
+    status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_QUEUED)
+    verdict = models.CharField(max_length=10, choices=VERDICT_CHOICES, blank=True)
+    result = models.JSONField(default=dict, blank=True)
+    error = models.TextField(blank=True)
+    provider = models.CharField(max_length=10, blank=True)  # "builtin" or "own"
+    model_label = models.CharField(max_length=200, blank=True)
+    endpoint_host = models.CharField(max_length=200, blank=True)
+    duration_ms = models.PositiveIntegerField(null=True, blank=True)
+    feedback = models.CharField(max_length=8, blank=True)  # "right" or "wrong"
+    feedback_note = models.CharField(max_length=1000, blank=True)
+    created_at = models.DateTimeField(default=timezone.now, db_index=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        indexes = (models.Index(fields=("created_by", "-created_at")),)
+
+    def __str__(self) -> str:
+        return self.title
+
+
+class InspectionImage(models.Model):
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    inspection = models.ForeignKey(Inspection, on_delete=models.CASCADE, related_name="images")
+    position = models.PositiveSmallIntegerField()
+    filename = models.CharField(max_length=255)
+    storage_key = models.CharField(max_length=500)
+    content_type = models.CharField(max_length=40)
+    sha256 = models.CharField(max_length=64)
+    size_bytes = models.PositiveIntegerField()
+    width = models.PositiveIntegerField()
+    height = models.PositiveIntegerField()
+    frame_time = models.FloatField(null=True, blank=True)  # seconds into the video, for frames taken from one
+
+    class Meta:
+        ordering = ("position",)
+        constraints = (models.UniqueConstraint(fields=("inspection", "position"), name="inspection_image_position"),)

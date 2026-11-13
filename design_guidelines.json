@@ -1,0 +1,250 @@
+{
+  "project_info": {
+    "name": "Athena OS",
+    "version": "2.0.0",
+    "theme_mode": "dual_light_dark",
+    "tech_stack": "Django templates + Vanilla JS + CSS Custom Properties (Self-hosted assets)"
+  },
+  "design_philosophy": {
+    "concept": "Industrial Control Room Precision meets High-Clarity SaaS",
+    "fusion_elements": [
+      "ISA-101 High-Performance HMI (Neutral low-fatigue base + high-signal status indicators)",
+      "Swiss Structural Grid & Typographic Contrast (Wide Display + Humanist Sans + Tactical Mono)",
+      "Tactical Industrial Aesthetic (Subtle grid borders, sharp glassmorphism, functional data density)"
+    ],
+    "anti_patterns_avoided": [
+      "No generic AI purple-blue gradients (#7351B7 forbidden)",
+      "No Inter font for headlines",
+      "No center-everything layout",
+      "No transparent headers without backdrop blur",
+      "No decorative green/blue noise that competes with alarm states"
+    ]
+  },
+  "typography": {
+    "font_families": {
+      "heading": "'Anybody', 'Helvetica Neue', sans-serif",
+      "body": "'Hanken Grotesk', system-ui, -apple-system, sans-serif",
+      "mono": "'Martian Mono', monospace"
+    },
+    "self_hosted_files": {
+      "anybody": "/static/projects/fonts/anybody-latin.woff2",
+      "hanken_grotesk": "/static/projects/fonts/hanken-grotesk-latin.woff2",
+      "martian_mono": "/static/projects/fonts/martian-mono-latin.woff2"
+    },
+    "scale": {
+      "h1": {
+        "desktop": "clamp(2.25rem, 5vw, 3.5rem)",
+        "mobile": "2rem",
+        "weight": "800",
+        "letter_spacing": "-0.03em",
+        "line_height": "1.1"
+      },
+      "h2": {
+        "desktop": "2.25rem",
+        "mobile": "1.75rem",
+        "weight": "700",
+        "letter_spacing": "-0.02em",
+        "line_height": "1.2"
+      },
+      "h3": {
+        "desktop": "1.5rem",
+        "mobile": "1.25rem",
+        "weight": "600",
+        "letter_spacing": "-0.01em",
+        "line_height": "1.3"
+      },
+      "body_lg": {
+        "size": "1.125rem",
+        "line_height": "1.6",
+        "weight": "400"
+      },
+      "body": {
+        "size": "1rem",
+        "line_height": "1.5",
+        "weight": "400"
+      },
+      "label_mono": {
+        "size": "0.8125rem",
+        "letter_spacing": "0.08em",
+        "text_transform": "uppercase",
+        "font_family": "var(--font-mono)"
+      }
+    }
+  },
+  "colors": {
+    "light_theme": {
+      "bg_root": "#f8fafc",
+      "bg_surface": "#ffffff",
+      "bg_surface_hover": "#f1f5f9",
+      "bg_surface_alt": "#e2e8f0",
+      "border": "#cbd5e1",
+      "border_subtle": "#e2e8f0",
+      "text_main": "#0f172a",
+      "text_muted": "#475569",
+      "text_dim": "#64748b",
+      "accent_primary": "#0284c7",
+      "accent_primary_hover": "#0369a1",
+      "accent_primary_light": "#e0f2fe",
+      "accent_focus": "#0284c7",
+      "status_clear": "#059669",
+      "status_clear_bg": "#ecfdf5",
+      "status_clear_border": "#a7f3d0",
+      "status_attention": "#d97706",
+      "status_attention_bg": "#fffbeb",
+      "status_attention_border": "#fde68a",
+      "status_critical": "#dc2626",
+      "status_critical_bg": "#fef2f2",
+      "status_critical_border": "#fecaca"
+    },
+    "dark_theme": {
+      "bg_root": "#0b0f17",
+      "bg_surface": "#131924",
+      "bg_surface_hover": "#1c2433",
+      "bg_surface_alt": "#17202e",
+      "border": "#283548",
+      "border_subtle": "#1e293b",
+      "text_main": "#f1f5f9",
+      "text_muted": "#94a3b8",
+      "text_dim": "#64748b",
+      "accent_primary": "#38bdf8",
+      "accent_primary_hover": "#0ea5e9",
+      "accent_primary_light": "#0c4a6e",
+      "accent_focus": "#38bdf8",
+      "status_clear": "#10b981",
+      "status_clear_bg": "#022c22",
+      "status_clear_border": "#065f46",
+      "status_attention": "#f59e0b",
+      "status_attention_bg": "#451a03",
+      "status_attention_border": "#78350f",
+      "status_critical": "#ef4444",
+      "status_critical_bg": "#450a0a",
+      "status_critical_border": "#7f1d1d"
+    }
+  },
+  "css_custom_properties_template": "/* Dark Theme Default (Control Room) */\n:root {\n  --font-heading: 'Anybody', 'Helvetica Neue', sans-serif;\n  --font-body: 'Hanken Grotesk', system-ui, sans-serif;\n  --font-mono: 'Martian Mono', monospace;\n  \n  --bg-root: #0b0f17;\n  --bg-surface: #131924;\n  --bg-surface-hover: #1c2433;\n  --bg-surface-alt: #17202e;\n  --border: #283548;\n  --border-subtle: #1e293b;\n  \n  --text-main: #f1f5f9;\n  --text-muted: #94a3b8;\n  --text-dim: #64748b;\n  \n  --accent-primary: #38bdf8;\n  --accent-primary-hover: #0ea5e9;\n  --accent-primary-light: #0c4a6e;\n  \n  --status-clear: #10b981;\n  --status-clear-bg: #022c22;\n  --status-clear-border: #065f46;\n  \n  --status-attention: #f59e0b;\n  --status-attention-bg: #451a03;\n  --status-attention-border: #78350f;\n  \n  --status-critical: #ef4444;\n  --status-critical-bg: #450a0a;\n  --status-critical-border: #7f1d1d;\n  \n  --radius-sm: 4px;\n  --radius-md: 8px;\n  --radius-lg: 12px;\n  --radius-pill: 9999px;\n  \n  --shadow-card: 0 4px 20px -2px rgba(0, 0, 0, 0.5);\n  --shadow-dropdown: 0 10px 25px -5px rgba(0, 0, 0, 0.6);\n}\n\n/* Light Theme Override */\n[data-theme=\"light\"] {\n  --bg-root: #f8fafc;\n  --bg-surface: #ffffff;\n  --bg-surface-hover: #f1f5f9;\n  --bg-surface-alt: #e2e8f0;\n  --border: #cbd5e1;\n  --border-subtle: #e2e8f0;\n  \n  --text-main: #0f172a;\n  --text-muted: #475569;\n  --text-dim: #64748b;\n  \n  --accent-primary: #0284c7;\n  --accent-primary-hover: #0369a1;\n  --accent-primary-light: #e0f2fe;\n  \n  --status-clear: #059669;\n  --status-clear-bg: #ecfdf5;\n  --status-clear-border: #a7f3d0;\n  \n  --status-attention: #d97706;\n  --status-attention-bg: #fffbeb;\n  --status-attention-border: #fde68a;\n  \n  --status-critical: #dc2626;\n  --status-critical-bg: #fef2f2;\n  --status-critical-border: #fecaca;\n  \n  --shadow-card: 0 4px 12px -2px rgba(0, 0, 0, 0.08);\n  --shadow-dropdown: 0 10px 25px -5px rgba(0, 0, 0, 0.15);\n}",
+  "component_recipes": {
+    "header_nav": {
+      "selector": ".athena-header",
+      "styles": "position: sticky; top: 0; z-index: 50; backdrop-filter: blur(12px); background: rgba(19, 25, 36, 0.85); border-bottom: 1px solid var(--border); padding: 0.75rem 1.5rem; display: flex; align-items: center; justify-content: space-between;",
+      "light_background": "rgba(255, 255, 255, 0.85)"
+    },
+    "primary_button": {
+      "selector": ".btn-primary",
+      "styles": "background-color: var(--accent-primary); color: #0b0f17; font-family: var(--font-body); font-weight: 600; padding: 0.625rem 1.25rem; border-radius: var(--radius-md); border: none; cursor: pointer; transition: background-color 0.2s ease, transform 0.1s ease; display: inline-flex; align-items: center; gap: 0.5rem;",
+      "hover": "background-color: var(--accent-primary-hover); transform: translateY(-1px);"
+    },
+    "secondary_button": {
+      "selector": ".btn-secondary",
+      "styles": "background-color: transparent; color: var(--text-main); font-family: var(--font-body); font-weight: 500; padding: 0.625rem 1.25rem; border-radius: var(--radius-md); border: 1px solid var(--border); cursor: pointer; transition: background-color 0.2s ease, border-color 0.2s ease; display: inline-flex; align-items: center; gap: 0.5rem;",
+      "hover": "background-color: var(--bg-surface-hover); border-color: var(--text-muted);"
+    },
+    "card": {
+      "selector": ".athena-card",
+      "styles": "background-color: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.5rem; box-shadow: var(--shadow-card); transition: border-color 0.2s ease, transform 0.2s ease;"
+    },
+    "template_tile": {
+      "selector": ".template-tile",
+      "styles": "background-color: var(--bg-surface); border: 1px solid var(--border); border-radius: var(--radius-lg); padding: 1.25rem; cursor: pointer; transition: all 0.2s ease; display: flex; flex-direction: column; gap: 0.75rem;",
+      "hover": "border-color: var(--accent-primary); background-color: var(--bg-surface-hover); transform: translateY(-2px);"
+    },
+    "status_chip": {
+      "clear": "background-color: var(--status-clear-bg); color: var(--status-clear); border: 1px solid var(--status-clear-border); padding: 0.25rem 0.75rem; border-radius: var(--radius-pill); font-family: var(--font-mono); font-size: 0.8125rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.375rem;",
+      "attention": "background-color: var(--status-attention-bg); color: var(--status-attention); border: 1px solid var(--status-attention-border); padding: 0.25rem 0.75rem; border-radius: var(--radius-pill); font-family: var(--font-mono); font-size: 0.8125rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.375rem;",
+      "critical": "background-color: var(--status-critical-bg); color: var(--status-critical); border: 1px solid var(--status-critical-border); padding: 0.25rem 0.75rem; border-radius: var(--radius-pill); font-family: var(--font-mono); font-size: 0.8125rem; font-weight: 600; display: inline-flex; align-items: center; gap: 0.375rem;"
+    },
+    "count_tile": {
+      "selector": ".count-tile",
+      "styles": "background-color: var(--bg-surface-alt); border: 1px solid var(--border-subtle); border-radius: var(--radius-md); padding: 1rem; text-align: left;",
+      "number_style": "font-family: var(--font-mono); font-size: 2rem; font-weight: 700; color: var(--text-main); line-height: 1.1;",
+      "label_style": "font-family: var(--font-body); font-size: 0.875rem; color: var(--text-muted); margin-top: 0.25rem;"
+    },
+    "dropzone": {
+      "selector": ".upload-dropzone",
+      "styles": "border: 2px dashed var(--border); border-radius: var(--radius-lg); padding: 2.5rem 1.5rem; text-align: center; background-color: var(--bg-surface-alt); cursor: pointer; transition: border-color 0.2s ease, background-color 0.2s ease;",
+      "dragover": "border-color: var(--accent-primary); background-color: var(--accent-primary-light);"
+    },
+    "overlay_bounding_box": {
+      "selector": ".vlm-overlay-box",
+      "styles": "position: absolute; border: 2px solid var(--accent-primary); background-color: rgba(56, 189, 248, 0.15); border-radius: var(--radius-sm); pointer-events: auto;",
+      "label_tag": "position: absolute; top: -1.5rem; left: -2px; background-color: var(--accent-primary); color: #0b0f17; font-family: var(--font-mono); font-size: 0.75rem; font-weight: 700; padding: 0.1rem 0.4rem; border-radius: 2px 2px 0 0;"
+    }
+  },
+  "landing_page_structure": {
+    "hero_section": {
+      "headline": "No IT Degree Needed. Count, Detect, and Inspect Anything with AI Vision.",
+      "subheadline": "Show Athena a photo or video, ask what you want to know, and get immediate contextual analysis for industrial operations, retail, parking, and facility safety.",
+      "primary_cta": "Try Free Demo",
+      "secondary_cta": "Bring Your Own AI API",
+      "badge": "Default: Open-Source Qwen VLM | Bring Your Own Model"
+    },
+    "how_it_works_3_steps": [
+      {
+        "step": 1,
+        "title": "Upload or Pick a Template",
+        "description": "Choose from ready-made presets (Parking, Foot Traffic, Corrosion, PPE, Leaks) or write in plain English."
+      },
+      {
+        "step": 2,
+        "title": "Visual AI Context Engine Runs",
+        "description": "Our open-source Vision-Language Model reads the image, counts items, and analyzes structural context."
+      },
+      {
+        "step": 3,
+        "title": "Instant Actionable Inspection Report",
+        "description": "Get status verdicts (All Clear, Needs Attention, Critical), bounding highlights, exact counts, and recommended actions."
+      }
+    ],
+    "use_case_cards": [
+      {
+        "title": "Oil & Gas Industrial Inspection",
+        "description": "Detect corrosion, flange leaks, surface defects, and pipe degradation with severity scoring.",
+        "image_key": "refinery"
+      },
+      {
+        "title": "Facility & Parking Occupancy",
+        "description": "Count free vs occupied parking spaces and monitor vehicle movement in real time.",
+        "image_key": "parking"
+      },
+      {
+        "title": "Retail Foot Traffic & Safety",
+        "description": "Track store traffic flows, detect hazard spills, and verify safety PPE compliance.",
+        "image_key": "retail"
+      }
+    ],
+    "trust_section": {
+      "headline": "Open Source & Self-Hostable Trust",
+      "points": [
+        "100% Data Sovereignty — Run locally on your own infrastructure or cloud",
+        "No Vendor Lock-in — Connect Qwen VLM or any OpenAI-compatible Vision API endpoint",
+        "Built for Non-Technical Field Operations Teams"
+      ]
+    }
+  },
+  "image_urls": {
+    "refinery": "https://images.unsplash.com/photo-1586057285471-2f78bffaf074?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "parking": "https://images.unsplash.com/photo-1506521781263-d8422e82f27a?crop=entropy&cs=srgb&fm=jpg&q=85",
+    "retail": "https://images.unsplash.com/photo-1758520387434-3ade1dbb4cf7?crop=entropy&cs=srgb&fm=jpg&q=85"
+  },
+  "data_testid_guidelines": {
+    "rule": "All key interactive buttons, inputs, links, tabs, and status cards MUST contain readable data-testid attributes.",
+    "examples": {
+      "landing_page_cta": "data-testid=\"landing-hero-cta-button\"",
+      "theme_toggle": "data-testid=\"header-theme-toggle-button\"",
+      "new_inspection_btn": "data-testid=\"nav-new-inspection-button\"",
+      "template_parking": "data-testid=\"template-card-parking\"",
+      "template_corrosion": "data-testid=\"template-card-corrosion\"",
+      "file_upload_input": "data-testid=\"inspection-file-upload-input\"",
+      "run_inspection_btn": "data-testid=\"inspection-wizard-run-button\"",
+      "verdict_badge": "data-testid=\"report-verdict-status-badge\"",
+      "ai_endpoint_input": "data-testid=\"ai-settings-endpoint-input\"",
+      "ai_save_btn": "data-testid=\"ai-settings-save-button\""
+    }
+  },
+  "instructions_to_main_agent": [
+    "Inject the CSS custom properties from css_custom_properties_template into web/projects/static/projects/console.css or a dedicated athena_theme.css file.",
+    "Implement the theme toggle on the top navigation bar so toggling updates [data-theme='light'] / [data-theme='dark'] on <html> or <body>.",
+    "Use plain vanilla JavaScript with clear event listeners for wizard transitions, modal dialogs, and image overlay interactions.",
+    "Ensure input elements are minimum 16px font size to prevent automatic zooming on iOS devices and maintain WCAG 2.2 AA accessibility.",
+    "Include all required data-testid attributes across templates and JS dynamic renders to support automated test coverage."
+  ]
+}

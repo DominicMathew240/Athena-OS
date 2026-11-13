@@ -35,7 +35,7 @@ curl -s -b "$JAR" -c "$JAR" -o /dev/null -e "$BASE/login/" \
 
 # 2. Re-read the token (it can rotate at login). Reuse $JAR and $CSRF below.
 CSRF=$(awk '$6=="csrftoken"{print $7}' "$JAR")
-PROJECT=00000000-0000-0000-0000-000000000000     # your image project's id
+PROJECT=see-athena--5vnim2of     # your image project's id
 ```
 
 Not signed in: `401 {"error": "Sign in to continue."}`. `GET` calls need only the cookie. `POST` also needs

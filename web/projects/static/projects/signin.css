@@ -1,0 +1,51 @@
+/* Sign-in page: a dark control-room panel with a sample answer beside a calm, light form. Tokens from tokens.css. */
+.si { min-height: 100vh; display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(420px, 1fr); }
+
+.si-art { position: relative; display: flex; flex-direction: column; justify-content: space-between; gap: 40px; padding: 36px 56px 56px; overflow: hidden; isolation: isolate; color: #eef3f8; background: #05080d; }
+.si-art::before { content: ""; position: absolute; inset: 0; z-index: -2; background: url("landing/parking-aerial.jpg") center / cover no-repeat; filter: saturate(.8) brightness(.55); animation: si-drift 24s ease-in-out infinite alternate; }
+.si-art::after { content: ""; position: absolute; inset: 0; z-index: -1; background: linear-gradient(180deg, rgb(5 8 13 / .55) 0%, rgb(5 8 13 / .15) 40%, rgb(5 8 13 / .92) 100%); }
+
+.si-brand { display: inline-flex; align-items: center; gap: 10px; color: #fff; text-decoration: none; font: 800 21px/1 var(--font-display); font-stretch: 115%; letter-spacing: -.02em; }
+.si-brand em { margin-left: 2px; padding: 2px 5px 1px; border: 1px solid rgb(148 180 220 / .3); border-radius: 4px; color: #38bdf8; font: 600 10px/1.4 var(--font-mono); font-style: normal; letter-spacing: .08em; }
+.si-mark { width: 30px; height: 30px; border-radius: 8px; background: url("brand/athena-mark-96.png") center / contain no-repeat; box-shadow: 0 0 0 1px rgb(148 180 220 / .2); }
+
+.si-sample { align-self: flex-end; width: min(380px, 100%); margin: 0; padding: 18px 20px; border: 1px solid rgb(148 180 220 / .22); border-radius: 16px; background: rgb(10 15 23 / .72); backdrop-filter: blur(18px) saturate(140%); -webkit-backdrop-filter: blur(18px) saturate(140%); box-shadow: 0 30px 60px -30px rgb(0 0 0 / .8); animation: si-rise .7s .15s cubic-bezier(.2,.7,.2,1) both; }
+.si-q { margin: 0; color: #aebacb; font-size: 14px; font-style: italic; }
+.si-verdict { display: inline-flex; align-items: center; gap: 7px; margin: 12px 0 0; padding: 3px 9px; border-radius: 6px; background: rgb(255 176 32 / .14); color: #ffb020; font: 600 11px/1.5 var(--font-mono); letter-spacing: .1em; text-transform: uppercase; }
+.si-verdict span { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+.si-head { margin: 10px 0 0; font-size: 16px; font-weight: 600; line-height: 1.4; }
+.si-counts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 14px 0 0; padding: 0; list-style: none; }
+.si-counts li { padding: 9px 11px; border-radius: 10px; background: rgb(255 255 255 / .05); color: #aebacb; font-size: 12px; }
+.si-counts strong { display: block; color: #fff; font: 700 22px/1.1 var(--font-display); }
+
+.si-copy { max-width: 520px; animation: si-rise .7s cubic-bezier(.2,.7,.2,1) both; }
+.si-copy h1 { margin: 0; font: 800 clamp(36px, 4vw, 56px)/1 var(--font-display); font-stretch: 112%; letter-spacing: -.035em; }
+.si-copy p { margin: 16px 0 0; color: #c9d3df; font-size: 17px; line-height: 1.55; }
+
+.si-main { display: grid; place-items: center; padding: 48px 32px; background: var(--c-bg); }
+.si-main:focus { outline: none; }
+.si-panel { width: min(400px, 100%); animation: si-rise .5s .05s cubic-bezier(.2,.7,.2,1) both; }
+.si-title { margin: 6px 0 28px; font: 750 30px/1.1 var(--font-display); letter-spacing: -.02em; color: var(--c-text); }
+.si-form { display: grid; gap: 18px; }
+.si-submit { width: 100%; margin-top: 4px; }
+.si-submit .ico { transition: transform .15s var(--ease); }
+.si-submit:hover .ico { transform: translateX(3px); }
+.si-foot { margin-top: 22px; }
+.si-back { display: inline-flex; align-items: center; gap: 4px; margin-top: 28px; color: var(--c-text-3); font-size: 14px; text-decoration: none; transition: color .15s var(--ease); }
+.si-back .ico { transform: rotate(180deg); }
+.si-back:hover { color: var(--c-accent); }
+
+@keyframes si-rise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@keyframes si-drift { from { transform: scale(1.04); } to { transform: scale(1.12) translate(-1.5%, -1%); } }
+
+@media (max-width: 900px) {
+  .si { grid-template-columns: 1fr; }
+  .si-art { padding: 22px 20px 28px; gap: 22px; min-height: 0; }
+  .si-sample { display: none; }
+  .si-copy h1 { font-size: 30px; }
+  .si-copy p { font-size: 15px; margin-top: 10px; }
+  .si-main { padding: 32px 20px 48px; place-items: start center; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .si-art::before, .si-sample, .si-copy, .si-panel { animation: none; }
+}

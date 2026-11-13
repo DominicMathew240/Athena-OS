@@ -1,0 +1,10 @@
+{
+  "name": "athena-preview-proxy",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Forwards the preview's page requests to the Athena Django console on port 8001.",
+  "scripts": {
+    "start": "node proxy.js",
+    "build": "node -e \"console.log('Athena pages are served by Django; nothing to build.')\""
+  }
+}

@@ -1,0 +1,89 @@
+{% extends "projects/app_base.html" %}{% load static athena_ui %}
+{% block title %}Inspection report{% endblock %}
+{% block content %}
+<div id="report" data-id="{{ inspection_id }}" data-testid="inspection-report">
+  <header class="a-pagehead">
+    <div>
+      <nav class="a-crumbs" aria-label="Breadcrumb"><a href="{% url 'inspections-page' %}">Inspections</a>{% icon "chevron" 14 %}<span id="crumb-title">Report</span></nav>
+      <h1 class="a-h1" id="rep-title" data-testid="report-title">Loading the report…</h1>
+      <p class="a-row a-muted a-small" id="rep-sub"></p>
+    </div>
+    <div class="a-pagehead-actions">
+      <button class="a-btn" id="rep-rerun" type="button" data-needs="label" data-testid="report-rerun-button" hidden>{% icon "refresh" 18 %}Run again</button>
+      <button class="a-btn" id="rep-print" type="button" data-testid="report-print-button" hidden>{% icon "printer" 18 %}Print or save PDF</button>
+      <button class="a-btn a-btn--danger" id="rep-delete" type="button" data-needs="label" data-testid="report-delete-button">{% icon "trash" 18 %}Delete</button>
+    </div>
+  </header>
+
+  <div class="rep">
+    <section class="a-card viewer" aria-label="Pictures">
+      <div class="stage" id="stage" data-testid="report-image-stage">
+        <div class="stage-frame" id="stage-frame"><img id="stage-img" alt="" data-testid="report-main-image"></div>
+      </div>
+      <div class="stage-bar"><span id="stage-caption">Picture 1</span><label for="show-boxes"><input id="show-boxes" type="checkbox" checked data-testid="report-toggle-boxes"> Show marked areas</label></div>
+      <div class="stage-thumbs" id="stage-thumbs" aria-label="Choose a picture"></div>
+    </section>
+
+    <div class="rep-col" id="rep-col" aria-live="polite">
+      <section class="a-card running" id="state-running" data-testid="report-running-state" hidden>
+        <div><p class="a-eyebrow"><b>●</b> Working</p><h2 class="a-h2">Athena is looking at your pictures</h2></div>
+        <ol class="running-steps" id="running-steps"></ol>
+        <p class="a-help" id="running-help">This usually takes 10 to 60 seconds. You can leave this page — the report is saved and you will find it under Inspections.</p>
+      </section>
+
+      <section class="a-card a-card--pad" id="state-failed" data-testid="report-failed-state" hidden>
+        <p class="a-eyebrow">Did not finish</p>
+        <h2 class="a-h2">Athena could not finish this inspection</h2>
+        <div class="a-note a-note--bad">{% icon "alert" 20 %}<p id="failed-message" data-testid="report-error-message"></p></div>
+        <div class="a-row">
+          <button class="a-btn a-btn--primary" id="failed-retry" type="button" data-needs="label" data-testid="report-retry-button">{% icon "refresh" 18 %}Try again</button>
+          <a class="a-btn" href="{% url 'ai-settings' %}" data-testid="report-ai-settings-link">{% icon "cpu" 18 %}Check the AI model</a>
+        </div>
+      </section>
+
+      <div id="state-done" class="rep-col" hidden>
+        <section class="verdict" id="verdict" data-testid="report-verdict">
+          <div class="verdict-top"><span class="verdict-word" id="verdict-word" data-testid="report-verdict-status-badge"></span><span class="a-tag" id="verdict-template"></span></div>
+          <p class="verdict-headline" id="verdict-headline" data-testid="report-headline"></p>
+          <p class="verdict-summary" id="verdict-summary" data-testid="report-summary"></p>
+        </section>
+
+        <section id="counts-block" aria-labelledby="counts-title" hidden>
+          <h2 class="a-eyebrow block-title" id="counts-title">Counts</h2>
+          <div class="counts" id="counts" data-testid="report-counts"></div>
+        </section>
+
+        <section class="a-card a-card--pad" aria-labelledby="findings-title">
+          <div class="block-title"><h2 class="a-h3" id="findings-title">What Athena found</h2><span class="a-muted a-small" id="findings-count"></span></div>
+          <ol class="findings" id="findings" data-testid="report-findings"></ol>
+        </section>
+
+        <section class="a-card a-card--pad" id="actions-block" aria-labelledby="actions-title" hidden>
+          <div class="block-title"><h2 class="a-h3" id="actions-title">What to do next</h2></div>
+          <ol class="todo" id="actions" data-testid="report-actions"></ol>
+        </section>
+
+        <section class="a-card a-card--pad" aria-labelledby="context-title">
+          <div class="block-title"><h2 class="a-h3" id="context-title">Context</h2></div>
+          <dl class="context" id="context" data-testid="report-context"></dl>
+        </section>
+
+        <section class="a-card a-card--pad feedback" aria-labelledby="feedback-title" data-needs="label">
+          <div><h2 class="a-h3" id="feedback-title">Was this right?</h2><p class="a-help" id="feedback-help">Your answer is saved with the report so your team knows how far to trust it.</p></div>
+          <div class="feedback-btns">
+            <button class="a-btn a-btn--sm" type="button" data-rating="right" aria-pressed="false" data-testid="report-feedback-right">{% icon "up" 16 %}Yes</button>
+            <button class="a-btn a-btn--sm" type="button" data-rating="wrong" aria-pressed="false" data-testid="report-feedback-wrong">{% icon "down" 16 %}No</button>
+          </div>
+        </section>
+
+        <section class="a-card a-card--pad" aria-labelledby="meta-title">
+          <h2 class="a-eyebrow block-title" id="meta-title">About this report</h2>
+          <dl class="meta" id="meta" data-testid="report-meta"></dl>
+          <p class="a-help">Athena's answers are a careful first look, not a final engineering or legal decision. A qualified person should confirm anything critical.</p>
+        </section>
+      </div>
+    </div>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{% static 'projects/report.js' %}"></script>{% endblock %}
