@@ -609,39 +609,21 @@ export default function App() {
                 <b>06</b> Who is behind this
               </p>
               <h2 className="lp-h2" id="founder-title">
-                Founder, Athena Vision, and Inspec-Ther.
+                Built by{" "}
+                <a href={site.founder.url}>{site.founder.name}</a>.
               </h2>
             </div>
-            <div className="lp-about-grid">
-              <article className="lp-about-card lp-reveal">
-                <p className="lp-about-kicker">Founder</p>
-                <h3>{site.founder.name}</h3>
-                <p>{site.founder.summary}</p>
-                <p className="lp-about-links">
-                  <a href={site.founder.url}>Portfolio</a>
-                </p>
-              </article>
-              <article className="lp-about-card lp-reveal">
-                <p className="lp-about-kicker">Athena Vision</p>
-                <h3>{site.athenaVision.name}</h3>
-                <p>{site.athenaVision.summary}</p>
-                <p className="lp-about-links">
-                  <a href={site.founder.url}>Portfolio</a>
-                </p>
-              </article>
-              <article className="lp-about-card lp-reveal">
-                <p className="lp-about-kicker">Inspec-Ther</p>
-                <h3>{site.inspecTher.name}</h3>
-                <p>
-                  {site.inspecTher.name} is {site.inspecTher.description.replace(/\.$/, "")}.{" "}
-                  {site.inspecTher.modelNote}
-                </p>
-                <p className="lp-about-links">
-                  <a href={site.inspecTher.url}>{site.inspecTher.name}</a>
-                  <a href={site.founder.url}>Portfolio</a>
-                </p>
-              </article>
-            </div>
+            <article className="lp-about-card lp-reveal">
+              <p className="lp-about-copy">
+                Co-Founder and CTO of Stratetics Experts.{" "}
+                <a href={site.founder.url}>{site.athenaVision.name}</a> is the in-house
+                Segment and Detect stack — label one picture, review AI drafts on the rest,
+                export boxes and masks to COCO, YOLO or VOC. It sits behind{" "}
+                <a href={site.inspecTher.url}>{site.inspecTher.name}</a>, AI-driven thermal
+                inspection of solar PV assets. This page is the open-source Athena OS toolkit,
+                not the hosted app.
+              </p>
+            </article>
           </div>
         </section>
 
