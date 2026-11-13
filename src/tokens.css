@@ -1,0 +1,103 @@
+/* Athena OS design tokens: fonts and colours for the light ("clean and friendly") and dark ("control room") themes.
+   Every stylesheet reads these; console.css maps its older names onto them. The theme is the data-theme attribute on
+   <html>, set before first paint by theme.js. Fonts are served from this site (the Content Security Policy allows no
+   other origin); all three are SIL Open Font License 1.1, see fonts/OFL-*.txt. */
+
+@font-face { font-family: "Anybody"; font-style: normal; font-weight: 400 900; font-stretch: 75% 125%; font-display: swap; src: url("./assets/fonts/anybody-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Anybody"; font-style: normal; font-weight: 400 900; font-stretch: 75% 125%; font-display: swap; src: url("./assets/fonts/anybody-latin-ext.woff2") format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Hanken Grotesk"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("./assets/fonts/hanken-grotesk-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+@font-face { font-family: "Hanken Grotesk"; font-style: normal; font-weight: 400 700; font-display: swap; src: url("./assets/fonts/hanken-grotesk-latin-ext.woff2") format("woff2"); unicode-range: U+0100-02BA, U+02BD-02C5, U+02C7-02CC, U+02CE-02D7, U+02DD-02FF, U+1D00-1DBF, U+1E00-1E9F, U+1EF2-1EFF, U+2020, U+20A0-20AB, U+20AD-20C0, U+2113, U+2C60-2C7F, U+A720-A7FF; }
+@font-face { font-family: "Martian Mono"; font-style: normal; font-weight: 400 600; font-stretch: 100%; font-display: swap; src: url("./assets/fonts/martian-mono-latin.woff2") format("woff2"); unicode-range: U+0000-00FF, U+0131, U+0152-0153, U+02BB-02BC, U+02C6, U+02DA, U+02DC, U+0304, U+0308, U+0329, U+2000-206F, U+20AC, U+2122, U+2191, U+2193, U+2212, U+2215, U+FEFF, U+FFFD; }
+
+:root {
+  color-scheme: light;
+  --font-display: "Anybody", "Hanken Grotesk", system-ui, sans-serif;
+  --font-body: "Hanken Grotesk", system-ui, -apple-system, "Segoe UI", sans-serif;
+  --font-mono: "Martian Mono", ui-monospace, "SF Mono", Menlo, monospace;
+
+  --c-bg: #f3f5f8;
+  --c-surface: #ffffff;
+  --c-surface-2: #f0f3f7;
+  --c-surface-3: #e5eaf1;
+  --c-line: #e2e7ee;
+  --c-line-strong: #c9d1dc;
+  --c-field-line: #838fa1;
+  --c-text: #0c1423;
+  --c-text-2: #39465a;
+  --c-text-3: #5a677b;
+  --c-accent: #0369a1;
+  --c-accent-hover: #075985;
+  --c-accent-soft: #e2f1fb;
+  --c-accent-line: #8ccbef;
+  --c-on-accent: #ffffff;
+  --c-ok: #047857;
+  --c-ok-soft: #e6f5ee;
+  --c-ok-line: #8fd3b3;
+  --c-warn: #8a4b07;
+  --c-warn-soft: #fff4dc;
+  --c-warn-line: #e4ad3f;
+  --c-bad: #b42318;
+  --c-bad-soft: #fdecea;
+  --c-bad-line: #ec8a82;
+  --c-stage: #0a0f17;
+  --c-grid: rgb(12 20 35 / .05);
+  --c-scrim: rgb(9 13 20 / .55);
+
+  --shadow-1: 0 1px 2px rgb(12 20 35 / .06), 0 1px 1px rgb(12 20 35 / .04);
+  --shadow-2: 0 12px 32px -14px rgb(12 20 35 / .22);
+  --shadow-3: 0 28px 64px -24px rgb(12 20 35 / .38);
+
+  --r-sm: 6px;
+  --r-md: 10px;
+  --r-lg: 14px;
+  --r-xl: 20px;
+  --r-full: 999px;
+  --sidebar-w: 252px;
+  --ease: cubic-bezier(.2, .7, .2, 1);
+
+  /* The navigation rail is the control-room strip in both themes. */
+  --sb-bg: #0a1019;
+  --sb-bg-2: #111a26;
+  --sb-text: #c9d3df;
+  --sb-text-dim: #7f8ca0;
+  --sb-line: rgb(255 255 255 / .08);
+  --sb-hover: rgb(255 255 255 / .06);
+  --sb-active-bg: rgb(56 189 248 / .14);
+  --sb-active: #7dd3fc;
+  --sb-accent: #38bdf8;
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --c-bg: #080c12;
+  --c-surface: #0f151e;
+  --c-surface-2: #151d29;
+  --c-surface-3: #1c2634;
+  --c-line: #1d2836;
+  --c-line-strong: #2b394c;
+  --c-field-line: #536379;
+  --c-text: #edf2f7;
+  --c-text-2: #b3bfce;
+  --c-text-3: #8796aa;
+  --c-accent: #38bdf8;
+  --c-accent-hover: #7dd3fc;
+  --c-accent-soft: rgb(56 189 248 / .13);
+  --c-accent-line: rgb(56 189 248 / .45);
+  --c-on-accent: #04121c;
+  --c-ok: #34d399;
+  --c-ok-soft: rgb(52 211 153 / .12);
+  --c-ok-line: rgb(52 211 153 / .42);
+  --c-warn: #fbbf24;
+  --c-warn-soft: rgb(251 191 36 / .12);
+  --c-warn-line: rgb(251 191 36 / .45);
+  --c-bad: #f87171;
+  --c-bad-soft: rgb(248 113 113 / .12);
+  --c-bad-line: rgb(248 113 113 / .45);
+  --c-stage: #04070b;
+  --c-grid: rgb(148 197 255 / .055);
+  --c-scrim: rgb(2 4 8 / .7);
+
+  --shadow-1: 0 1px 0 rgb(255 255 255 / .03) inset, 0 1px 2px rgb(0 0 0 / .45);
+  --shadow-2: 0 14px 34px -14px rgb(0 0 0 / .75);
+  --shadow-3: 0 30px 70px -24px rgb(0 0 0 / .85);
+}
