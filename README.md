@@ -4,6 +4,8 @@ Athena OS is an open-source (Apache-2.0) toolkit for building reviewed datasets 
 data, starting with image object detection. It is early: see [`ROADMAP.md`](ROADMAP.md) for what is done and
 what is not. This README only claims what the source tree and its tests demonstrate.
 
+The public marketing site is a static React app on the [`landing`](https://github.com/DominicMathew240/Athena-OS/tree/landing) branch (no backend). It deploys to GitHub Pages. This `main` branch is the product source: contracts, SDK, CLI, and the Django console in `web/`.
+
 ## What exists today
 
 - **Contracts and SDK** (`sdk/python`, `contracts/`): versioned Pydantic contracts for observations, assets,

@@ -22,7 +22,7 @@ and remediate the issue before any public disclosure.
 
 ## Scope boundary
 
-This security policy covers the open-source packages in `athena-oss/`. It does
+This security policy covers the open-source packages in this repository. It does
 **not** cover the closed-source Athena Forge control plane, Athena Lab, or
 proprietary model weights. After mailbox verification, reports about closed systems may use the
 same private address for internal routing.

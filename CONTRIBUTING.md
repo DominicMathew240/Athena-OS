@@ -37,7 +37,7 @@ don't need an RFC — open a PR directly.
 
 ## Development setup
 
-From the root of the extracted open-source project, run the following. In the development monorepo, first run `cd athena-oss`.
+From the root of this repository, run:
 
 ```bash
 python -m venv .venv && source .venv/bin/activate

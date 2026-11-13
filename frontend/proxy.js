@@ -1,4 +1,5 @@
-// Forwards every page request on port 3000 to the Athena Django console on port 8001, headers untouched.
+// Preview proxy: forwards every page request on port 3000 to the Athena Django console on port 8001.
+// This is not a React app. The public landing lives on the `landing` branch.
 const http = require("http");
 
 const TARGET_HOST = "127.0.0.1";

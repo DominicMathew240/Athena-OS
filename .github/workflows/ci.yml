@@ -57,3 +57,6 @@ jobs:
         run: |
           python contracts/generate_json_schema.py /tmp/generated-schemas
           diff -r contracts/v1 /tmp/generated-schemas/v1
+
+      - name: OSS hygiene (no leaked local files)
+        run: pytest -q tests/test_oss_hygiene.py

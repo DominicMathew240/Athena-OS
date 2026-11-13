@@ -1,4 +1,8 @@
-"""Preview entry point: serves the Athena Django console (web/) through uvicorn on port 8001."""
+"""Preview entry point: serves the Athena Django console (web/) through uvicorn on port 8001.
+
+This is not a separate product API. The console lives in `web/`. Use
+`web/DEPLOYMENT.md` for self-hosting.
+"""
 
 import os
 import sys

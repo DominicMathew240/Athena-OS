@@ -28,8 +28,6 @@ build/
 web/staticfiles/
 web/.env
 *.sqlite3
-
-# Web console
 .venv-web/
 
 # Preview data
@@ -38,7 +36,13 @@ frontend/node_modules/
 .env
 .env.*
 *.env
+!.env.example
+!**/.env.example
 credentials.json
 *.pem
 *.key
 .credentials
+
+# Local notes and preview-platform files must never ship
+memory/
+.emergent/
