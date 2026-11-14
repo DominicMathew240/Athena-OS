@@ -599,6 +599,11 @@ export default function App() {
                 <p>When a check repeats every day, label pictures and train a dedicated detector — no code.</p>
               </div>
             </div>
+            <section aria-labelledby="security-update-title">
+              <h3 id="security-update-title">Security update: esbuild advisory</h3>
+              <p className="lp-sub">GitHub advisory GHSA-gv7w-rqvm-qjhr was withdrawn because it identified the wrong package. The reported issue concerns esbuild’s Deno module. This landing page uses esbuild as a build dependency; the advisory was not about the npm package. This is not a security assessment of other dependencies or installations.</p>
+              <p><a className="lp-btn lp-btn--line" href="https://github.com/advisories/GHSA-gv7w-rqvm-qjhr">Read the GitHub advisory <Icon name="arrow" size={16} /></a></p>
+            </section>
           </div>
         </section>
 
