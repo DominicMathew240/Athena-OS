@@ -23,9 +23,9 @@ class SignInTests(TestCase):
         self.user = get_user_model().objects.create_user("annotator", password=PASSWORD)
 
     def test_console_redirects_anonymous_visitors_to_sign_in(self) -> None:
-        response = self.client.get("/")
+        response = self.client.get("/detectors")
         self.assertEqual(response.status_code, 302)
-        self.assertEqual(response["Location"], "/login/")
+        self.assertEqual(response["Location"], "/login/?next=%2Fdetectors")
 
     def test_api_returns_json_401_instead_of_a_login_redirect(self) -> None:
         for method, url in (
@@ -115,7 +115,7 @@ class ConsolePageTests(TestCase):
         self.assertIn("frame-ancestors 'none'", policy)
 
     def test_markup_has_no_inline_script_style_or_handlers(self) -> None:
-        for url in ("/", "/login/"):
+        for url in ("/detectors", "/login/"):
             html = self.client.get(url).content.decode()
             with self.subTest(url=url):
                 self.assertNotRegex(html, r"<script(?![^>]*\bsrc=)")
@@ -135,7 +135,7 @@ class ConsolePageTests(TestCase):
         self.assertTrue(response.cookies["csrftoken"]["httponly"])
 
     def test_autolabel_controls_are_present(self) -> None:
-        html = self.client.get("/").content.decode()
+        html = self.client.get("/detectors").content.decode()
         for element_id in (
             "autolabel-form", "autolabel-run", "autolabel-accept", "autolabel-reject",
             "annotation-autolabel", "annotation-accept-all",
@@ -143,7 +143,7 @@ class ConsolePageTests(TestCase):
             self.assertIn(f'id="{element_id}"', html)
 
     def test_get_started_checklist_and_label_editor_are_present(self) -> None:
-        html = self.client.get("/").content.decode()
+        html = self.client.get("/detectors").content.decode()
         for element_id in (
             "checklist", "checklist-progress", "labels-panel", "label-list", "label-add-form",
             "label-new", "label-save", "label-discard", "save-state", "annotation-save-state",
@@ -151,7 +151,7 @@ class ConsolePageTests(TestCase):
             self.assertIn(f'id="{element_id}"', html)
 
     def test_page_has_skip_link_main_landmark_and_live_save_state(self) -> None:
-        html = self.client.get("/").content.decode()
+        html = self.client.get("/detectors").content.decode()
         self.assertIn('href="#main"', html)
         self.assertRegex(html, r'<main[^>]*id="main"')
         self.assertRegex(html, r'id="save-state" role="status" aria-live="polite"')
@@ -177,12 +177,12 @@ class ConsolePageTests(TestCase):
                 self.assertNotRegex(text, re.compile(term, 0 if case_sensitive else re.I))
 
     def test_teach_panel_and_decision_dialog_are_in_the_page(self) -> None:
-        html = self.client.get("/").content.decode()
+        html = self.client.get("/detectors").content.decode()
         for element_id in ("train-panel", "tr-form", "tr-model-list", "decision-dialog"):
             self.assertIn(f'id="{element_id}"', html)
 
     def test_unavailable_steps_are_labelled_not_wired_up(self) -> None:
-        html = self.client.get("/").content.decode()
+        html = self.client.get("/detectors").content.decode()
         self.assertIn("Coming soon", html)
         self.assertIn("no labelling tools yet", html)
         js = (WEB_DIR / "projects" / "static" / "projects" / "console.js").read_text()

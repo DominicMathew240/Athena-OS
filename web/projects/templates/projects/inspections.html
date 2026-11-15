@@ -1,14 +1,8 @@
 {% extends "projects/app_base.html" %}{% load static athena_ui %}
 {% block title %}Inspections{% endblock %}
 {% block content %}
-<header class="a-pagehead">
-  <div>
-    <p class="a-eyebrow"><b>●</b> Your reports</p>
-    <h1 class="a-h1">Inspections</h1>
-    <p class="a-lead">Every question you asked and what Athena found. Open one to see the marked pictures and next steps.</p>
-  </div>
-  <div class="a-pagehead-actions"><a class="a-btn a-btn--primary" href="{% url 'inspect-new' %}" data-needs="label" data-testid="history-new-inspection-button">{% icon "plus" 18 %}New inspection</a></div>
-</header>
+{% url 'inspect-new' as inspect_new_url %}
+{% include "projects/components/_page_head.html" with eyebrow="Your reports" eyebrow_dot=True title="Inspections" lead="Every question you asked and what Athena found. Open one to see the marked pictures and next steps." action_url=inspect_new_url action_label="New inspection" action_icon="plus" action_primary=True action_needs="label" action_testid="history-new-inspection-button" %}
 
 <section class="a-card" aria-label="All inspections">
   <div class="filters">
@@ -25,7 +19,7 @@
       <div class="searchbox">{% icon "search" 18 %}<label class="a-sr" for="history-search">Search inspections</label><input class="a-input" id="history-search" type="search" placeholder="Search by name or question" autocomplete="off" data-testid="history-search-input"></div>
     </div>
   </div>
-  <div class="insp-list" id="history-list" data-testid="history-list"><div class="sk-row a-skel"></div><div class="sk-row a-skel"></div><div class="sk-row a-skel"></div></div>
+  <div class="insp-list" id="history-list" data-testid="history-list">{% include "projects/components/_skeleton_rows.html" %}</div>
 </section>
 {% endblock %}
 {% block data %}{{ templates_data|json_script:"athena-templates" }}{% endblock %}

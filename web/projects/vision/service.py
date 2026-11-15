@@ -111,7 +111,9 @@ def _run(inspection_id) -> None:
         with default_storage.open(image.storage_key, "rb") as handle:
             data_url, width, height = client.prepare_image(handle.read())
         pictures.append({"data_url": data_url, "width": width, "height": height, "frame_time": image.frame_time})
-    messages = client.build_messages(template, inspection.instructions, pictures, inspection.source)
+    messages = client.build_messages(
+        template, inspection.instructions, pictures, inspection.source, regions=inspection.regions or [],
+    )
     try:
         text = client.chat(conn, messages, max_tokens=settings.VISION["MAX_TOKENS"], timeout=settings.VISION["TIMEOUT_SECONDS"])
         result = client.parse_result(text, [(p["width"], p["height"]) for p in pictures])

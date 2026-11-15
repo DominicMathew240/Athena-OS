@@ -776,8 +776,8 @@ class AdminMessageTests(TrainingBase):
 
     def test_the_screen_the_steps_name_is_the_one_the_console_has(self) -> None:
         """Pins the words: the Access link in the console header and the section the switch will sit under."""
-        console = (Path(__file__).resolve().parent / "templates" / "projects" / "console.html").read_text()
-        self.assertIn(">Access</a>", console)
+        sidebar = (Path(__file__).resolve().parent / "templates" / "projects" / "_sidebar.html").read_text()
+        self.assertIn('data-testid="nav-access-link"', sidebar)
 
     def test_the_steps_say_who_where_and_how_and_that_nothing_is_typed_into_the_page(self) -> None:
         steps = tv.AUTO_NONE_STEPS

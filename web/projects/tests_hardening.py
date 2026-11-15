@@ -72,7 +72,7 @@ class AnonymousAccessSweep(InferenceBase):
 
     def test_public_paths_are_exactly_the_documented_ones(self) -> None:
         public = sorted(route for route, converters in walk() if not converters and is_public("/" + route))
-        self.assertEqual(public, ["healthz", "login/"])
+        self.assertEqual(public, ["", "healthz", "login/"])
 
     def test_walk_covers_the_routes_added_for_this_milestone(self) -> None:
         routes = {route for route, _ in walk()}

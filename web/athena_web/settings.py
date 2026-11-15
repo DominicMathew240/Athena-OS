@@ -254,9 +254,11 @@ TRAINING = {"BACKENDS": ["projects.training.dfine:DFineBackend"]}  # opt-in D-FI
 
 # --- Vision inspections (a vision-language model that explains what it sees) -----------------
 # The built-in model is an open Qwen vision model served by your own Ollama or vLLM server through
-# an OpenAI-compatible API. Each person can switch to their own endpoint and key on the AI model page.
+# an OpenAI-compatible API. In local development (DJANGO_DEBUG=1), it defaults to localhost Ollama
+# with qwen2.5vl:7b if ATHENA_VLM_BASE_URL is not set. Each person can also switch to their own
+# endpoint and key on the AI model page.
 VISION = {
-    "BASE_URL": os.environ.get("ATHENA_VLM_BASE_URL", "").strip(),
+    "BASE_URL": os.environ.get("ATHENA_VLM_BASE_URL", "http://127.0.0.1:11434/v1" if DEBUG else "").strip(),
     "MODEL": os.environ.get("ATHENA_VLM_MODEL", "qwen2.5vl:7b").strip(),
     "API_KEY": os.environ.get("ATHENA_VLM_API_KEY", "").strip(),
     "LABEL": os.environ.get("ATHENA_VLM_LABEL", "Qwen vision (built-in)").strip(),

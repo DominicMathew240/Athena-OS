@@ -1,7 +1,7 @@
 {% extends "projects/checkscreen_base.html" %}
 {% load static %}
 {% block title %}Set up your check screen{% endblock %}
-{% block barnav %}<a class="cs-link" href="/#project={{ project.id }}">All projects</a>{% endblock %}
+{% block barnav %}<a class="cs-link" href="{% url 'dashboard' %}#project={{ project.id }}">All projects</a>{% endblock %}
 {% block content %}
 <div class="cs-wrap cs-wrap-wide" id="cs-root" data-project-id="{{ project.id }}" data-initial-app="{{ initial_app_id }}">
   <header class="cs-head">

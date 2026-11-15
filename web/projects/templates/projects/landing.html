@@ -7,7 +7,7 @@
   <title>Athena OS · Ask your cameras anything</title>
   <link rel="icon" type="image/png" href="{% static 'projects/brand/athena-mark-32.png' %}">
   <link rel="stylesheet" href="{% static 'projects/tokens.css' %}">
-  <link rel="stylesheet" href="{% static 'projects/landing.css' %}">
+  <link rel="stylesheet" href="{% static 'projects/landing.css' %}?v=2">
 </head>
 <body class="lp">
   <a class="lp-skip" href="#main">Skip to main content</a>
@@ -53,7 +53,7 @@
               <button type="button" role="tab" aria-selected="false" data-scene="parking" data-testid="landing-demo-tab-parking">Parking</button>
               <button type="button" role="tab" aria-selected="false" data-scene="footfall" data-testid="landing-demo-tab-footfall">Foot traffic</button>
             </div>
-            <span class="lp-demo-live">LIVE · QWEN-VL</span>
+            <span class="lp-demo-live">EXAMPLE REPORT</span>
           </div>
           <div class="lp-demo-stage">
             <div class="lp-demo-frame" id="demo-frame">
@@ -189,8 +189,8 @@
       <div class="lp-container lp-ai-grid">
         <div class="lp-reveal">
           <p class="lp-eyebrow"><b>04</b> Your AI, your rules</p>
-          <h2 class="lp-h2" id="ai-title">Open-source Qwen by default. Any AI you like, when you want.</h2>
-          <p class="lp-sub">Athena ships with the open Qwen vision-language model running on your own server, so pictures never leave your network. Each person can also plug in their own AI with an address and a key — anything that speaks the OpenAI-compatible API.</p>
+          <h2 class="lp-h2" id="ai-title">Choose where your picture-reading AI runs.</h2>
+          <p class="lp-sub">Picture reading requires a compatible AI service to be connected and running. Your organisation can host one on its own server, or you can connect another service; pictures are sent to the service you choose.</p>
           <ul class="lp-pills" aria-label="Works with">
             <li>Qwen-VL</li><li>OpenAI</li><li>Google Gemini</li><li>OpenRouter</li><li>vLLM</li><li>Ollama</li><li>LM Studio</li><li>Alibaba Cloud</li>
           </ul>
@@ -199,13 +199,13 @@
           <div class="lp-ai-card lp-ai-card--on">
             <div class="lp-ai-top"><strong>Built-in Qwen</strong><span class="lp-ai-badge">Default</span></div>
             <p>qwen2.5vl:7b · on your own server</p>
-            <span class="lp-ai-status"><i></i>Answering · 1.8 s</span>
+            <span class="lp-ai-status"><i></i>Example connection</span>
           </div>
           <div class="lp-ai-card">
             <div class="lp-ai-top"><strong>Your own AI</strong><span class="lp-ai-badge lp-ai-badge--line">Optional</span></div>
             <div class="lp-ai-field"><span>Address</span><code>https://api.openai.com/v1</code></div>
             <div class="lp-ai-field"><span>Model</span><code>gpt-4o-mini</code></div>
-            <div class="lp-ai-field"><span>API key</span><code>••••••••••••3f9a</code></div>
+            <div class="lp-ai-field"><span>API key</span><code>hidden · 3f9a</code></div>
           </div>
         </div>
       </div>
@@ -223,6 +223,11 @@
           <div class="lp-trust-item lp-reveal"><span>{% icon "shield" 22 %}</span><h3>A person decides</h3><p>Reports are a careful first look. People confirm, rate and act on them.</p></div>
           <div class="lp-trust-item lp-reveal"><span>{% icon "detector" 22 %}</span><h3>Grow into custom models</h3><p>When a check repeats every day, label pictures and train a dedicated detector — no code.</p></div>
         </div>
+        <section aria-labelledby="security-update-title">
+          <h3 id="security-update-title">Security update: esbuild advisory</h3>
+          <p class="lp-sub">GitHub advisory GHSA-gv7w-rqvm-qjhr was withdrawn because it identified the wrong package. The reported issue concerns esbuild’s Deno module. Athena’s tracked frontend manifest and lockfile do not list esbuild; this is not a security assessment of other installations or dependencies.</p>
+          <p><a class="lp-btn lp-btn--line" href="https://github.com/advisories/GHSA-gv7w-rqvm-qjhr">Read the GitHub advisory {% icon "arrow" 16 %}</a></p>
+        </section>
       </div>
     </section>
 

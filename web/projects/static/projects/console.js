@@ -493,8 +493,10 @@ function placeCorrectionsCard(waiting) {
   const form = document.getElementById("image-upload-form");
   const home = document.getElementById("asset-status");
   if (!form || !home || !correctionsPanel) return;
+  const focused = correctionsPanel.contains(document.activeElement) ? document.activeElement : null;
   if (waiting) { if (correctionsPanel.previousElementSibling !== form) form.after(correctionsPanel); }
   else if (correctionsPanel.nextElementSibling !== home) home.before(correctionsPanel);
+  if (focused && document.activeElement !== focused && focused.isConnected) focused.focus({ preventScroll: true });
 }
 
 // A person who is looking for the night shift's work finds it without knowing it lives in "Pictures".

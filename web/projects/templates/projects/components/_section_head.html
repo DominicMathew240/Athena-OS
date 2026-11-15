@@ -1,0 +1,7 @@
+{% load athena_ui %}<div class="section-head">
+  <div>
+    {% if eyebrow_num or eyebrow %}<p class="a-eyebrow">{% if eyebrow_num %}<b>{{ eyebrow_num }}</b> {% endif %}{{ eyebrow }}</p>{% endif %}
+    <h2 class="a-h2"{% if heading_id %} id="{{ heading_id }}"{% endif %}>{{ title }}</h2>
+  </div>
+  {% if link_url %}<a href="{{ link_url }}"{% if link_testid %} data-testid="{{ link_testid }}"{% endif %}>{{ link_label }}{% icon "arrow" 16 %}</a>{% endif %}
+</div>

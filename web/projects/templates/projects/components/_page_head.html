@@ -1,0 +1,15 @@
+{% load athena_ui %}<header class="a-pagehead">
+  <div>
+    {% if crumb_url %}<nav class="a-crumbs" aria-label="Breadcrumb"><a href="{{ crumb_url }}">{{ crumb_label }}</a>{% icon "chevron" 14 %}<span{% if crumb_id %} id="{{ crumb_id }}"{% endif %}>{{ crumb_current }}</span></nav>{% endif %}
+    {% if eyebrow %}<p class="a-eyebrow"{% if eyebrow_testid %} data-testid="{{ eyebrow_testid }}"{% endif %}>{% if eyebrow_dot %}<b class="a-status-dot" aria-hidden="true"></b> {% endif %}{{ eyebrow }}</p>{% endif %}
+    <h1 class="a-h1"{% if title_id %} id="{{ title_id }}"{% endif %}{% if title_testid %} data-testid="{{ title_testid }}"{% endif %}>{{ title }}</h1>
+    {% if lead %}<p class="a-lead">{{ lead }}</p>{% endif %}
+    {% if sub_id %}<p class="a-row a-muted a-small" id="{{ sub_id }}"></p>{% endif %}
+  </div>
+  {% if action_url or actions_template %}
+  <div class="a-pagehead-actions">
+    {% if action_url %}<a class="a-btn{% if action_primary %} a-btn--primary{% endif %}" href="{{ action_url }}"{% if action_needs %} data-needs="{{ action_needs }}"{% endif %}{% if action_testid %} data-testid="{{ action_testid }}"{% endif %}>{% if action_icon %}{% icon action_icon 18 %}{% endif %}{{ action_label }}</a>{% endif %}
+    {% if actions_template %}{% include actions_template %}{% endif %}
+  </div>
+  {% endif %}
+</header>

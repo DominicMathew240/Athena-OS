@@ -10,11 +10,37 @@ CUSTOM = "custom"
 
 TEMPLATES: list[dict] = [
     {
+        "key": "corrosion",
+        "name": "Corrosion check",
+        "industry": "Oil & gas, utilities, marine",
+        "icon": "factory",
+        "tagline": "Spot rust, pitting and coating damage on pipes and steel.",
+        "blurb": "Grade rust on pipe racks, flanges and tanks as light, moderate or severe — and get the repair steps an inspector would write.",
+        "cover": "projects/landing/refinery-skyline.jpg",
+        "featured": True,
+        "question": "Is there corrosion or coating damage, and how bad is it?",
+        "counts": ["Corroded areas", "Severe areas"],
+        "source_hint": "Photos of pipe racks, flanges, tanks, valves or steel structures",
+        "focus": (
+            "Inspect every metal surface for corrosion: surface rust, scaling, pitting, blistering or flaking paint, "
+            "coating breakdown, corrosion under insulation signs (stains, wet or damaged cladding), and corrosion at "
+            "flanges, bolts, clamps, supports and welds. Grade each area in plain words: light (surface staining only), "
+            "moderate (rust with coating loss), severe (scaling, pitting or visible metal loss). Say which part of the "
+            "equipment it is on. Recommend practical next steps such as wire-brush and recoat, ultrasonic thickness "
+            "measurement, or a close visual inspection by a qualified inspector. Verdict: clear for no or light corrosion; "
+            "attention for moderate corrosion; critical for severe corrosion, visible metal loss, or anything near a "
+            "leak or a pressure-containing joint."
+        ),
+    },
+    {
         "key": "parking",
         "name": "Parking occupancy",
         "industry": "Facilities & smart city",
         "icon": "car",
         "tagline": "Count free and taken parking spaces.",
+        "blurb": "Free, taken and badly parked — counted from a camera or drone photo.",
+        "cover": "projects/landing/parking-aerial.jpg",
+        "featured": False,
         "question": "How many parking spaces are free, and how many are taken?",
         "counts": ["Total spaces", "Occupied", "Free"],
         "source_hint": "A car park camera or a drone photo",
@@ -33,6 +59,9 @@ TEMPLATES: list[dict] = [
         "industry": "Retail & hospitality",
         "icon": "users",
         "tagline": "See how many people come in and go out.",
+        "blurb": "Who is walking in, who is leaving, and how long the queue is.",
+        "cover": "projects/landing/store-entrance.jpg",
+        "featured": False,
         "question": "How many people are walking in, and how many are walking out?",
         "counts": ["People in view", "Walking in", "Walking out", "Waiting in a queue"],
         "source_hint": "A camera pointed at a shop door or a short video of it",
@@ -46,48 +75,14 @@ TEMPLATES: list[dict] = [
         ),
     },
     {
-        "key": "corrosion",
-        "name": "Corrosion check",
-        "industry": "Oil & gas, utilities, marine",
-        "icon": "factory",
-        "tagline": "Spot rust, pitting and coating damage on pipes and steel.",
-        "question": "Is there corrosion or coating damage, and how bad is it?",
-        "counts": ["Corroded areas", "Severe areas"],
-        "source_hint": "Photos of pipe racks, flanges, tanks, valves or steel structures",
-        "focus": (
-            "Inspect every metal surface for corrosion: surface rust, scaling, pitting, blistering or flaking paint, "
-            "coating breakdown, corrosion under insulation signs (stains, wet or damaged cladding), and corrosion at "
-            "flanges, bolts, clamps, supports and welds. Grade each area in plain words: light (surface staining only), "
-            "moderate (rust with coating loss), severe (scaling, pitting or visible metal loss). Say which part of the "
-            "equipment it is on. Recommend practical next steps such as wire-brush and recoat, ultrasonic thickness "
-            "measurement, or a close visual inspection by a qualified inspector. Verdict: clear for no or light corrosion; "
-            "attention for moderate corrosion; critical for severe corrosion, visible metal loss, or anything near a "
-            "leak or a pressure-containing joint."
-        ),
-    },
-    {
-        "key": "defects",
-        "name": "Surface defects",
-        "industry": "Manufacturing & quality",
-        "icon": "scan",
-        "tagline": "Find cracks, dents, scratches and bad welds.",
-        "question": "Are there any defects on this part or surface?",
-        "counts": ["Defects found", "Serious defects"],
-        "source_hint": "Close-up photos of parts, welds, panels or products",
-        "focus": (
-            "Look for manufacturing and wear defects: cracks, dents, scratches, chips, deformation, porosity, missing "
-            "parts or fasteners, misalignment, contamination, and weld problems (undercut, porosity, spatter, incomplete "
-            "fusion, cracks). Describe each defect's type, size relative to the part, and location. Verdict: clear when "
-            "the part looks acceptable; attention for cosmetic defects; critical for cracks, structural damage or "
-            "anything that would make the part unsafe or unusable."
-        ),
-    },
-    {
         "key": "ppe",
         "name": "Safety gear (PPE)",
         "industry": "Construction, plants & warehouses",
         "icon": "hardhat",
         "tagline": "Check that people wear helmets, vests and other safety gear.",
+        "blurb": "Helmets, vests and glasses — and the hazards around people.",
+        "cover": "projects/landing/safety-worker.jpg",
+        "featured": False,
         "question": "Is everyone wearing the right safety gear?",
         "counts": ["People in view", "Wearing full PPE", "Missing some PPE"],
         "source_hint": "Site, plant or warehouse camera photos",
@@ -101,11 +96,34 @@ TEMPLATES: list[dict] = [
         ),
     },
     {
+        "key": "defects",
+        "name": "Surface defects",
+        "industry": "Manufacturing & quality",
+        "icon": "scan",
+        "tagline": "Find cracks, dents, scratches and bad welds.",
+        "blurb": "Cracks, dents, porosity and spatter, with size and location.",
+        "cover": "projects/landing/welding.jpg",
+        "featured": False,
+        "question": "Are there any defects on this part or surface?",
+        "counts": ["Defects found", "Serious defects"],
+        "source_hint": "Close-up photos of parts, welds, panels or products",
+        "focus": (
+            "Look for manufacturing and wear defects: cracks, dents, scratches, chips, deformation, porosity, missing "
+            "parts or fasteners, misalignment, contamination, and weld problems (undercut, porosity, spatter, incomplete "
+            "fusion, cracks). Describe each defect's type, size relative to the part, and location. Verdict: clear when "
+            "the part looks acceptable; attention for cosmetic defects; critical for cracks, structural damage or "
+            "anything that would make the part unsafe or unusable."
+        ),
+    },
+    {
         "key": "leaks",
         "name": "Leaks & spills",
         "industry": "Oil & gas, process plants, facilities",
         "icon": "droplet",
         "tagline": "Look for drips, stains, pools and vapour.",
+        "blurb": "Drips, stains, pools and vapour on pumps, flanges and floors.",
+        "cover": "projects/landing/refinery-night.jpg",
+        "featured": False,
         "question": "Is anything leaking or spilled?",
         "counts": ["Possible leaks", "Spills on the ground"],
         "source_hint": "Photos of pumps, valves, flanges, tanks or floors",
@@ -125,6 +143,9 @@ CUSTOM_TEMPLATE = {
     "industry": "Anything you can photograph",
     "icon": "sparkle",
     "tagline": "Describe what you want to know in your own words.",
+    "blurb": "“Are the gauge needles in the green?” “Which shelves need restocking?” If you can photograph it, you can ask it.",
+    "cover": "",
+    "featured": False,
     "question": "",
     "counts": [],
     "source_hint": "Any photo or short video",
@@ -136,7 +157,10 @@ CUSTOM_TEMPLATE = {
 }
 
 BY_KEY = {item["key"]: item for item in [*TEMPLATES, CUSTOM_TEMPLATE]}
-PUBLIC_FIELDS = ("key", "name", "industry", "icon", "tagline", "question", "counts", "source_hint")
+PUBLIC_FIELDS = (
+    "key", "name", "industry", "icon", "tagline", "blurb", "cover", "featured",
+    "question", "counts", "source_hint",
+)
 
 
 def public(template: dict) -> dict:

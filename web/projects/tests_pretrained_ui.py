@@ -240,7 +240,7 @@ class BackendsEndpointTests(TrainingBase):
 class PanelMarkupTests(TrainingBase):
     def setUp(self) -> None:
         super().setUp()
-        self.html = self.client.get("/").content.decode()
+        self.html = self.client.get("/detectors").content.decode()
 
     def test_the_control_is_inside_the_closed_administrator_fold_and_has_a_radio_group_a_licence_box_and_a_tick(self) -> None:
         self.assertRegex(self.html, r'<details class="admin-fold train-admin" id="tr-admin"(?![^>]*\bopen\b)')

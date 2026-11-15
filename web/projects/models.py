@@ -864,6 +864,7 @@ class Inspection(models.Model):
     status = models.CharField(max_length=10, choices=STATUS_CHOICES, default=STATUS_QUEUED)
     verdict = models.CharField(max_length=10, choices=VERDICT_CHOICES, blank=True)
     result = models.JSONField(default=dict, blank=True)
+    regions = models.JSONField(default=list, blank=True)
     error = models.TextField(blank=True)
     provider = models.CharField(max_length=10, blank=True)  # "builtin" or "own"
     model_label = models.CharField(max_length=200, blank=True)

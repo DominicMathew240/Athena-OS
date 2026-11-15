@@ -1,21 +1,15 @@
 {% extends "projects/app_base.html" %}{% load static athena_ui %}
 {% block title %}New inspection{% endblock %}
 {% block content %}
-<header class="a-pagehead">
-  <div>
-    <nav class="a-crumbs" aria-label="Breadcrumb"><a href="/">Home</a>{% icon "chevron" 14 %}<span>New inspection</span></nav>
-    <h1 class="a-h1">New inspection</h1>
-    <p class="a-lead">Three steps: say what to check, add your pictures, and Athena writes a plain-language report with what it found, where, and what to do next.</p>
-  </div>
-</header>
+{% include "projects/components/_page_head.html" with crumb_url="/" crumb_label="Home" crumb_current="New inspection" title="New inspection" lead="Three steps: say what to check, add your pictures, and Athena writes a plain-language report with what it found, where, and what to do next." %}
 
 <div class="a-card connect-first" id="connect-first" role="status" hidden data-testid="connect-ai-first-banner">
   <span class="ai-status-icon">{% icon "cpu" 22 %}</span>
   <div class="connect-first-text">
-    <h2 class="a-h3">Connect an AI model first</h2>
-    <p>Athena needs a vision AI to read your pictures. Add your organisation's Qwen server (Ollama or vLLM), or any OpenAI-compatible AI. It takes about a minute, and you can set everything up below in the meantime.</p>
+    <h2 class="a-h3">Picture reading is not ready yet</h2>
+    <p>Ask the person who manages Athena to connect it if you cannot change these settings. Open AI settings in a new tab, then return here. Your pictures and marked areas stay on this page while it remains open; they are not saved if you reload or close it before running the inspection.</p>
   </div>
-  <a class="a-btn a-btn--primary" href="{% url 'ai-settings' %}" data-testid="connect-ai-first-button">{% icon "cpu" 18 %}Connect AI</a>
+  <a class="a-btn a-btn--primary" href="{% url 'ai-settings' %}" target="_blank" rel="noopener" data-testid="connect-ai-first-button">{% icon "cpu" 18 %}Connect AI (opens a new tab)</a>
 </div>
 
 <form class="wiz" id="wiz" novalidate data-chosen="{{ chosen }}" data-testid="inspection-wizard">
@@ -53,6 +47,18 @@
       </label>
       <p class="a-help" id="video-status" role="status" aria-live="polite" hidden></p>
       <div class="thumbs" id="thumbs" data-testid="inspection-thumbnails"></div>
+      <div class="mark" id="mark-stage" hidden data-testid="mark-stage">
+        <div class="mark-head">
+          <h3 class="a-h3" id="mark-title">Mark areas on the picture</h3>
+          <p class="a-help" id="mark-help">Optional. Draw a box around each parking bay, pipe, shelf or other place Athena should check. Click and drag on the picture. Skip this if the whole picture should be checked.</p>
+        </div>
+        <div class="mark-frame" id="mark-frame" data-testid="mark-canvas">
+          <img id="mark-img" alt="The first picture, for marking areas">
+          <div class="mark-boxes" id="mark-boxes"></div>
+        </div>
+        <ul class="mark-list" id="mark-list" data-testid="mark-list"></ul>
+        <p class="a-help" id="mark-count"></p>
+      </div>
     </section>
 
     <section class="a-card step" id="step-run" aria-labelledby="step-run-title">
@@ -69,7 +75,7 @@
     <ul class="sum-list">
       <li id="sum-what" data-ok="false">{% icon "check" 20 %}<span><strong id="sum-what-text">Choose what to check</strong><small id="sum-what-sub">Step 1</small></span></li>
       <li id="sum-pics" data-ok="false">{% icon "check" 20 %}<span><strong id="sum-pics-text">No pictures yet</strong><small>Step 2</small></span></li>
-      <li id="sum-ai" data-ok="false">{% icon "cpu" 20 %}<span><strong id="sum-ai-text">Checking your AI model…</strong><small id="sum-ai-sub"><a href="{% url 'ai-settings' %}">Change AI model</a></small></span></li>
+      <li id="sum-ai" data-ok="false">{% icon "cpu" 20 %}<span><strong id="sum-ai-text">Checking your AI model…</strong><small id="sum-ai-sub"><a href="{% url 'ai-settings' %}" target="_blank" rel="noopener">Change AI model (opens a new tab)</a></small></span></li>
     </ul>
     <div class="sum-foot">
       <p class="a-error" id="wiz-error" role="alert" data-testid="inspection-wizard-error"></p>

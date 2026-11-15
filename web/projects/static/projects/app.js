@@ -113,27 +113,40 @@
   const sidebar = document.getElementById("sidebar");
   const menu = document.getElementById("sb-menu");
   if (sidebar && menu) {
+    const closeMenu = () => {
+      sidebar.dataset.open = "false";
+      menu.setAttribute("aria-expanded", "false");
+      menu.setAttribute("aria-label", "Open the menu");
+    };
     menu.addEventListener("click", () => {
       const open = sidebar.dataset.open !== "true";
       sidebar.dataset.open = open ? "true" : "false";
       menu.setAttribute("aria-expanded", open ? "true" : "false");
+      menu.setAttribute("aria-label", open ? "Close the menu" : "Open the menu");
     });
     document.addEventListener("keydown", event => {
-      if (event.key === "Escape" && sidebar.dataset.open === "true") { sidebar.dataset.open = "false"; menu.setAttribute("aria-expanded", "false"); menu.focus(); }
+      if (event.key === "Escape" && sidebar.dataset.open === "true") { closeMenu(); menu.focus(); }
     });
+    window.matchMedia("(max-width: 850px)").addEventListener("change", closeMenu);
   }
 
-  // AI status: one request, shared with the page through a promise.
+  // AI status: all consumers share the same request and sidebar rendering rules.
+  let statusRequest = 0;
+  async function refreshAIStatus() {
+    const request = ++statusRequest;
+    const status = await api("/api/vision/status").catch(() => null);
+    if (request === statusRequest) {
+      document.querySelectorAll("[data-ai-dot]").forEach(dot => {
+        dot.dataset.state = status ? (status.reachable ? "ok" : "down") : "unknown";
+        dot.title = !status ? "AI model status is unknown" : status.reachable
+          ? `${status.active.label} is answering` : `${status.active.label} is not answering right now`;
+      });
+    }
+    return status;
+  }
   const statusPromise = document.querySelector("[data-ai-dot], [data-ai-status]")
-    ? api("/api/vision/status").catch(() => null)
+    ? refreshAIStatus()
     : Promise.resolve(null);
-  statusPromise.then(status => {
-    document.querySelectorAll("[data-ai-dot]").forEach(dot => {
-      if (!status) return;
-      dot.dataset.state = status.reachable ? "ok" : "down";
-      dot.title = status.reachable ? `${status.active.label} is answering` : `${status.active.label} is not answering right now`;
-    });
-  });
 
-  window.AthenaApp = Object.freeze({ api, icon, esc, toast, timeAgo, VERDICTS, statusChip, inspectionRow, aiStatus: () => statusPromise });
+  window.AthenaApp = Object.freeze({ api, icon, esc, toast, timeAgo, VERDICTS, statusChip, inspectionRow, aiStatus: () => statusPromise, refreshAIStatus });
 })();

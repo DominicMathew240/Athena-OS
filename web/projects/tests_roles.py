@@ -245,7 +245,8 @@ class SuperuserAndAnonymousTests(RoleBase):
             ("post", "/api/projects"), ("get", f"/api/projects/{pid}/models"),
         ):
             self.assertEqual(getattr(anonymous, method)(url).status_code, 401, url)
-        self.assertEqual(anonymous.get("/").status_code, 302)
+        self.assertEqual(anonymous.get("/").status_code, 200)  # public landing
+        self.assertEqual(anonymous.get("/detectors").status_code, 302)
 
 
 # ---------------------------------------------------------------------------------------
@@ -463,6 +464,21 @@ class EveryRouteDeclaresItsRole(RoleBase):
     # route -> {method: needed action}; GET is "view" unless listed. Update this table on purpose, in review.
     DECLARED = {
         "": {},
+        "detectors": {},
+        "inspect/new": {},
+        "inspections": {},
+        "inspections/<uuid:inspection_id>": {},
+        "settings/ai": {},
+        "api/vision/templates": {},
+        "api/vision/connection": {"PUT": LABEL, "DELETE": LABEL},
+        "api/vision/connection/test": {"POST": LABEL},
+        "api/vision/status": {},
+        "api/inspections": {"POST": LABEL},
+        "api/inspections/summary": {},
+        "api/inspections/<uuid:inspection_id>": {"DELETE": LABEL},
+        "api/inspections/<uuid:inspection_id>/rerun": {"POST": LABEL},
+        "api/inspections/<uuid:inspection_id>/feedback": {"POST": LABEL},
+        "api/inspections/<uuid:inspection_id>/images/<int:position>": {},
         "api/me": {},
         "access": {"GET": ADMIN},
         "api/access": {"GET": ADMIN},
@@ -541,6 +557,27 @@ class EveryRouteDeclaresItsRole(RoleBase):
         for route, expected in self.DECLARED.items():
             declared = {m: a for m, a in callbacks[route].athena_access.items() if not (m == "GET" and a == VIEW)}
             self.assertEqual(declared, expected, route)
+
+    def test_viewer_cannot_modify_or_test_an_ai_connection(self) -> None:
+        from unittest.mock import patch
+        from .models import AIConnection
+
+        viewer = self.as_user("viewer")
+        labeler = self.as_user("labeler")
+        other = AIConnection.objects.create(user=self.users["labeler"], label="Existing")
+        payload = {"use_own": False, "label": "Changed"}
+        self.assertEqual(viewer.get("/api/vision/connection").status_code, 200)
+        with patch("projects.vision_views.client.test_connection") as test_connection:
+            for method, url in (("put", "/api/vision/connection"), ("delete", "/api/vision/connection"),
+                                ("post", "/api/vision/connection/test")):
+                self.assertEqual(self.send(viewer, method, url, payload).status_code, 403)
+            test_connection.assert_not_called()
+        self.assertFalse(AIConnection.objects.filter(user=self.users["viewer"]).exists())
+        other.refresh_from_db()
+        self.assertEqual(other.label, "Existing")
+        self.assertEqual(self.send(labeler, "put", "/api/vision/connection", payload).status_code, 200)
+        other.refresh_from_db()
+        self.assertEqual(other.label, "Changed")
 
     def test_no_write_method_is_declared_as_view_only(self) -> None:
         for route, view in self.callbacks().items():
@@ -699,10 +736,10 @@ class ConsoleMarkerTests(RoleBase):
                     self.assertIn(f'{attribute}="{value}"', tag)
 
     def test_the_role_shows_in_words_and_viewers_get_a_reason_up_front(self) -> None:
-        viewer = self.as_user("viewer").get("/").content.decode()
+        viewer = self.as_user("viewer").get("/detectors").content.decode()
         self.assertIn("Your role: Viewer", viewer)
         self.assertIn("Your account can look but not change things.", viewer)
-        approver = self.as_user("approver").get("/").content.decode()
+        approver = self.as_user("approver").get("/detectors").content.decode()
         self.assertIn("Your role: Approver", approver)
         self.assertNotIn("Your account can look but not change things.", approver)
         self.assertNotIn("there are no separate roles yet", approver)
@@ -731,7 +768,7 @@ class ConsoleMarkerTests(RoleBase):
             self.assertIn("Athena.can(", (STATIC / name).read_text(), f"{name} never checks a capability")
 
     def test_the_console_names_the_buttons_it_gates(self) -> None:
-        html = self.as_user("viewer").get("/").content.decode()
+        html = self.as_user("viewer").get("/detectors").content.decode()
         for marker in (
             'id="open-project-dialog" type="button" data-needs="label"', 'id="image-upload-form" data-needs="label"',
             'id="dataset-form" data-needs="label"', 'id="tr-form" data-needs="train"', 'id="tr-cancel" type="button" data-needs="train"',

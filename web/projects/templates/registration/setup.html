@@ -1,0 +1,117 @@
+{% load static athena_ui %}<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Set up Athena · Athena OS</title>
+  <link rel="icon" type="image/png" href="{% static 'projects/brand/athena-mark-32.png' %}">
+  <script src="{% static 'projects/theme.js' %}"></script>
+  <link rel="stylesheet" href="{% static 'projects/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'projects/app.css' %}">
+  <link rel="stylesheet" href="{% static 'projects/signin.css' %}">
+</head>
+<body class="a-body">
+  <a class="a-skip" href="#main">Skip to main content</a>
+  <div class="si">
+    <header class="si-art" aria-label="About Athena OS">
+      <a class="si-brand" href="/" data-testid="setup-brand-link"><span class="si-mark" aria-hidden="true"></span>Athena<em>OS</em></a>
+      <figure class="si-sample">
+        <p class="si-q">“Is there corrosion on these pipe flanges, or any safety gear missing?”</p>
+        <p class="si-verdict"><span aria-hidden="true"></span>Local Qwen VLM</p>
+        <p class="si-head">Runs privately on your own hardware or connects to any OpenAI-compatible vision endpoint.</p>
+        <ul class="si-counts">
+          <li><strong>1</strong>Admin setup</li>
+          <li><strong>Qwen</strong>Default VLM</li>
+          <li><strong>Ready</strong>In 1 minute</li>
+        </ul>
+      </figure>
+      <div class="si-copy">
+        <h1>Welcome to Athena OS.</h1>
+        <p>Create your administrator account and choose your default vision model before opening the dashboard.</p>
+      </div>
+    </header>
+    <main class="si-main" id="main" tabindex="-1">
+      <div class="si-panel si-panel--wide">
+        <p class="a-eyebrow">First-time setup</p>
+        <h2 class="si-title">Set up your workspace</h2>
+        <form class="si-form" method="post" action="{% url 'setup' %}" aria-label="Initial setup" data-testid="setup-form">
+          {% csrf_token %}
+          {% if errors %}
+          <div class="a-error" role="alert" data-testid="setup-error">
+            {% for err in errors %}<div>{{ err }}</div>{% endfor %}
+          </div>
+          {% endif %}
+
+          <fieldset class="si-fieldset">
+            <legend class="si-legend">1. Administrator account</legend>
+            <div class="a-field">
+              <label class="a-label" for="id_email">Email address</label>
+              <input class="a-input" id="id_email" name="email" type="email" autocomplete="email" required autofocus placeholder="you@company.com" value="{{ email|default:'' }}" data-testid="setup-email-input">
+            </div>
+            <div class="a-field">
+              <label class="a-label" for="id_username">Username <span class="a-muted a-small">(optional — defaults from email)</span></label>
+              <input class="a-input" id="id_username" name="username" type="text" autocomplete="username" autocapitalize="none" spellcheck="false" maxlength="150" placeholder="admin" value="{{ username|default:'' }}" data-testid="setup-username-input">
+            </div>
+            <div class="si-row">
+              <div class="a-field">
+                <label class="a-label" for="id_password">Password</label>
+                <input class="a-input" id="id_password" name="password" type="password" autocomplete="new-password" required data-testid="setup-password-input">
+              </div>
+              <div class="a-field">
+                <label class="a-label" for="id_password_confirm">Confirm password</label>
+                <input class="a-input" id="id_password_confirm" name="password_confirm" type="password" autocomplete="new-password" required data-testid="setup-password-confirm-input">
+              </div>
+            </div>
+          </fieldset>
+
+          <fieldset class="si-fieldset si-ai-group">
+            <legend class="si-legend">2. Default vision AI</legend>
+            <div class="si-choices">
+              <label class="si-choice">
+                <input type="radio" name="ai_mode" value="local_qwen"{% if ai_mode != "custom" and ai_mode != "skip" %} checked{% endif %} data-testid="setup-ai-local">
+                <span>
+                  <strong>Local Qwen (Ollama) <span class="a-tag">Recommended</span></strong>
+                  <small>Uses <span class="a-mono">{{ default_qwen_model }}</span> at <span class="a-mono">{{ default_qwen_url }}</span>. Ideal for M3 Mac 24GB.</small>
+                </span>
+              </label>
+              <label class="si-choice">
+                <input type="radio" name="ai_mode" value="custom"{% if ai_mode == "custom" %} checked{% endif %} data-testid="setup-ai-custom">
+                <span>
+                  <strong>Connect another OpenAI-compatible AI</strong>
+                  <small>OpenAI, Google Gemini, OpenRouter, LM Studio, or vLLM.</small>
+                </span>
+              </label>
+              <div class="si-subfields">
+                <div class="a-field">
+                  <label class="a-label" for="id_base_url">API base URL</label>
+                  <input class="a-input" id="id_base_url" name="base_url" type="url" placeholder="https://api.openai.com/v1" value="{{ base_url|default:'' }}" data-testid="setup-base-url-input">
+                </div>
+                <div class="si-row">
+                  <div class="a-field">
+                    <label class="a-label" for="id_model">Model name</label>
+                    <input class="a-input" id="id_model" name="model" type="text" placeholder="gpt-4o-mini" value="{{ model|default:'' }}" data-testid="setup-model-input">
+                  </div>
+                  <div class="a-field">
+                    <label class="a-label" for="id_api_key">API key <span class="a-muted a-small">(optional)</span></label>
+                    <input class="a-input" id="id_api_key" name="api_key" type="password" autocomplete="off" placeholder="sk-…" data-testid="setup-api-key-input">
+                  </div>
+                </div>
+              </div>
+              <label class="si-choice">
+                <input type="radio" name="ai_mode" value="skip"{% if ai_mode == "skip" %} checked{% endif %} data-testid="setup-ai-skip">
+                <span>
+                  <strong>Configure later</strong>
+                  <small>Skip for now and set up your AI model from Settings after signing in.</small>
+                </span>
+              </label>
+            </div>
+          </fieldset>
+
+          <button class="a-btn a-btn--primary a-btn--lg si-submit" type="submit" data-testid="setup-submit-button">Complete setup and open dashboard{% icon "arrow" 18 %}</button>
+        </form>
+        <a class="si-back" href="/">{% icon "chevron" 14 %}Back to the Athena home page</a>
+      </div>
+    </main>
+  </div>
+</body>
+</html>

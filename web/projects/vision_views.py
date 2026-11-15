@@ -20,6 +20,7 @@ from .models import AIConnection, Inspection, InspectionImage
 from .permissions import access
 from .views import _safe_filename, _validate_uploaded_image
 from .vision import catalog, client, secrets, service
+from .vision.regions import parse_regions
 
 MAX_PICTURES = 6
 MAX_BATCH_BYTES = 60 * 1024 * 1024
@@ -91,6 +92,7 @@ def _inspection_data(inspection: Inspection, *, full: bool = True) -> dict:
             "started_at": inspection.started_at.isoformat() if inspection.started_at else None,
             "feedback": inspection.feedback,
             "feedback_note": inspection.feedback_note,
+            "regions": inspection.regions or [],
             "images": [
                 {"position": image.position, "url": _image_url(inspection, image.position), "width": image.width,
                  "height": image.height, "filename": image.filename, "frame_time": image.frame_time}
@@ -126,7 +128,7 @@ def _draft_connection(request: HttpRequest, payload: dict) -> client.Connection:
                              base_url=base_url, model=model, api_key=key)
 
 
-@access(PUT="view", DELETE="view")
+@access(PUT="label", DELETE="label")
 @require_http_methods(["GET", "PUT", "DELETE"])
 def vision_connection(request: HttpRequest) -> JsonResponse:
     if request.method == "DELETE":
@@ -168,7 +170,7 @@ def vision_connection(request: HttpRequest) -> JsonResponse:
     return _no_store(JsonResponse(service.settings_payload(request.user)))
 
 
-@access(POST="view")
+@access(POST="label")
 @require_http_methods(["POST"])
 def vision_connection_test(request: HttpRequest) -> JsonResponse:
     try:
@@ -203,8 +205,8 @@ def vision_status(request: HttpRequest) -> JsonResponse:
 
 # --- inspections ----------------------------------------------------------------------------------------
 
-NOT_CONNECTED = ("Connect an AI model first. Open the AI model page to add your organisation's Qwen server "
-                 "or another OpenAI-compatible AI; it takes about a minute.")
+NOT_CONNECTED = ("Picture reading is not ready yet. Ask the person who manages Athena to connect it "
+                 "before running an inspection.")
 
 
 def _create_inspection(request: HttpRequest) -> JsonResponse:
@@ -241,11 +243,16 @@ def _create_inspection(request: HttpRequest) -> JsonResponse:
     title = (request.POST.get("title") or "").strip()[:120]
     if not title:
         title = template["name"] if template_key != catalog.CUSTOM else (instructions[:80] + ("…" if len(instructions) > 80 else ""))
+    try:
+        marks = parse_regions(request.POST.get("regions") or "[]")
+    except ValueError as error:
+        return _error(str(error))
     saved_keys: list[str] = []
     try:
         with transaction.atomic():
             inspection = Inspection.objects.create(
                 created_by=request.user, template=template_key, title=title, instructions=instructions, source=source,
+                regions=marks,
             )
             for position, (upload, meta) in enumerate(validated, 1):
                 key = default_storage.save(f"inspections/{inspection.id}/{uuid.uuid4()}.{meta['extension']}", upload)

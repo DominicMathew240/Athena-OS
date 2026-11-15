@@ -51,7 +51,7 @@ def panel_and_dialog_html(html: str) -> str:
 class TeachPanelMarkupTests(TrainingBase):
     def setUp(self) -> None:
         super().setUp()
-        self.html = self.client.get("/").content.decode()
+        self.html = self.client.get("/detectors").content.decode()
 
     def test_panel_has_every_control_the_script_needs(self) -> None:
         for element_id in (
@@ -321,7 +321,7 @@ class TeachScriptWordingTests(TrainingBase):
         self.assertIn("Limits: how far to trust this", section)
 
     def test_no_claim_of_accuracy_certification_or_safety_in_what_a_person_reads(self) -> None:
-        for sentence in user_facing_strings(script_section()) + [visible_text(panel_and_dialog_html(self.client.get("/").content.decode()))]:
+        for sentence in user_facing_strings(script_section()) + [visible_text(panel_and_dialog_html(self.client.get("/detectors").content.decode()))]:
             with self.subTest(sentence=sentence[:50]):
                 self.assertNotRegex(sentence, r"(?i)\baccurat|\bcertif|\bsafe(ly)?\b")
 
@@ -342,7 +342,7 @@ class TeachScriptWordingTests(TrainingBase):
 
 class WeakApprovalDialogTests(TrainingBase):
     def test_dialog_has_a_required_acknowledgement_checkbox_that_sends_the_flag(self) -> None:
-        html = self.client.get("/").content.decode()
+        html = self.client.get("/detectors").content.decode()
         dialog = html[html.index('<dialog id="decision-dialog"') :]
         self.assertRegex(dialog, r'<input id="decision-ack" type="checkbox">')
         self.assertRegex(dialog, r'id="decision-ack-row"[^>]*\shidden>')  # only shown when the model is weak
@@ -415,7 +415,7 @@ class ChecklistStepSixTests(TrainingBase):
         self.assertIn("const approvedModels = project.approved_model_count || 0;", js)
 
     def test_step_seven_is_a_link_only_when_the_check_screen_exists(self) -> None:
-        html = self.client.get("/").content.decode()
+        html = self.client.get("/detectors").content.decode()
         js = (STATIC / "console.js").read_text()
         self.assertIn('const template = checklistEl.dataset.checkUrlTemplate || "";', js)
         self.assertIn("Coming soon. Not available yet; this step is planned for a later version.", js)
@@ -808,7 +808,8 @@ class DownloadSwitchPageTests(TrainingBase):
         self.assertIn("in “Ready-made model downloads”", dfine.DFineBackend().start_options({"online": False, "downloads_allowed": False})[0]["how_to_enable"])
         self.assertIn('<h2 id="downloads-heading">Ready-made model downloads</h2>', page)
         self.assertIn('id="ready-made-model-downloads"', page)
-        self.assertIn(">Access</a>", page)
+        sidebar = (Path(__file__).resolve().parent / "templates" / "projects" / "_sidebar.html").read_text()
+        self.assertIn('data-testid="nav-access-link"', sidebar)
 
     def test_the_teach_link_points_at_that_section_and_only_an_administrator_gets_it(self) -> None:
         from .tests_roles import client_for, make_user
@@ -817,8 +818,8 @@ class DownloadSwitchPageTests(TrainingBase):
         self.assertIn('trIsAdmin() && trState.backends?.downloads?.allowed === false', script_section())
         admin = client_for(make_user("root-ui", is_superuser=True))
         trainer = client_for(make_user("tina-ui", role="trainer"))
-        self.assertIn('data-admin="1"', admin.get("/").content.decode())
-        self.assertIn('data-admin="0"', trainer.get("/").content.decode())
+        self.assertIn('data-admin="1"', admin.get("/detectors").content.decode())
+        self.assertIn('data-admin="0"', trainer.get("/detectors").content.decode())
         self.assertEqual(admin.get("/access").status_code, 200)
         self.assertEqual(trainer.get("/access").status_code, 403)  # so the section is for administrators; others read the Teach panel's sentence
 
@@ -906,7 +907,7 @@ class FallbackToolAndReadOnlyDownloadsTests(TrainingBase):
 
         ask = js_function("TR_ASK_ADMIN_DOWNLOADS", "const")
         self.assertEqual(run_js(ask, "TR_ASK_ADMIN_DOWNLOADS"), "Only an administrator can change this. Ask an administrator to open Access > Ready-made model downloads.")
-        html = client_for(make_user("tina-fu", role="trainer")).get("/").content.decode()
+        html = client_for(make_user("tina-fu", role="trainer")).get("/detectors").content.decode()
         note = html[html.index('id="tr-downloads-note"') : html.index("</p>", html.index('id="tr-downloads-note"'))]
         self.assertNotIn("<a ", note)
         self.assertNotIn("<input", note)

@@ -34,6 +34,22 @@
       frame.insertAdjacentHTML("beforeend", '<span class="stage-scrim"></span><span class="scanline"></span>');
     }
     const findings = (item.result && item.result.findings) || [];
+    const marks = item.regions || [];
+    marks.forEach((region, index) => {
+      if (region.image && region.image !== image.position) return;
+      const box = document.createElement("span");
+      box.className = "ov ov--mark";
+      box.setAttribute("aria-label", `Your marked area ${esc(region.label)}`);
+      box.style.left = `${region.x * 100}%`;
+      box.style.top = `${region.y * 100}%`;
+      box.style.width = `${region.w * 100}%`;
+      box.style.height = `${region.h * 100}%`;
+      const tag = document.createElement("span");
+      tag.className = "ov-tag";
+      tag.textContent = region.label;
+      box.append(tag);
+      frame.append(box);
+    });
     if ($("show-boxes").checked) {
       findings.forEach((finding, index) => {
         if (!finding.box || finding.image !== image.position) return;

@@ -1,4 +1,4 @@
-{% load athena_ui %}<aside class="sb" id="sidebar" data-testid="app-sidebar">
+{% load athena_ui %}<header class="sb" id="sidebar" data-testid="app-sidebar">
   <div class="sb-top">
     <a class="sb-brand" href="/" data-testid="sidebar-brand-link" aria-label="Athena OS home"><span class="sb-mark" aria-hidden="true"></span><span class="sb-name">Athena<em>OS</em></span></a>
     <button class="sb-menu" id="sb-menu" type="button" aria-expanded="false" aria-controls="sb-panel" aria-label="Open the menu" data-testid="sidebar-menu-toggle">{% icon "menu" 22 %}</button>
@@ -12,7 +12,7 @@
       <p class="sb-group">Build</p>
       <a href="{% url 'dashboard' %}" data-testid="nav-detectors-link"{% if nav == "detectors" %} aria-current="page"{% endif %}>{% icon "detector" 18 %}Custom detectors</a>
       <p class="sb-group">Settings</p>
-      <a href="{% url 'ai-settings' %}" data-testid="nav-ai-settings-link"{% if nav == "ai" %} aria-current="page"{% endif %}>{% icon "cpu" 18 %}AI model<span class="sb-dot" data-ai-dot title="Checking the AI model…"></span></a>
+      <a href="{% url 'ai-settings' %}" data-testid="nav-ai-settings-link"{% if nav == "ai" %} aria-current="page"{% endif %}{% if nav == "new" %} target="_blank" rel="noopener" aria-label="AI model (opens in a new tab)"{% endif %}>{% icon "cpu" 18 %}AI model<span class="sb-dot" data-ai-dot title="Checking the AI model…"></span></a>
       {% if athena_access.can_administer %}<a href="{% url 'access-page' %}" data-testid="nav-access-link"{% if nav == "access" %} aria-current="page"{% endif %}>{% icon "shield" 18 %}Access</a>{% endif %}
     </nav>
     <div class="sb-foot">
@@ -20,8 +20,8 @@
       <div class="sb-user">
         <span class="sb-avatar" aria-hidden="true">{{ request.user.get_username|slice:":1" }}</span>
         <span class="sb-username" title="Signed in as {{ request.user.get_username }}" data-testid="sidebar-username">{{ request.user.get_username }}</span>
-        <form method="post" action="{% url 'logout' %}">{% csrf_token %}<button class="sb-signout" type="submit" aria-label="Sign out" title="Sign out" data-testid="sidebar-signout-button">{% icon "logout" 17 %}</button></form>
+        <form method="post" action="{% url 'logout' %}" aria-label="Sign out">{% csrf_token %}<button class="sb-signout" type="submit" aria-label="Sign out" title="Sign out" data-testid="sidebar-signout-button">{% icon "logout" 17 %}</button></form>
       </div>
     </div>
   </div>
-</aside>
+</header>

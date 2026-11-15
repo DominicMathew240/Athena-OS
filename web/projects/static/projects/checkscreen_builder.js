@@ -91,7 +91,7 @@
   function updateThresholdText() {
     const t = Number(f.threshold.value) / 100;
     const words = CS.thresholdWords(t);
-    f.thresholdOut.textContent = `${t.toFixed(2)} (${Math.round(t * 100)}%). ${words}.`;
+    f.thresholdOut.textContent = `${Math.round(t * 100)}%. ${words}.`;
     f.threshold.setAttribute("aria-valuetext", `${Math.round(t * 100)} percent. ${words}`);
   }
 
@@ -284,7 +284,7 @@
     byId("cs-pv-disclaimer").textContent = p.disclaimer;
     byId("cs-pv-labels").textContent = p.displayed_labels.join(", ");
     byId("cs-pv-types").textContent = CS.typeList(p.accepted_inputs);
-    byId("cs-pv-threshold").textContent = `${CS.percent(p.confidence_threshold)} sure or more (${p.confidence_threshold.toFixed(2)})`;
+    byId("cs-pv-threshold").textContent = `${CS.percent(p.confidence_threshold)} sure or more`;
     byId("cs-pv-model").textContent = `Version ${p.model.version}${p.model_in_use ? "" : ` (${p.model.stage_now}: no longer approved, so this screen will not run)`}`;
     byId("cs-pv-human").textContent = p.human_review_required ? "Yes, always" : "No";
     const wording = p.confidence_wording;

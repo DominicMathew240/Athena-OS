@@ -1,14 +1,15 @@
 from __future__ import annotations
 
 from django.conf import settings
+from django.contrib.auth import get_user_model
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import redirect
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.http import urlencode
 
-PUBLIC_PATHS = ("/", "/login/", "/healthz")
+PUBLIC_PATHS = ("/", "/login/", "/setup/", "/healthz")
 # Views that need no role: they are about signing in or out (anyone signed in may sign out).
-UNGUARDED_URL_NAMES = frozenset({"login", "logout", "healthz", "home"})
+UNGUARDED_URL_NAMES = frozenset({"login", "logout", "setup", "healthz", "home"})
 
 
 class ConsoleLoginRequiredMiddleware:
@@ -34,6 +35,8 @@ class ConsoleLoginRequiredMiddleware:
             response = JsonResponse({"error": "Sign in to continue."}, status=401)
             response["Cache-Control"] = "no-store"
             return response
+        if not get_user_model().objects.exists():
+            return redirect("/setup/")
         target = path if url_has_allowed_host_and_scheme(path, allowed_hosts=None) else "/"
         query = urlencode({"next": target}) if target != "/" else ""
         return redirect(f"{settings.LOGIN_URL}?{query}" if query else settings.LOGIN_URL)

@@ -61,7 +61,7 @@ class DatasetPanelMarkupTests(TestCase):
         from django.contrib.auth import get_user_model
 
         self.client.force_login(get_user_model().objects.create_user("operator"))
-        self.html = self.client.get("/").content.decode()
+        self.html = self.client.get("/detectors").content.decode()
 
     def test_panel_has_every_control_the_script_needs(self) -> None:
         for element_id in (

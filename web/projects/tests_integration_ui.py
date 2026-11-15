@@ -139,7 +139,7 @@ class IncompleteSnapshotTests(TestCase):
 class CheckScreenListTests(TestCase):
     def setUp(self) -> None:
         self.client.force_login(get_user_model().objects.create_user("operator"))
-        self.html = self.client.get("/").content.decode()
+        self.html = self.client.get("/detectors").content.decode()
 
     def test_panel_is_on_the_project_page_hidden_until_a_project_is_open(self) -> None:
         self.assertRegex(self.html, r'<section class="panel apps-panel" id="apps-panel"[^>]*\shidden>')
@@ -316,7 +316,7 @@ class LongNamesAndBackButtonTests(TestCase):
         from .models import Project
 
         project = Project.objects.create(name="Back", modality="image", task="t", labels=["a"])
-        self.assertIn(f'href="/#project={project.id}"', (TEMPLATES / "checkscreen_builder.html").read_text().replace("{{ project.id }}", str(project.id)))
+        self.assertContains(self.client.get(f"/projects/{project.id}/check-screen/setup"), f'href="/detectors#project={project.id}"')
         js = source("checkscreen_builder.js")
         self.assertIn('addEventListener("beforeunload"', js)
         self.assertIn("touched = false;", js)

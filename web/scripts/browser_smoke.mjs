@@ -279,11 +279,23 @@ async function step(name, fn) {
   if (onlySteps && !onlySteps.test(name) && !/^(sign|console starts)/.test(name)) return;
   where = name;
   console.log(`- ${name}`);
+  const fakeRunnableTool = /^(Teach part: tick the box|switching project:|Teach part: a project with no test pictures|teach part: the notes)/.test(name);
+  const backendRoute = "**/api/projects/*/training/backends";
+  if (fakeRunnableTool) {
+    await page.route(backendRoute, async (route) => {
+      const response = await route.fetch();
+      const body = await response.json();
+      body.backends = body.backends.map((tool) => tool.name === body.default ? { ...tool, available_in_web_process: true } : tool);
+      await route.fulfill({ response, json: body });
+    });
+  }
   try { await fn(); } catch (error) {
     const line = (String(error.stack).split("\n").find((text) => text.includes("browser_smoke.mjs")) || "").match(/:(\d+):\d+\)?$/);
     fail(`step crashed: ${String(error.message).split("\n")[0].slice(0, 300)}${line ? ` (browser_smoke.mjs line ${line[1]})` : ""}`);
     // A debugging aid: ATHENA_SMOKE_SHOT_DIR=<folder> keeps a picture of the page at the moment a step crashed.
     if (process.env.ATHENA_SMOKE_SHOT_DIR) await page.screenshot({ path: path.join(process.env.ATHENA_SMOKE_SHOT_DIR, `${name.replace(/\W+/g, "-").slice(0, 60)}.png`) }).catch(() => {});
+  } finally {
+    if (fakeRunnableTool) await page.unroute(backendRoute);
   }
 }
 
@@ -291,7 +303,7 @@ async function step(name, fn) {
 await step("sign-in page", async () => {
   await go(`${BASE}/login/`);
   await page.waitForSelector("#id_username");
-  expect(await page.locator("a.skip-link").count() === 1, "sign-in page has a skip link", "sign-in page has no skip link");
+  expect(await page.locator("a.a-skip").count() === 1, "sign-in page has a skip link", "sign-in page has no skip link");
   await audit("sign-in page");
   await fieldSizesAtWidths("sign-in page");
 });
@@ -299,12 +311,12 @@ await step("sign-in page", async () => {
 await step("sign in", async () => {
   await page.fill("#id_username", opts.user);
   await page.fill("#id_password", process.env.ATHENA_SMOKE_PASSWORD);
-  await Promise.all([page.waitForURL((url) => !url.pathname.startsWith("/login")), page.click("form.signin-form button[type=submit]")]);
+  await Promise.all([page.waitForURL((url) => !url.pathname.startsWith("/login")), page.click("form.si-form button[type=submit]")]);
   expect(!page.url().includes("/login"), "signed in", "still on the sign-in page after signing in");
 });
 
 await step("console starts (fresh load)", async () => {
-  await go(`${BASE}/`);
+  await go(`${BASE}/detectors`);
   // A dead console shows the server's HTML with the project count never marked ready (data-ready stays "false").
   await page.waitForFunction(() => document.getElementById("project-count")?.dataset.ready === "true", null, { timeout: 15000 })
     .then(() => pass("console script started: the project list loaded and the project count is marked ready"))
@@ -313,6 +325,51 @@ await step("console starts (fresh load)", async () => {
   expect(rows >= 1, `project list rendered (${rows} rows)`, "no project rows rendered");
   await audit("console (project list)");
   await fieldSizesAtWidths("console");
+});
+
+await step("shared sidebar stays closed after changing screen size", async () => {
+  const original = page.viewportSize();
+  await page.setViewportSize({ width: 1024, height: 900 });
+  const detectorWidth = await page.locator("#sidebar").evaluate((el) => el.getBoundingClientRect().width);
+  await go(`${BASE}/`);
+  const homeWidth = await page.locator("#sidebar").evaluate((el) => el.getBoundingClientRect().width);
+  expect(detectorWidth === homeWidth, "sidebar width matches home at tablet landscape", `sidebar widths differ: detectors ${detectorWidth}px, home ${homeWidth}px`);
+  await go(`${BASE}/detectors`);
+  await page.waitForFunction(() => document.getElementById("project-count")?.dataset.ready === "true");
+  await page.setViewportSize({ width: 390, height: 900 });
+  const menu = page.locator("#sb-menu");
+  await menu.click();
+  expect(await menu.getAttribute("aria-expanded") === "true", "mobile navigation opens", "mobile navigation did not open");
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.waitForFunction(() => document.getElementById("sb-menu")?.getAttribute("aria-expanded") === "false");
+  await page.setViewportSize({ width: 390, height: 900 });
+  expect(!(await page.locator("#sb-panel").isVisible()), "mobile navigation stays closed after desktop", "mobile navigation reopens after returning from desktop");
+  if (original) await page.setViewportSize(original);
+});
+
+await step("AI settings: viewer controls are disabled", async () => {
+  await page.route(`${BASE}/settings/ai`, async (route) => {
+    const response = await route.fetch();
+    const html = (await response.text()).replace(/data-role="[a-z]+" data-can-label="\d" data-can-train="\d" data-can-approve="\d"/,
+      'data-role="viewer" data-can-label="0" data-can-train="0" data-can-approve="0"');
+    await route.fulfill({ response, body: html });
+  });
+  try {
+    await go(`${BASE}/settings/ai`);
+    await page.waitForFunction(() => document.querySelector('#choices button')?.disabled === true);
+    const controls = await page.evaluate(() => ({
+      choices: [...document.querySelectorAll('#choices button')].every((el) => el.disabled),
+      builtin: document.getElementById('test-builtin').disabled,
+      own: [...document.querySelectorAll('#own-form button, #own-form input')].every((el) => el.disabled),
+      note: document.querySelector('[data-gate-note="label"]').textContent,
+      visible: !document.querySelector('[data-gate-note="label"]').hidden,
+    }));
+    expect(controls.choices && controls.builtin && controls.own && controls.visible && /look but not change/.test(controls.note),
+      "viewer sees read-only AI settings and an explanation", `viewer controls: ${JSON.stringify(controls)}`);
+  } finally {
+    await page.unroute(`${BASE}/settings/ai`);
+    await go(`${BASE}/detectors`);
+  }
 });
 
 await step("New project dialog", async () => {
@@ -341,7 +398,7 @@ await step("create a project; the address follows it (XB-1)", async () => {
 });
 
 await step("seeded project: every panel", async () => {
-  await go(`${BASE}/#project=${opts.projectId}`);
+  await go(`${BASE}/detectors#project=${opts.projectId}`);
   await reloadPage(); // the address alone must reopen it, on a fresh load
   await page.waitForFunction(() => document.getElementById("workspace-title")?.textContent.includes("Smoke test bags"));
   pass("the address reopens the seeded project on a fresh load");
@@ -427,7 +484,7 @@ function stubRunBody(quality = "quick") {
   };
 }
 async function openTeachFresh() {
-  await go(`${BASE}/#project=${opts.projectId}`); // the address names whichever project was open last
+  await go(`${BASE}/detectors#project=${opts.projectId}`); // the address names whichever project was open last
   await reloadPage();
   await page.waitForFunction((title) => document.getElementById("workspace-title")?.textContent.includes(title), "Smoke test bags");
   await openPart("train-panel");
@@ -721,7 +778,12 @@ await step("Teach part: a project with no test pictures is warned in the plan se
   const read = () => page.evaluate(() => {
     const help = document.getElementById("tr-start-help");
     const warn = [...help.querySelectorAll(".train-plan-warning")];
-    return { disabled: document.getElementById("tr-start").disabled, text: help.textContent, warnings: warn.map((n) => n.textContent), last: help.lastElementChild?.classList.contains("train-plan-warning") || false, border: warn[0] ? getComputedStyle(warn[0]).borderLeftColor : "" };
+    const probe = document.createElement("span");
+    probe.style.borderLeft = "1px solid var(--warn-line)";
+    help.append(probe);
+    const warningBorder = getComputedStyle(probe).borderLeftColor;
+    probe.remove();
+    return { disabled: document.getElementById("tr-start").disabled, text: help.textContent, warnings: warn.map((n) => n.textContent), last: help.lastElementChild?.classList.contains("train-plan-warning") || false, border: warn[0] ? getComputedStyle(warn[0]).borderLeftColor : "", warningBorder };
   });
   try {
     for (const next of ["server", "fallback", "none", "download"]) {
@@ -734,7 +796,7 @@ await step("Teach part: a project with no test pictures is warned in the plan se
         expect(!got.disabled, `${next === "server" ? "with the server's warning" : "worked out from the data check"}: the Teach button stays on (advice, not a stop)`, `${next}: button off: ${JSON.stringify(got)}`);
         expect(got.warnings.length === 1 && /No pictures would be kept back/.test(got.warnings[0]) && got.last, `${next}: one amber warning ends the plan sentence`, `${next}: ${JSON.stringify(got)}`);
         expect(/It will start from/.test(got.text) && got.text.indexOf("It will start from") < got.text.indexOf("No pictures would be kept back"), `${next}: the plan sentence comes first, the warning after it`, `${next}: ${got.text}`);
-        expect(got.border === "rgb(217, 165, 32)", `${next}: the warning line is amber`, `${next}: border ${got.border}`);
+        expect(got.border === got.warningBorder, `${next}: the warning line is amber`, `${next}: border ${got.border}`);
         if (next === "server") await audit("Teach part with the no-test-pictures warning");
       } else {
         expect(got.warnings.length === 0, `${next}: no warning when nothing is wrong`, `${next}: ${JSON.stringify(got)}`);
@@ -872,7 +934,7 @@ await step("approve dialog: the verdict comes first, a weak verdict needs the ti
 
 await step("Teach part for a viewer and a labeler: no tick or Quick/Better, and the card names the missing role (STUBBED role marks)", async () => {
   let role = "viewer";
-  await page.route(`${BASE}/`, async (route) => {
+  await page.route(`${BASE}/detectors`, async (route) => {
     if (route.request().resourceType() !== "document") return route.continue();
     const response = await route.fetch();
     const marks = role === "viewer" ? 'data-role="viewer" data-can-label="0" data-can-train="0" data-can-approve="0"' : 'data-role="labeler" data-can-label="1" data-can-train="0" data-can-approve="0"';
@@ -896,7 +958,7 @@ await step("Teach part for a viewer and a labeler: no tick or Quick/Better, and 
       else expect(/Your account cannot approve a model for use/.test(got.why) && !/can look but not change/.test(got.why), "a labeler's model card says what a labeler cannot do", `labeler card reason: ${got.why}`);
     }
   } finally {
-    await page.unroute(`${BASE}/`).catch(() => {});
+    await page.unroute(`${BASE}/detectors`).catch(() => {});
     await page.unroute(readinessUrl()).catch(() => {});
     await openTeachFresh().catch(() => {}); // back to the real role marks for the steps that follow
   }
@@ -1316,7 +1378,7 @@ await step("teach part: the notes the server sends sit under the plan sentence i
 });
 
 async function openPicturesFresh() {
-  await go(`${BASE}/#project=${opts.projectId}`);
+  await go(`${BASE}/detectors#project=${opts.projectId}`);
   await reloadPage();
   await page.waitForFunction((title) => document.getElementById("workspace-title")?.textContent.includes(title), "Smoke test bags");
   await openPart("image-assets-panel");
@@ -1343,7 +1405,7 @@ await step("pictures part: corrections from check screens, one outline button, t
     await page.waitForFunction(() => /waiting/.test(document.getElementById("corrections-count").textContent), null, { timeout: 15000 });
     const before = await page.evaluate(() => {
       const button = document.getElementById("corrections-import");
-      const blue = [...document.querySelectorAll("#image-assets-panel button")].filter((b) => b.checkVisibility() && getComputedStyle(b).backgroundColor === "rgb(36, 71, 184)").map((b) => b.textContent.trim());
+      const blue = [...document.querySelectorAll("#image-assets-panel button.primary")].filter((b) => b.checkVisibility()).map((b) => b.textContent.trim());
       return { count: document.getElementById("corrections-count").textContent, skipped: [...document.querySelectorAll("#corrections-skipped li")].map((li) => li.textContent), button: button.textContent, cls: button.className, blue, help: document.getElementById("corrections-help").textContent };
     });
     expect(/^2 pictures with corrections are waiting\. 1 cannot be added:/.test(before.count) && before.skipped.length === 1 && before.skipped[0].includes(SKIP.message), "the card counts what waits and names the picture that cannot be added, with the server's reason", `before: ${JSON.stringify(before)}`);
@@ -1517,7 +1579,7 @@ const CORR_ITEM = (id, over = {}) => ({ observation_id: id, app_name: "Line 4 ch
 const CORR_BODY = (over = {}) => ({ pending: 0, imported: 0, cannot_import: 0, total: 0, scanned: 0, truncated: false, batch_limit: 50, items: [], ...over });
 const projectRoute = (suffix) => new RegExp(`/api/projects/${opts.projectId}/${suffix}$`);
 async function openProjectStart() {
-  await go(`${BASE}/#project=${opts.projectId}`);
+  await go(`${BASE}/detectors#project=${opts.projectId}`);
   await reloadPage();
   await page.waitForFunction((title) => document.getElementById("workspace-title")?.textContent.includes(title), "Smoke test bags");
 }
@@ -1556,7 +1618,7 @@ await step("G3 project start: the corrections count is on the Pictures chip and 
         const card = document.getElementById("corrections-panel");
         const rect = card.getBoundingClientRect();
         const after = (node) => Boolean(node) && Boolean(card.compareDocumentPosition(node) & Node.DOCUMENT_POSITION_FOLLOWING);
-        const blue = [...document.querySelectorAll("#image-assets-panel button")].filter((b) => b.checkVisibility() && getComputedStyle(b).backgroundColor === "rgb(36, 71, 184)").map((b) => b.textContent.trim());
+        const blue = [...document.querySelectorAll("#image-assets-panel button.primary")].filter((b) => b.checkVisibility()).map((b) => b.textContent.trim());
         return { focus: document.activeElement?.id, top: rect.top, bottom: rect.bottom, vh: innerHeight, prev: card.previousElementSibling?.id, autolabelAfter: after(document.getElementById("autolabel-panel")), listAfter: after(document.getElementById("asset-list")), blue,
           steps: [...document.querySelectorAll("#image-assets-panel > .panel-steps button")].map((b) => b.textContent) };
       });
@@ -1925,10 +1987,15 @@ await step("G3 results card and approve dialog: a model that did worse than the 
       const headline = root.querySelector(".result-headline");
       const line = root.querySelector(".result-worse");
       const colour = (el) => getComputedStyle(el).backgroundColor;
-      return { headline: headline.textContent, state: headline.dataset.state || "", headlineBg: colour(headline), next: headline.nextElementSibling?.className, line: line?.textContent || "", lineBg: line ? colour(line) : "", compare: root.querySelector(".compare-verdict")?.textContent.trim() || "" };
+      const probe = document.createElement("span");
+      probe.style.backgroundColor = "var(--warn-tint)";
+      root.append(probe);
+      const warningBg = colour(probe);
+      probe.remove();
+      return { headline: headline.textContent, state: headline.dataset.state || "", headlineBg: colour(headline), next: headline.nextElementSibling?.className, line: line?.textContent || "", lineBg: line ? colour(line) : "", warningBg, compare: root.querySelector(".compare-verdict")?.textContent.trim() || "" };
     });
     expect(/^Good enough to try/.test(worse.headline) && worse.state === "" && worse.headlineBg !== "rgb(230, 244, 236)" && worse.next === "result-worse", "the headline is not in the green style, and the amber line comes directly under it", `worse: ${JSON.stringify(worse)}`);
-    expect(/Worse than the model in use on the same test pictures\./.test(worse.line) && worse.lineBg === "rgb(255, 246, 220)" && /Worse$/.test(worse.compare), "the line says it in words, in the amber tint, next to the Worse word", `line: ${JSON.stringify(worse)}`);
+    expect(/Worse than the model in use on the same test pictures\./.test(worse.line) && worse.lineBg === worse.warningBg && /Worse$/.test(worse.compare), "the line says it in words, in the amber tint, next to the Worse word", `line: ${JSON.stringify(worse)}`);
     await audit("results card for a worse model");
     await fieldSizesAtWidths("results card for a worse model");
     // approve: the tick comes with the dialog, comparison first

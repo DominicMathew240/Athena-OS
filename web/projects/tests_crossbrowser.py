@@ -244,7 +244,7 @@ class Landmarks(HTMLParser):
             self.banners.append(list(self.stack))
         if tag == "form":
             self.forms.append(attrs)
-        if tag == "a" and "skip-link" in (attrs.get("class") or ""):
+        if tag == "a" and {"skip-link", "a-skip"} & set((attrs.get("class") or "").split()):
             self.skip_links.append(attrs)
         if tag == "main":
             self.mains += 1
@@ -271,7 +271,7 @@ class LandmarkTests(TestCase):
 
     def test_console_has_a_top_level_banner_and_one_main(self) -> None:
         self.client.force_login(self.user)
-        page = landmarks(self.client.get("/").content.decode())
+        page = landmarks(self.client.get("/detectors").content.decode())
         top_level = [path for path in page.banners if not set(path) & {"main", "aside", "nav", "section", "article"}]
         self.assertEqual(len(top_level), 1, page.banners)
         self.assertEqual(page.mains, 1)
@@ -283,11 +283,12 @@ class LandmarkTests(TestCase):
         self.assertEqual(page.skip_links[0].get("href"), "#main")
         self.assertRegex(html, r'<main[^>]*id="main"')
         self.assertEqual(len(page.banners), 1)
-        self.assertLess(html.index("skip-link"), html.index("<header"))
+        self.assertLess(html.index('href="#main"'), html.index("<header"))
 
     def test_every_form_has_an_accessible_name(self) -> None:
         self.client.force_login(self.user)
-        pages = {"login": Client().get("/login/").content.decode(), "console": self.client.get("/").content.decode()}
+        pages = {"login": Client().get("/login/").content.decode(), "home": self.client.get("/").content.decode(),
+                 "console": self.client.get("/detectors").content.decode()}
         for name, html in pages.items():
             for attrs in landmarks(html).forms:
                 with self.subTest(page=name, form=attrs.get("id") or attrs.get("action") or attrs.get("class")):

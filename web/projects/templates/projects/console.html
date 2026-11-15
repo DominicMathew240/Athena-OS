@@ -1,4 +1,4 @@
-{% load static %}{% url 'checkscreen-setup' '00000000-0000-0000-0000-000000000000' as check_setup_url %}{% url 'checkscreen-operator' 'slug-placeholder' as check_open_url %}<!doctype html>
+{% load static athena_ui %}{% url 'checkscreen-setup' '00000000-0000-0000-0000-000000000000' as check_setup_url %}{% url 'checkscreen-operator' 'slug-placeholder' as check_open_url %}<!doctype html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
@@ -7,31 +7,17 @@
   <meta name="csrf-token" content="{{ csrf_token }}">
   <title>Projects · Athena console</title>
   <link rel="icon" type="image/png" href="{% static 'projects/brand/athena-mark-32.png' %}">
+  <script src="{% static 'projects/theme.js' %}"></script>
   <link rel="stylesheet" href="{% static 'projects/console.css' %}">
+  <link rel="stylesheet" href="{% static 'projects/app.css' %}">
 </head>
 <body {% include 'projects/_access_attrs.html' %}>
   <a class="skip-link" href="#main">Skip to main content</a>
-  <div class="app">
-    <header class="rail">
-      <div class="brand"><span class="brand-mark" aria-hidden="true"><i></i><i></i><i></i><i></i></span><span>Athena<small>Data labelling</small></span></div>
-      <div class="rail-heading">Workspace</div>
-      <nav class="nav" aria-label="Main navigation">
-        <a href="/" aria-current="page">Projects</a>
-        {% if athena_access.can_administer %}<a href="{% url 'access-page' %}">Access</a>{% endif %}
-      </nav>
-      <div class="rail-foot"><span class="rail-user" title="Signed in as {{ request.user.get_username }}">{{ request.user.get_username }}</span><form method="post" action="{% url 'logout' %}" aria-label="Sign out">{% csrf_token %}<button type="submit" class="rail-signout">Sign out</button></form></div>
-    </header>
-    <main class="main" id="main" tabindex="-1">
-      <header class="page-head">
-        <div>
-          <h1>Your projects</h1>
-          <p class="subtitle">A project is one piece of labelling work, such as “Bag scanner photos”. Open a project to add pictures and mark the items you care about.</p>
-        </div>
-        <div class="head-actions">
-          <button class="primary" id="open-project-dialog" type="button" data-needs="label" data-needs-scope="console">New project</button>
-          <p class="save-state" id="save-state" role="status" aria-live="polite" data-state="idle"><span class="save-dot" aria-hidden="true"></span><span id="save-state-text">Nothing to save yet.</span></p>
-        </div>
-      </header>
+  <div class="a-shell">
+    {% include 'projects/_sidebar.html' with nav='detectors' %}
+    <main class="a-main" id="main" tabindex="-1">
+      <div class="a-wrap">
+      {% include "projects/components/_page_head.html" with eyebrow="Build" eyebrow_dot=True title="Your projects" lead="A project is one piece of labelling work, such as “Bag scanner photos”. Open a project to add pictures and mark the items you care about." actions_template="projects/components/_console_head_actions.html" %}
       {% if athena_access %}<p class="role-strip" id="role-strip" data-role="{{ athena_access.role }}"><strong>Your role: {{ athena_access.role_title }}.</strong>
         {% if athena_access.role == 'viewer' %}Your account can look but not change things. Ask an administrator for the Labeler role.
         {% elif athena_access.role == 'labeler' %}You can add pictures, draw boxes and save snapshots. Teaching a model needs the Trainer role, and approving one needs the Approver role.
@@ -360,6 +346,7 @@
         </ul>
       </section>
       <p class="footer-note">What you can change depends on your role (shown near the top of this page); an administrator sets it. Athena does not encrypt stored pictures itself, so use an encrypted disk for sensitive images. Usage-rights checks are not available yet. A taught model is never used until a person approves it.</p>
+      </div>
     </main>
   </div>
 
@@ -436,6 +423,7 @@
     </form>
   </dialog>
   <script src="{% static 'projects/ui_common.js' %}"></script>
+  <script src="{% static 'projects/app.js' %}"></script>
   <script src="{% static 'projects/console.js' %}" defer></script>
 </body>
 </html>

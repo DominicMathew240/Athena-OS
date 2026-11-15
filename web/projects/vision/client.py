@@ -17,6 +17,8 @@ from urllib.parse import urlparse
 import httpx
 from PIL import Image, ImageOps
 
+from .regions import prompt_lines
+
 MAX_SIDE = 1008  # Qwen-VL works on 28-pixel patches; a multiple of 28 keeps its box coordinates on our grid
 PATCH = 28
 SEVERITIES = ("info", "low", "medium", "high", "critical")
@@ -204,7 +206,7 @@ given below, or null when it is not one place. List the most important findings 
 If there is nothing wrong, "findings" may be empty and the verdict is "clear"."""
 
 
-def build_messages(template: dict, instructions: str, pictures: list[dict], source: str) -> list:
+def build_messages(template: dict, instructions: str, pictures: list[dict], source: str, regions: list | None = None) -> list:
     """``pictures``: dicts with ``data_url``, ``width``, ``height`` and optional ``frame_time``."""
     lines = [f"Inspection type: {template['name']}."]
     question = template.get("question") or ""
@@ -214,6 +216,9 @@ def build_messages(template: dict, instructions: str, pictures: list[dict], sour
         label = "Question" if not question else "Extra instructions from the person"
         lines.append(f"{label}: {instructions}")
     lines.append(f"What to look for: {template['focus']}")
+    marked = prompt_lines(regions or [], template.get("key") or "")
+    if marked:
+        lines.append(marked)
     if template.get("counts"):
         lines.append("Report these counts (add others if useful): " + ", ".join(template["counts"]) + ".")
     if source == "video" and len(pictures) > 1:

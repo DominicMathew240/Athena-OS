@@ -21,7 +21,7 @@
     if (!status) { name.textContent = "AI model"; line.textContent = "Could not check the AI model."; return; }
     if (!status.active.configured) {
       name.textContent = "Connect your AI to start";
-      line.innerHTML = `<span class="dot" data-state="down"></span>Add your Qwen server or another OpenAI-compatible AI — open to set up`;
+      line.innerHTML = `<span class="dot" data-state="down"></span>Picture reading is not ready. Open for setup.`;
       return;
     }
     name.textContent = `${status.active.label} · ${status.active.model}`;

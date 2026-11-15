@@ -1,23 +1,18 @@
 {% extends "projects/app_base.html" %}{% load static athena_ui %}
 {% block title %}AI model{% endblock %}
 {% block content %}
-<header class="a-pagehead">
-  <div>
-    <p class="a-eyebrow"><b>●</b> Settings</p>
-    <h1 class="a-h1">Your AI model</h1>
-    <p class="a-lead">Athena uses a vision-language model: an AI that looks at a picture and explains it in words. Use the built-in open-source Qwen model, or plug in your own.</p>
-  </div>
-</header>
+{% include "projects/components/_page_head.html" with eyebrow="Settings" eyebrow_dot=True title="Your AI model" lead="Athena needs a picture-reading AI to write inspection reports. Ask the person who manages Athena to connect one, or connect your own service." %}
 
 <div class="ai-grid">
   <div class="rep-col">
     <section class="a-card a-card--pad" aria-labelledby="choose-title">
       <div class="block-title"><h2 class="a-h3" id="choose-title">Which AI should read your pictures?</h2><span class="a-muted a-small">Only for your account</span></div>
-      <div class="choice-grid" role="radiogroup" aria-labelledby="choose-title" id="choices">
+      <p class="a-note" data-gate-note="label" hidden></p>
+      <div class="choice-grid" role="radiogroup" aria-labelledby="choose-title" id="choices" data-needs="label">
         <button class="choice" type="button" role="radio" aria-checked="true" data-choice="builtin" data-testid="ai-choice-builtin">
           <span class="choice-top"><span class="choice-name">Built-in Qwen</span><span class="choice-radio" aria-hidden="true"></span></span>
-          <p>The open-source Qwen vision model, run on your organisation's own server. Nothing to set up for you.</p>
-          <span class="choice-meta"><span class="a-tag" data-testid="ai-builtin-model">{{ builtin.model|default:"not set" }}</span><span class="a-tag">{{ builtin.host|default:"no server address" }}</span></span>
+          <p>The open-source Qwen vision model can run on your organisation's server once the person managing Athena connects it.</p>
+          <span class="choice-meta"><span class="a-tag" data-testid="ai-builtin-model">{% if builtin.configured %}{{ builtin.model }}{% else %}Not connected{% endif %}</span>{% if builtin.configured %}<span class="a-tag">{{ builtin.host }}</span>{% endif %}</span>
         </button>
         <button class="choice" type="button" role="radio" aria-checked="false" data-choice="own" data-testid="ai-choice-own">
           <span class="choice-top"><span class="choice-name">Your own AI</span><span class="choice-radio" aria-hidden="true"></span></span>
@@ -26,13 +21,13 @@
         </button>
       </div>
       <div class="a-row" id="builtin-actions">
-        <button class="a-btn a-btn--sm" type="button" id="test-builtin" data-testid="ai-test-builtin-button">{% icon "plug" 16 %}Test the built-in model</button>
-        <span class="a-help">The address and model are set by your administrator on the server (ATHENA_VLM_BASE_URL and ATHENA_VLM_MODEL).</span>
+        <button class="a-btn a-btn--sm" type="button" id="test-builtin" data-needs="label" data-testid="ai-test-builtin-button">{% icon "plug" 16 %}Test the built-in model</button>
+        <span class="a-help">Ask the person who manages Athena to set up picture reading for your organisation.</span>
       </div>
       <div id="builtin-result"></div>
     </section>
 
-    <form class="a-card a-card--pad" id="own-form" novalidate aria-labelledby="own-title" data-testid="ai-own-form" hidden>
+    <form class="a-card a-card--pad" id="own-form" novalidate aria-labelledby="own-title" data-needs="label" data-testid="ai-own-form" hidden>
       <div class="block-title"><h2 class="a-h3" id="own-title">Connect your own AI</h2></div>
       <div class="a-field">
         <span class="a-label" id="preset-label">Start from a common service</span>

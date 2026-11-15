@@ -71,7 +71,7 @@
 .lp-sub { max-width: 58ch; margin: 18px 0 0; color: var(--lp-text-2); font-size: 18px; line-height: 1.6; }
 
 /* hero */
-.lp-hero { position: relative; padding: clamp(48px, 8vw, 96px) 0 72px; isolation: isolate; }
+.lp-hero { position: relative; padding: clamp(48px, 8vw, 96px) 0 72px; isolation: isolate; overflow-x: clip; }
 .lp-hero::before { content: ""; position: absolute; inset: -70px 0 0; z-index: -2; background-image: linear-gradient(rgb(148 197 255 / .06) 1px, transparent 1px), linear-gradient(90deg, rgb(148 197 255 / .06) 1px, transparent 1px); background-size: 44px 44px; mask-image: radial-gradient(ellipse 80% 70% at 60% 30%, #000 30%, transparent 80%); -webkit-mask-image: radial-gradient(ellipse 80% 70% at 60% 30%, #000 30%, transparent 80%); }
 .lp-hero::after { content: ""; position: absolute; right: -10%; top: -10%; z-index: -1; width: 720px; height: 720px; border-radius: 50%; background: radial-gradient(closest-side, rgb(56 189 248 / .16), transparent); pointer-events: none; }
 .lp-hero-grid { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.02fr); gap: clamp(32px, 5vw, 72px); align-items: center; }

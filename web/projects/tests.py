@@ -60,7 +60,7 @@ class ProjectWorkspaceTests(SignedInMixin, TestCase):
         )
 
     def test_dashboard_renders_project_creation_form_and_csrf_cookie(self) -> None:
-        response = self.client.get("/")
+        response = self.client.get("/detectors")
 
         self.assertEqual(response.status_code, 200)
         self.assertContains(response, 'id="create-project-form"')
@@ -68,7 +68,7 @@ class ProjectWorkspaceTests(SignedInMixin, TestCase):
         self.assertIn("csrftoken", response.cookies)
 
     def test_dashboard_exposes_image_import_controls(self) -> None:
-        response = self.client.get("/")
+        response = self.client.get("/detectors")
 
         self.assertContains(response, 'id="image-upload"')
         self.assertContains(response, 'accept="image/jpeg,image/png,image/webp"')

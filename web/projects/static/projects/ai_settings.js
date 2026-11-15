@@ -4,13 +4,13 @@
   const { api, icon, esc, toast } = window.AthenaApp;
   const $ = id => document.getElementById(id);
   const PRESETS = [
+    { name: "Ollama (Local Qwen)", url: "http://localhost:11434/v1", model: "qwen2.5vl:7b" },
+    { name: "LM Studio", url: "http://localhost:1234/v1", model: "qwen2.5-vl-7b-instruct" },
+    { name: "vLLM", url: "http://localhost:8000/v1", model: "Qwen/Qwen2.5-VL-7B-Instruct" },
     { name: "OpenAI", url: "https://api.openai.com/v1", model: "gpt-4o-mini" },
     { name: "Google Gemini", url: "https://generativelanguage.googleapis.com/v1beta/openai", model: "gemini-2.5-flash" },
     { name: "OpenRouter", url: "https://openrouter.ai/api/v1", model: "qwen/qwen2.5-vl-72b-instruct" },
-    { name: "Alibaba Qwen", url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", model: "qwen-vl-max" },
-    { name: "Ollama", url: "http://localhost:11434/v1", model: "qwen2.5vl:7b" },
-    { name: "vLLM", url: "http://localhost:8000/v1", model: "Qwen/Qwen2.5-VL-7B-Instruct" },
-    { name: "LM Studio", url: "http://localhost:1234/v1", model: "qwen2.5-vl-7b-instruct" }
+    { name: "Alibaba Qwen", url: "https://dashscope-intl.aliyuncs.com/compatible-mode/v1", model: "qwen-vl-max" }
   ];
   let state = null;
   let choice = "builtin";
@@ -46,7 +46,7 @@
     $("model-name").value = own.model || "";
     $("display-name").value = own.label || "";
     $("api-key").value = "";
-    $("api-key").placeholder = own.has_key ? `Saved key ending in ${own.key_hint || "••••"} — type to replace` : "sk-…";
+    $("api-key").placeholder = own.has_key ? `Saved key ending in ${own.key_hint || "hidden"} — type to replace` : "sk-…";
     $("key-help").textContent = own.key_unreadable
       ? "Your saved key can no longer be read (the server's secret changed). Enter it again."
       : own.has_key ? "A key is saved. Leave this empty to keep it." : "Leave empty for servers that need no key. Your key is stored encrypted on this Athena server and is never shown again.";
@@ -55,7 +55,9 @@
       ? `<span class="a-tag">${esc(own.model || "no model")}</span><span class="a-tag">${esc(new URL(own.base_url).host)}</span>`
       : `<span class="a-tag">Bring your own key</span>`;
     const active = data.active;
-    $("active-text").innerHTML = `Your next inspection will use <strong data-testid="ai-active-model">${esc(active.label)} · ${esc(active.model || "no model")}</strong>${active.host ? ` at <span class="a-mono">${esc(active.host)}</span>` : ""}.`;
+    $("active-text").innerHTML = active.configured
+      ? `Your next inspection will use <strong data-testid="ai-active-model">${esc(active.label)} · ${esc(active.model || "no model")}</strong>${active.host ? ` at <span class="a-mono">${esc(active.host)}</span>` : ""}.`
+      : "Picture reading is not connected. Ask the person who manages Athena for help.";
     setChoice(own.use_own ? "own" : "builtin");
   }
 

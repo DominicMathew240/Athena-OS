@@ -23,12 +23,14 @@
   const errorBox = document.getElementById("wiz-error");
   const runButton = document.getElementById("run");
 
-  const state = { template: "", source: "photo", pictures: [], busy: false, aiMissing: false };
+  const state = { template: "", source: "photo", pictures: [], regions: [], busy: false, submitting: false, aiMissing: false };
 
   // Step 1: the checks
   grid.innerHTML = templates.map(t => `
-    <button class="pick${t.key === "custom" ? " pick--custom" : ""}" type="button" role="radio" aria-checked="false" data-key="${esc(t.key)}" data-testid="template-option-${esc(t.key)}">
-      <span class="tpl-icon">${icon(t.icon, 20)}</span><span class="pick-name">${esc(t.name)}</span><span class="pick-line">${esc(t.tagline)}</span>
+    <button class="pick${t.key === "custom" ? " pick--custom" : ""}${t.featured ? " pick--hero" : ""}" type="button" role="radio" aria-checked="false" data-key="${esc(t.key)}" data-testid="template-option-${esc(t.key)}">
+      ${t.cover ? `<img class="pick-cover" src="/static/${esc(t.cover)}" alt="">` : `<span class="tpl-icon">${icon(t.icon, 20)}</span>`}
+      <span class="pick-name">${esc(t.name)}</span>
+      <span class="pick-line">${esc(t.blurb || t.tagline)}</span>
     </button>`).join("");
 
   function choose(key, focus = false) {
@@ -52,6 +54,10 @@
     instructions.placeholder = custom ? "e.g. Are any fire extinguishers missing from their brackets?" : "e.g. Focus on the flange bolts of the 6-inch line";
     document.getElementById("step-what").dataset.done = "true";
     update();
+    if (state.regions.length) {
+      state.regions.forEach((region, index) => { region.label = regionLabel(index + 1); });
+    }
+    renderMarks();
   }
 
   grid.addEventListener("click", event => {
@@ -120,12 +126,105 @@
         ${p.frameTime !== null ? `<span class="thumb-tag">${p.frameTime.toFixed(1)}s</span>` : `<span class="thumb-tag">${i + 1}</span>`}
         <button class="thumb-x" type="button" data-remove="${i}" aria-label="Remove ${esc(p.name)}" data-testid="remove-picture-${i + 1}">${icon("x", 16)}</button></figure>`).join("");
     document.getElementById("step-pics").dataset.done = state.pictures.length ? "true" : "false";
+    renderMarks();
   }
+
+  function regionLabel(index) {
+    return state.template === "parking" ? `Bay ${index}` : String(index);
+  }
+
+  function renderMarks() {
+    const stage = document.getElementById("mark-stage");
+    const help = document.getElementById("mark-help");
+    const img = document.getElementById("mark-img");
+    if (!state.pictures.length) {
+      stage.hidden = true;
+      state.regions = [];
+      return;
+    }
+    stage.hidden = false;
+    if (!stage.dataset.seen) {
+      stage.dataset.seen = "1";
+      stage.scrollIntoView({ block: "center", behavior: "smooth" });
+    }
+    help.textContent = state.template === "parking"
+      ? "Optional. Draw a box around each parking bay so Athena can count which are free and which are taken. Click and drag on the picture."
+      : "Optional. Draw a box around each place Athena should check — a bay, a pipe, a shelf. Click and drag on the picture. Skip this if the whole picture should be checked.";
+    img.src = state.pictures[0].url;
+    const boxes = document.getElementById("mark-boxes");
+    boxes.replaceChildren(...state.regions.map((region, index) => {
+      const el = document.createElement("span");
+      el.className = "mark-box";
+      el.style.left = `${region.x * 100}%`;
+      el.style.top = `${region.y * 100}%`;
+      el.style.width = `${region.w * 100}%`;
+      el.style.height = `${region.h * 100}%`;
+      const tag = document.createElement("b");
+      tag.textContent = region.label;
+      el.append(tag);
+      el.dataset.index = String(index);
+      return el;
+    }));
+    const list = document.getElementById("mark-list");
+    list.innerHTML = state.regions.map((region, index) => `
+      <li><span>${esc(region.label)}</span>
+        <button type="button" data-unmark="${index}" aria-label="Remove ${esc(region.label)}" data-testid="remove-mark-${index + 1}">${icon("x", 14)}</button></li>`).join("");
+    document.getElementById("mark-count").textContent = state.regions.length
+      ? `${state.regions.length} marked area${state.regions.length === 1 ? "" : "s"}`
+      : "No areas marked yet.";
+  }
+
+  document.getElementById("mark-list").addEventListener("click", event => {
+    const button = event.target.closest("[data-unmark]");
+    if (!button) return;
+    state.regions.splice(Number(button.dataset.unmark), 1);
+    state.regions.forEach((region, index) => { region.label = regionLabel(index + 1); });
+    renderMarks();
+  });
+
+  (function markDraw() {
+    const frame = document.getElementById("mark-frame");
+    const img = document.getElementById("mark-img");
+    let drag = null;
+    function point(event) {
+      const box = img.getBoundingClientRect();
+      if (box.width < 8 || box.height < 8) return null;
+      return {
+        x: Math.min(1, Math.max(0, (event.clientX - box.left) / box.width)),
+        y: Math.min(1, Math.max(0, (event.clientY - box.top) / box.height)),
+      };
+    }
+    frame.addEventListener("pointerdown", event => {
+      if (event.button !== 0 || state.regions.length >= 24) return;
+      const start = point(event);
+      if (!start) return;
+      drag = { ...start };
+      frame.setPointerCapture(event.pointerId);
+      event.preventDefault();
+    });
+    frame.addEventListener("pointerup", event => {
+      if (!drag) return;
+      const end = point(event) || drag;
+      const x = Math.min(drag.x, end.x);
+      const y = Math.min(drag.y, end.y);
+      const w = Math.abs(end.x - drag.x);
+      const h = Math.abs(end.y - drag.y);
+      drag = null;
+      if (w < 0.02 || h < 0.02) return;
+      state.regions.push({ x, y, w, h, label: regionLabel(state.regions.length + 1), image: 1 });
+      renderMarks();
+    });
+  })();
 
   thumbs.addEventListener("click", event => {
     const button = event.target.closest("[data-remove]");
     if (!button) return;
-    const [removed] = state.pictures.splice(Number(button.dataset.remove), 1);
+    const index = Number(button.dataset.remove);
+    const [removed] = state.pictures.splice(index, 1);
+    if (index === 0 && state.regions.length) {
+      state.regions = [];
+      toast("Marked areas were cleared because their picture was removed.");
+    }
     URL.revokeObjectURL(removed.url);
     renderThumbs();
     update();
@@ -188,25 +287,35 @@
     }
   }
 
-  // The summary and the button
-  window.AthenaApp.aiStatus().then(status => {
+  // AI status is refreshed when returning from settings without discarding the in-memory inspection.
+  let statusRequest = 0;
+  function showAIStatus(status) {
     const text = document.getElementById("sum-ai-text");
     const row = document.getElementById("sum-ai");
-    if (!status) { text.textContent = "AI model status unknown"; return; }
-    if (!status.active.configured) {
-      state.aiMissing = true;
+    if (!status || !status.active) { row.dataset.ok = "false"; text.textContent = "AI model status unknown"; return; }
+    state.aiMissing = !status.active.configured;
+    document.getElementById("connect-first").hidden = !state.aiMissing;
+    if (!runButton.hasAttribute("aria-disabled")) runButton.disabled = state.aiMissing || state.submitting;
+    if (state.aiMissing) {
+      row.dataset.ok = "false";
       text.textContent = "No AI model connected yet";
-      document.getElementById("sum-ai-sub").innerHTML = `<span class="dot" data-state="down"></span><a href="/settings/ai" data-testid="summary-connect-ai-link">Connect your AI first</a>`;
-      document.getElementById("connect-first").hidden = false;
-      runButton.disabled = true;
+      document.getElementById("sum-ai-sub").innerHTML = `<span class="dot" data-state="down"></span><a href="/settings/ai" target="_blank" rel="noopener" data-testid="summary-connect-ai-link">Connect your AI first (opens a new tab)</a>`;
       return;
     }
     text.textContent = `${status.active.label} · ${status.active.model}`;
     row.dataset.ok = status.reachable ? "true" : "false";
     document.getElementById("sum-ai-sub").innerHTML = status.reachable
-      ? `<span class="dot" data-state="ok"></span>Answering · <a href="/settings/ai">change</a>`
-      : `<span class="dot" data-state="down"></span>Not answering right now · <a href="/settings/ai" data-testid="summary-fix-ai-link">connect an AI</a>`;
-  });
+      ? `<span class="dot" data-state="ok"></span>Answering · <a href="/settings/ai" target="_blank" rel="noopener">change (opens a new tab)</a>`
+      : `<span class="dot" data-state="down"></span>Not answering right now · <a href="/settings/ai" target="_blank" rel="noopener" data-testid="summary-fix-ai-link">connect an AI (opens a new tab)</a>`;
+  }
+  async function refreshAIStatus(initial = false) {
+    const request = ++statusRequest;
+    const status = initial ? await window.AthenaApp.aiStatus() : await window.AthenaApp.refreshAIStatus();
+    if (request === statusRequest) showAIStatus(status);
+  }
+  refreshAIStatus(true);
+  window.addEventListener("focus", () => refreshAIStatus());
+  document.addEventListener("visibilitychange", () => { if (!document.hidden) refreshAIStatus(); });
 
   function problem() {
     if (state.aiMissing) return "Connect an AI model first (see the note at the top of the page).";
@@ -234,6 +343,7 @@
 
   form.addEventListener("submit", async event => {
     event.preventDefault();
+    if (state.submitting) return;
     const reason = problem();
     errorBox.textContent = reason;
     if (reason) return;
@@ -243,7 +353,9 @@
     data.append("title", document.getElementById("title").value.trim());
     data.append("source", state.source);
     data.append("frame_times", JSON.stringify(state.pictures.map(p => p.frameTime)));
+    data.append("regions", JSON.stringify(state.regions));
     state.pictures.forEach(p => data.append("images", p.file, p.name));
+    state.submitting = true;
     runButton.disabled = true;
     runButton.innerHTML = `${icon("loader", 18, "a-spin")}Sending your pictures…`;
     try {
@@ -251,7 +363,8 @@
       location.href = response.inspection.url;
     } catch (error) {
       errorBox.textContent = error.message;
-      runButton.disabled = false;
+      state.submitting = false;
+      if (!runButton.hasAttribute("aria-disabled")) runButton.disabled = state.aiMissing;
       runButton.innerHTML = `${icon("zap", 18)}Run inspection`;
     }
   });

@@ -428,7 +428,7 @@ class AccessScreenTests(ProjectRoleBase):
         html = response.content.decode()
         for needle in (
             "<h1>Who can do what</h1>", 'id="people"', 'id="record-rows"', 'id="people-search"',
-            'aria-current="page">Access</a>', "projects/access.js", "projects/access.css", 'name="csrf-token"',
+            'data-testid="nav-access-link" aria-current="page"', "projects/access.js", "projects/access.css", 'name="csrf-token"',
         ):
             self.assertIn(needle, html)
         self.assertNotIn("<script>", html)  # the page's CSP allows scripts from the console only
@@ -467,7 +467,7 @@ class AccessScreenTests(ProjectRoleBase):
         self.assertIn("Athena.useProject(", (static / "console.js").read_text())
 
     def test_creating_a_project_stays_a_console_wide_action(self) -> None:
-        html = self.as_user("viewer").get("/").content.decode()
+        html = self.as_user("viewer").get("/detectors").content.decode()
         for identifier in ("open-project-dialog", "empty-create"):
             self.assertRegex(html, rf'id="{identifier}"[^>]*data-needs-scope="console"')
 
