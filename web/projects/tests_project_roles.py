@@ -427,7 +427,7 @@ class AccessScreenTests(ProjectRoleBase):
         self.assertEqual(response["Cache-Control"], "no-store")
         html = response.content.decode()
         for needle in (
-            "<h1>Who can do what</h1>", 'id="people"', 'id="record-rows"', 'id="people-search"',
+            ">Who can do what</h1>", 'id="people"', 'id="record-rows"', 'id="people-search"',
             'data-testid="nav-access-link" aria-current="page"', "projects/access.js", "projects/access.css", 'name="csrf-token"',
         ):
             self.assertIn(needle, html)

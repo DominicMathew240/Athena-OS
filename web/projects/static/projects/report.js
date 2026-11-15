@@ -39,7 +39,7 @@
       if (region.image && region.image !== image.position) return;
       const box = document.createElement("span");
       box.className = "ov ov--mark";
-      box.setAttribute("aria-label", `Your marked area ${esc(region.label)}`);
+      box.setAttribute("aria-label", `Your marked area ${region.label}`);
       box.style.left = `${region.x * 100}%`;
       box.style.top = `${region.y * 100}%`;
       box.style.width = `${region.w * 100}%`;

@@ -1,0 +1,233 @@
+{% extends "projects/app_base.html" %}{% load static athena_ui %}
+{% block title %}Docs wiki{% endblock %}
+{% block content %}
+{% url 'inspect-new' as inspect_new_url %}
+{% include "projects/components/_page_head.html" with eyebrow="Documentation" eyebrow_dot=True title="Athena OS Docs Wiki" lead="Step-by-step guides for running visual inspections, marking regions, building custom detectors, managing team roles, and connecting your AI." action_url=inspect_new_url action_label="New inspection" action_icon="plus" action_primary=True action_needs="label" action_testid="docs-new-inspection-button" %}
+
+<div class="wiki-toolbar a-card a-card--pad" data-testid="docs-toolbar">
+  <div class="searchbox wiki-search">
+    {% icon "search" 18 %}
+    <label class="a-sr" for="wiki-search">Search the docs wiki</label>
+    <input class="a-input" id="wiki-search" type="search" placeholder="Search steps, e.g. region, Ollama, YOLO, check screen, role…" autocomplete="off" data-testid="docs-search-input">
+    <button class="a-btn a-btn--sm a-btn--ghost" id="wiki-clear" type="button" hidden data-testid="docs-search-clear">Clear</button>
+  </div>
+  <div class="seg wiki-audience" role="group" aria-label="Filter by who is using Athena" id="wiki-audience">
+    <button type="button" aria-pressed="true" data-audience="all" data-testid="docs-filter-all">All guides</button>
+    <button type="button" aria-pressed="false" data-audience="operator" data-testid="docs-filter-operator">Operators</button>
+    <button type="button" aria-pressed="false" data-audience="trainer" data-testid="docs-filter-trainer">Trainers</button>
+    <button type="button" aria-pressed="false" data-audience="admin" data-testid="docs-filter-admin">Admins &amp; devs</button>
+  </div>
+  <p class="a-muted a-small wiki-count" id="wiki-count" role="status" aria-live="polite"></p>
+</div>
+
+<div class="wiki-grid">
+  <aside class="wiki-toc-wrap" aria-label="Table of contents">
+    <nav class="a-card a-card--pad wiki-toc" id="wiki-toc" data-testid="docs-toc">
+      <p class="a-eyebrow">Contents</p>
+      <ol class="wiki-toc-list">
+        <li><a href="#overview" data-toc="overview">00 · How Athena OS works</a></li>
+        <li><a href="#setup-signin" data-toc="setup-signin">01 · First-run setup &amp; sign-in</a></li>
+        <li><a href="#connect-ai" data-toc="connect-ai">02 · Connect your AI model</a></li>
+        <li><a href="#run-inspection" data-toc="run-inspection">03 · Run a visual inspection</a></li>
+        <li><a href="#regions-reports" data-toc="regions-reports">04 · Mark regions &amp; read reports</a></li>
+        <li><a href="#custom-detectors" data-toc="custom-detectors">05 · Build a custom detector</a></li>
+        <li><a href="#check-screens" data-toc="check-screens">06 · Check screens &amp; improve loop</a></li>
+        <li><a href="#access-roles" data-toc="access-roles">07 · Team access &amp; roles</a></li>
+        <li><a href="#cli-sdk" data-toc="cli-sdk">08 · CLI, SDK &amp; connectors</a></li>
+      </ol>
+    </nav>
+  </aside>
+
+  <div class="wiki-body" id="wiki-body" data-testid="docs-sections">
+    <p class="a-card a-card--pad wiki-empty" id="wiki-empty" hidden>No wiki sections match your search. Clear the filter to see every step-by-step guide.</p>
+
+    <article class="a-card a-card--pad wiki-section" id="overview" data-audience="all operator trainer admin" data-keywords="overview workflow vision language model custom detector quick start">
+      <header class="wiki-sec-head">
+        <div>
+          <p class="a-eyebrow"><b>00</b> Overview</p>
+          <h2 class="a-h2">How Athena OS works</h2>
+        </div>
+        <span class="a-tag">Start here</span>
+      </header>
+      <p>Athena OS is a self-hosted visual inspection workspace with two ways to check pictures and video—pick the one that fits your job:</p>
+      <div class="wiki-cards">
+        <div class="wiki-mini">
+          <h3>{% icon "sparkle" 18 %}1. Instant visual inspections</h3>
+          <p>Ask a question in plain words, add up to 6 photos or a short video, and get a plain-language report with verdicts, counts, marked regions, and next steps. No training data needed.</p>
+          <a class="a-btn a-btn--sm" href="{% url 'inspect-new' %}">Start an inspection{% icon "arrow" 16 %}</a>
+        </div>
+        <div class="wiki-mini">
+          <h3>{% icon "detector" 18 %}2. Custom detectors &amp; check screens</h3>
+          <p>Label your own pictures, freeze a training set, teach a dedicated detector on your hardware, and publish a fast one-click operator check screen with a human-in-the-loop improve cycle.</p>
+          <a class="a-btn a-btn--sm" href="{% url 'dashboard' %}">Open custom detectors{% icon "arrow" 16 %}</a>
+        </div>
+      </div>
+    </article>
+
+    <article class="a-card a-card--pad wiki-section" id="setup-signin" data-audience="all operator admin" data-keywords="setup onboarding admin account login sign in theme control room dark mode">
+      <header class="wiki-sec-head">
+        <div>
+          <p class="a-eyebrow"><b>01</b> Getting started</p>
+          <h2 class="a-h2">First-run setup &amp; sign-in</h2>
+        </div>
+        <span class="a-tag">Admins &amp; operators</span>
+      </header>
+      <ol class="wiki-steps">
+        <li><strong>Complete first-run onboarding:</strong> On a brand-new install with no users yet, visiting the app opens the guided setup screen (<span class="a-mono">/setup/</span>). Enter the first administrator email, username, and password.</li>
+        <li><strong>Pick your starting AI option:</strong> During setup, choose <strong>Local Qwen (Ollama)</strong> (defaults to <span class="a-mono">http://127.0.0.1:11434/v1</span>), enter a <strong>Custom AI</strong> endpoint, or select <strong>Skip for now</strong> and configure it later in settings.</li>
+        <li><strong>Sign in anytime:</strong> Returning users sign in at <span class="a-mono">/login/</span>. Repeated failed sign-in attempts temporarily lock out the IP/username to protect your server.</li>
+        <li><strong>Switch workspace theme:</strong> Use <strong>Control-room mode</strong> at the bottom of the left sidebar to toggle between the bright day theme and the dark control-room theme.</li>
+      </ol>
+    </article>
+
+    <article class="a-card a-card--pad wiki-section" id="connect-ai" data-audience="operator admin" data-keywords="ai model settings qwen ollama vllm openai gemini openrouter lm studio api key endpoint">
+      <header class="wiki-sec-head">
+        <div>
+          <p class="a-eyebrow"><b>02</b> AI configuration</p>
+          <h2 class="a-h2">Connect your AI model</h2>
+        </div>
+        <a class="a-btn a-btn--sm" href="{% url 'ai-settings' %}">Open AI model{% icon "arrow" 16 %}</a>
+      </header>
+      <p>Before running an instant inspection, Athena needs a vision-language model (a model that can read images). The status dot next to <strong>AI model</strong> in the sidebar turns green when it is answering.</p>
+      <ol class="wiki-steps">
+        <li><strong>Open AI model settings:</strong> Click <strong>AI model</strong> in the sidebar (<span class="a-mono">/settings/ai</span>).</li>
+        <li><strong>Choose Built-in Qwen or Your own AI:</strong>
+          <ul>
+            <li><strong>Built-in Qwen:</strong> Uses the organisation-wide server configured by your Athena administrator. Click <strong>Test the built-in model</strong> to verify it responds.</li>
+            <li><strong>Your own AI:</strong> Connect any OpenAI-compatible <span class="a-mono">/v1/chat/completions</span> vision service (OpenAI, Gemini, OpenRouter, Ollama, vLLM, or LM Studio). Pick a preset or enter the base URL and model name.</li>
+          </ul>
+        </li>
+        <li><strong>Test &amp; save:</strong> Click <strong>Test connection</strong> first, then <strong>Save and use this AI</strong>. API keys are stored encrypted on the Athena server and are never shown back in full.</li>
+      </ol>
+      <div class="a-note">{% icon "lock" 18 %}<p>Your pictures are sent only to the AI connection you select. With local Ollama or a self-hosted vLLM/Qwen server, images never leave your network.</p></div>
+    </article>
+
+    <article class="a-card a-card--pad wiki-section" id="run-inspection" data-audience="operator" data-keywords="new inspection template corrosion parking footfall ppe video frames upload photo">
+      <header class="wiki-sec-head">
+        <div>
+          <p class="a-eyebrow"><b>03</b> Inspections</p>
+          <h2 class="a-h2">Run a visual inspection</h2>
+        </div>
+        <a class="a-btn a-btn--sm" href="{% url 'inspect-new' %}">New inspection{% icon "arrow" 16 %}</a>
+      </header>
+      <ol class="wiki-steps">
+        <li><strong>Choose what to check:</strong> On <a href="{% url 'home' %}">Home</a> or <a href="{% url 'inspect-new' %}">New inspection</a>, pick a ready-made template (such as <em>Corrosion check</em>, <em>Parking occupancy</em>, <em>Store foot traffic</em>, or <em>Safety gear (PPE)</em>) or choose <strong>Your own question</strong> and write what to look for in plain words.</li>
+        <li><strong>Add photos or a short video:</strong>
+          <ul>
+            <li><strong>Photos tab:</strong> Drop up to 6 JPEG, PNG, or WebP images (max 20 MB each).</li>
+            <li><strong>Video tab:</strong> Drop one MP4, WebM, or MOV clip. Athena automatically extracts 6 evenly spaced still frames in your browser.</li>
+          </ul>
+        </li>
+        <li><strong>Optionally name &amp; run:</strong> Give the inspection a short name (or leave blank for an automatic title) and click <strong>Run inspection</strong>. Reports usually finish in 10–60 seconds and are saved even if you navigate away.</li>
+      </ol>
+    </article>
+
+    <article class="a-card a-card--pad wiki-section" id="regions-reports" data-audience="operator" data-keywords="region annotation box draw mark areas report verdict critical attention clear findings feedback rerun print">
+      <header class="wiki-sec-head">
+        <div>
+          <p class="a-eyebrow"><b>04</b> Regions &amp; reports</p>
+          <h2 class="a-h2">Mark regions &amp; read reports</h2>
+        </div>
+        <a class="a-btn a-btn--sm" href="{% url 'inspections-page' %}">All inspections{% icon "arrow" 16 %}</a>
+      </header>
+      <ol class="wiki-steps">
+        <li><strong>Mark specific areas (optional):</strong> Once you add a picture in Step 2 of <em>New inspection</em>, the <strong>Mark areas on the picture</strong> canvas appears. Click and drag to draw boxes around specific parking bays, pipe flanges, or shelves so Athena focuses on those exact regions.</li>
+        <li><strong>Read the verdict &amp; counts:</strong> Open any finished report from <a href="{% url 'inspections-page' %}">Inspections</a>. Every report shows a clear verdict (<strong>All clear</strong>, <strong>Needs attention</strong>, or <strong>Critical</strong>), key counts, and practical next steps.</li>
+        <li><strong>Inspect findings on the image:</strong> Click any numbered finding in the list to highlight its bounding box on the photo, or toggle <strong>Show marked areas</strong> to compare your own region boxes against Athena's findings.</li>
+        <li><strong>Filter, print, re-run, or rate:</strong> Use the verdict pills and search box on <a href="{% url 'inspections-page' %}">Inspections</a> to find past runs. Inside a report, rate accuracy with thumbs up/down, print it, or click <strong>Run again</strong>.</li>
+      </ol>
+    </article>
+
+    <article class="a-card a-card--pad wiki-section" id="custom-detectors" data-audience="trainer" data-keywords="custom detector project labels bounding box autolabel sam clip dataset snapshot coco yolo train teach approve rollback">
+      <header class="wiki-sec-head">
+        <div>
+          <p class="a-eyebrow"><b>05</b> Custom detectors</p>
+          <h2 class="a-h2">Build a custom detector</h2>
+        </div>
+        <a class="a-btn a-btn--sm" href="{% url 'dashboard' %}">Custom detectors{% icon "arrow" 16 %}</a>
+      </header>
+      <p>Each project in <a href="{% url 'dashboard' %}">Custom detectors</a> opens on an <strong>Overview</strong> checklist that highlights the single recommended next step and the role it needs:</p>
+      <ol class="wiki-steps">
+        <li><strong>Create a project &amp; define labels:</strong> Create an image project, then add or reorder your class labels in the <strong>Labels</strong> panel without writing code. Renaming a label updates existing boxes automatically.</li>
+        <li><strong>Import pictures &amp; draw boxes:</strong> Upload JPEG/PNG/WebP images. Draw bounding boxes with pointer or keyboard (50–400% zoom, pan, and 100-step undo/redo), or run <strong>Auto-label</strong> (SAM + CLIP via <span class="a-mono">autolabel_worker</span>) and accept, fix, or reject proposals marked <strong>Needs review</strong>.</li>
+        <li><strong>Make a training set:</strong> Open <strong>Make a training set</strong> to check readiness, freeze an immutable numbered snapshot (deterministic 80/10/10 train/val/test split with SHA-256 manifest), and download a <strong>COCO</strong> or <strong>YOLO</strong> zip.</li>
+        <li><strong>Teach the computer:</strong> Check picture health (box counts per label and near-duplicate warnings), pick <strong>Quick</strong> or <strong>Better</strong>, and start training (<span class="a-mono">train_worker</span>). Review the plain-language results card ("found X of Y" and missed pictures).</li>
+        <li><strong>Stage, approve, or roll back:</strong> Approvers move a trained model version to trial, approve it for production check screens, or roll back to an earlier version.</li>
+      </ol>
+    </article>
+
+    <article class="a-card a-card--pad wiki-section" id="check-screens" data-audience="operator trainer" data-keywords="check screen setup slug operator feedback improve loop corrections import">
+      <header class="wiki-sec-head">
+        <div>
+          <p class="a-eyebrow"><b>06</b> Deployment &amp; feedback</p>
+          <h2 class="a-h2">Check screens &amp; improve loop</h2>
+        </div>
+      </header>
+      <ol class="wiki-steps">
+        <li><strong>Set up a check screen:</strong> From a project with an approved model, open <strong>Check screens</strong> (<span class="a-mono">/projects/&lt;id&gt;/check-screen/setup</span>) to create a dedicated operator screen with a shareable <span class="a-mono">/check/&lt;slug&gt;</span> link.</li>
+        <li><strong>Run live checks:</strong> Operators upload or capture a picture on the check screen (<span class="a-mono">inference_worker</span>) and confirm or correct the model's detections.</li>
+        <li><strong>Pull corrections back in (Improve loop):</strong> A Labeler opens <strong>Corrections from check screens</strong> inside the project to import operator-corrected pictures once as <strong>Needs review</strong> boxes—keeping lineage while never overwriting already-reviewed data.</li>
+      </ol>
+    </article>
+
+    <article class="a-card a-card--pad wiki-section" id="access-roles" data-audience="admin" data-keywords="access roles viewer labeler trainer approver administrator superuser audit log downloads">
+      <header class="wiki-sec-head">
+        <div>
+          <p class="a-eyebrow"><b>07</b> Governance</p>
+          <h2 class="a-h2">Team access &amp; roles</h2>
+        </div>
+        {% if athena_access.can_administer %}<a class="a-btn a-btn--sm" href="{% url 'access-page' %}">Open Access{% icon "arrow" 16 %}</a>{% endif %}
+      </header>
+      <p>Every write action in Athena OS is enforced on the server by role. Administrators (superusers) assign console-wide or per-project roles on the <strong>Access</strong> page (<span class="a-mono">/access</span>):</p>
+      <div class="wiki-table-wrap">
+        <table class="wiki-table">
+          <thead>
+            <tr><th scope="col">Role</th><th scope="col">What they can do</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Viewer</strong></td><td>Read inspections, projects, datasets, and docs; cannot create or modify records.</td></tr>
+            <tr><td><strong>Labeler</strong></td><td>Run inspections, connect personal AI settings, import images, draw/review boxes, and import check-screen corrections.</td></tr>
+            <tr><td><strong>Trainer</strong></td><td>Everything a Labeler can do, plus freeze dataset snapshots, start training runs, and configure check screens.</td></tr>
+            <tr><td><strong>Approver</strong></td><td>Everything a Trainer can do, plus stage, approve, and roll back model versions.</td></tr>
+            <tr><td><strong>Administrator</strong></td><td>Superuser access to assign roles, inspect the role-change audit log, and toggle ready-made model downloads.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+
+    <article class="a-card a-card--pad wiki-section" id="cli-sdk" data-audience="admin" data-keywords="cli sdk python contracts worker autolabel train inference knowledge connectors">
+      <header class="wiki-sec-head">
+        <div>
+          <p class="a-eyebrow"><b>08</b> Automation &amp; workers</p>
+          <h2 class="a-h2">CLI, SDK &amp; workers</h2>
+        </div>
+      </header>
+      <p>Run background workers for custom detectors, or use the <span class="a-mono">athena</span> CLI and <span class="a-mono">athena_sdk</span> Python package to validate contracts and connect external scanners:</p>
+      <div class="wiki-cmd-list">
+        <div class="wiki-cmd">
+          <div>
+            <strong>Validate Core contracts &amp; run synthetic pipeline</strong>
+            <code data-cmd>athena validate-contracts &amp;&amp; athena run-example</code>
+          </div>
+          <button class="a-btn a-btn--sm" type="button" data-copy="athena validate-contracts &amp;&amp; athena run-example">{% icon "copy" 15 %}Copy</button>
+        </div>
+        <div class="wiki-cmd">
+          <div>
+            <strong>Index local markdown/text docs into the CLI knowledge library</strong>
+            <code data-cmd>athena knowledge add ./docs &amp;&amp; athena knowledge search "inspection"</code>
+          </div>
+          <button class="a-btn a-btn--sm" type="button" data-copy='athena knowledge add ./docs &amp;&amp; athena knowledge search "inspection"'>{% icon "copy" 15 %}Copy</button>
+        </div>
+        <div class="wiki-cmd">
+          <div>
+            <strong>Start console background workers (auto-label, train, inference)</strong>
+            <code data-cmd>python web/manage.py autolabel_worker</code>
+          </div>
+          <button class="a-btn a-btn--sm" type="button" data-copy="python web/manage.py autolabel_worker">{% icon "copy" 15 %}Copy</button>
+        </div>
+      </div>
+    </article>
+  </div>
+</div>
+{% endblock %}
+{% block scripts %}<script src="{% static 'projects/docs.js' %}"></script>{% endblock %}

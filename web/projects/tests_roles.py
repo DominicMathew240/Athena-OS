@@ -469,6 +469,7 @@ class EveryRouteDeclaresItsRole(RoleBase):
         "inspections": {},
         "inspections/<uuid:inspection_id>": {},
         "settings/ai": {},
+        "docs": {},
         "api/vision/templates": {},
         "api/vision/connection": {"PUT": LABEL, "DELETE": LABEL},
         "api/vision/connection/test": {"POST": LABEL},
@@ -531,7 +532,7 @@ class EveryRouteDeclaresItsRole(RoleBase):
         "projects/<uuid:project_id>/check-screen/setup": {},
         "check/<slug:slug>": {},
     }
-    UNGUARDED = {"healthz", "login/", "logout/"}  # about signing in and out; no role applies
+    UNGUARDED = {"healthz", "login/", "logout/", "setup/"}  # about signing in, out, and first-run setup; no role applies
 
     def callbacks(self):
         from django.urls import get_resolver

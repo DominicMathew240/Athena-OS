@@ -10,6 +10,7 @@ urlpatterns = [
     path("inspections", vision_pages.inspections_page, name="inspections-page"),
     path("inspections/<uuid:inspection_id>", vision_pages.inspection_report, name="inspection-report"),
     path("settings/ai", vision_pages.ai_settings_page, name="ai-settings"),
+    path("docs", vision_pages.docs_page, name="docs-page"),
     path("api/vision/templates", vision_views.vision_templates, name="vision-templates"),
     path("api/vision/connection", vision_views.vision_connection, name="vision-connection"),
     path("api/vision/connection/test", vision_views.vision_connection_test, name="vision-connection-test"),

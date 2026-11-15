@@ -6,7 +6,10 @@
     <p class="a-eyebrow" data-testid="home-greeting"><b class="a-status-dot" aria-hidden="true"></b> <span id="greeting">Welcome back</span>, {{ request.user.get_username }}</p>
     <h1 class="a-h1">What do you want to check today?</h1>
   </div>
-  <div class="a-pagehead-actions"><a class="a-btn" href="{% url 'inspections-page' %}" data-testid="home-all-inspections-link">{% icon "list" 18 %}All inspections</a></div>
+  <div class="a-pagehead-actions">
+    <a class="a-btn" href="{% url 'docs-page' %}" data-testid="home-docs-link">{% icon "book" 18 %}Step-by-step guide</a>
+    <a class="a-btn" href="{% url 'inspections-page' %}" data-testid="home-all-inspections-link">{% icon "list" 18 %}All inspections</a>
+  </div>
 </header>
 
 <div class="home-top">

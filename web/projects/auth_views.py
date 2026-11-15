@@ -100,19 +100,8 @@ class SetupView(View):
     def get(self, request: HttpRequest) -> HttpResponse:
         return render(request, self.template_name, self._context(ai_mode="local_qwen"))
 
-    def post(self, request: HttpRequest) -> HttpResponse:
-        email = (request.POST.get("email") or "").strip()
-        username = (request.POST.get("username") or "").strip()
-        password = request.POST.get("password") or ""
-        password_confirm = request.POST.get("password_confirm") or ""
-        ai_mode = (request.POST.get("ai_mode") or "local_qwen").strip()
-        base_url = (request.POST.get("base_url") or "").strip()
-        model = (request.POST.get("model") or "").strip()[:160]
-        api_key = (request.POST.get("api_key") or "").strip()
-
-        if not username and email and "@" in email:
-            username = email.split("@", 1)[0][:150]
-
+    def _validate_account_fields(self, email: str, username: str, password: str, password_confirm: str) -> list[str]:
+        """Validate initial administrator email, username, and password."""
         errors: list[str] = []
         if not email:
             errors.append("Enter your email address.")
@@ -136,35 +125,45 @@ class SetupView(View):
                 validate_password(password)
             except ValidationError as exc:
                 errors.extend(exc.messages)
+        return errors
 
-        validated_ai: dict | None = None
+    def _validate_ai_config(self, ai_mode: str, base_url: str, model: str, api_key: str) -> tuple[dict | None, list[str]]:
+        """Validate and normalize the selected initial AI connection option."""
+        if ai_mode == "skip":
+            return None, []
         if ai_mode == "local_qwen":
             target_url = base_url or "http://127.0.0.1:11434/v1"
             target_model = model or settings.VISION.get("MODEL") or "qwen2.5vl:7b"
-            try:
-                validated_ai = {
-                    "label": "Local Qwen (Ollama)",
-                    "base_url": client.validate_base_url(target_url),
-                    "model": target_model,
-                    "api_key": "",
-                }
-            except client.VisionError as exc:
-                errors.append(exc.message)
+            label, key = "Local Qwen (Ollama)", ""
         elif ai_mode == "custom":
             if not base_url or not model:
-                errors.append("Enter both the API base URL and model name, or choose Local Qwen / Skip.")
-            else:
-                try:
-                    validated_ai = {
-                        "label": "Custom AI",
-                        "base_url": client.validate_base_url(base_url),
-                        "model": model,
-                        "api_key": api_key,
-                    }
-                except client.VisionError as exc:
-                    errors.append(exc.message)
-        elif ai_mode != "skip":
-            errors.append("Choose a valid AI setup option.")
+                return None, ["Enter both the API base URL and model name, or choose Local Qwen / Skip."]
+            target_url, target_model, label, key = base_url, model, "Custom AI", api_key
+        else:
+            return None, ["Choose a valid AI setup option."]
+
+        try:
+            validated_url = client.validate_base_url(target_url)
+        except client.VisionError as exc:
+            return None, [exc.message]
+        return {"label": label, "base_url": validated_url, "model": target_model, "api_key": key}, []
+
+    def post(self, request: HttpRequest) -> HttpResponse:
+        email = (request.POST.get("email") or "").strip()
+        username = (request.POST.get("username") or "").strip()
+        password = request.POST.get("password") or ""
+        password_confirm = request.POST.get("password_confirm") or ""
+        ai_mode = (request.POST.get("ai_mode") or "local_qwen").strip()
+        base_url = (request.POST.get("base_url") or "").strip()
+        model = (request.POST.get("model") or "").strip()[:160]
+        api_key = (request.POST.get("api_key") or "").strip()
+
+        if not username and email and "@" in email:
+            username = email.split("@", 1)[0][:150]
+
+        errors = self._validate_account_fields(email, username, password, password_confirm)
+        validated_ai, ai_errors = self._validate_ai_config(ai_mode, base_url, model, api_key)
+        errors.extend(ai_errors)
 
         if errors:
             return render(

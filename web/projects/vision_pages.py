@@ -60,3 +60,10 @@ def inspection_report(request: HttpRequest, inspection_id):
 @ensure_csrf_cookie
 def ai_settings_page(request: HttpRequest):
     return render(request, "projects/ai_settings.html", _ctx(request, "ai", builtin=service.builtin_connection()))
+
+
+@access()
+@require_http_methods(["GET", "HEAD"])
+@ensure_csrf_cookie
+def docs_page(request: HttpRequest):
+    return render(request, "projects/docs.html", _ctx(request, "docs"))

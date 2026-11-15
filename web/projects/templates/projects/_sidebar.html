@@ -14,6 +14,8 @@
       <p class="sb-group">Settings</p>
       <a href="{% url 'ai-settings' %}" data-testid="nav-ai-settings-link"{% if nav == "ai" %} aria-current="page"{% endif %}{% if nav == "new" %} target="_blank" rel="noopener" aria-label="AI model (opens in a new tab)"{% endif %}>{% icon "cpu" 18 %}AI model<span class="sb-dot" data-ai-dot title="Checking the AI model…"></span></a>
       {% if athena_access.can_administer %}<a href="{% url 'access-page' %}" data-testid="nav-access-link"{% if nav == "access" %} aria-current="page"{% endif %}>{% icon "shield" 18 %}Access</a>{% endif %}
+      <p class="sb-group">Learn</p>
+      <a href="{% url 'docs-page' %}" data-testid="nav-docs-link"{% if nav == "docs" %} aria-current="page"{% endif %}>{% icon "book" 18 %}Docs wiki</a>
     </nav>
     <div class="sb-foot">
       <button class="sb-theme" type="button" data-theme-toggle data-testid="header-theme-toggle-button" aria-pressed="false">{% icon "moon" 18 %}<span data-theme-label>Control-room mode</span><span class="sb-switch" aria-hidden="true"></span></button>

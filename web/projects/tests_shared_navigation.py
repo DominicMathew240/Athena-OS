@@ -20,6 +20,7 @@ class SharedNavigationTests(TestCase):
             ('inspections', reverse('inspections-page'), 'nav-inspections-link'),
             ('report', reverse('inspection-report', args=[self.inspection.id]), 'nav-inspections-link'),
             ('settings', reverse('ai-settings'), 'nav-ai-settings-link'),
+            ('docs', reverse('docs-page'), 'nav-docs-link'),
             ('detectors', reverse('dashboard'), 'nav-detectors-link'),
             ('access', reverse('access-page'), 'nav-access-link'),
             ('builder', reverse('checkscreen-setup', args=[self.project.id]), 'nav-detectors-link'),
@@ -38,7 +39,7 @@ class SharedNavigationTests(TestCase):
         self.assertContains(response, f'/detectors#project={self.project.id}')
 
     def test_authenticated_pages_use_unified_saas_shell_and_pagehead(self):
-        for name in ('home', 'inspections-page', 'ai-settings', 'dashboard', 'access-page'):
+        for name in ('home', 'inspections-page', 'ai-settings', 'docs-page', 'dashboard', 'access-page'):
             with self.subTest(page=name):
                 response = self.client.get(reverse(name))
                 self.assertEqual(response.status_code, 200)

@@ -68,3 +68,29 @@ class LandingCoversOnFrontViewTests(TestCase):
             with self.subTest(file=filename):
                 self.assertIn(filename, landing)
                 self.assertIn(filename, home)
+
+    def test_home_links_to_docs_wiki_and_docs_page_renders_guides(self) -> None:
+        home_html = self.client.get("/").content.decode()
+        self.assertIn('data-testid="home-docs-link"', home_html)
+        self.assertIn('data-testid="nav-docs-link"', home_html)
+
+        docs_resp = self.client.get("/docs")
+        self.assertEqual(docs_resp.status_code, 200)
+        docs_html = docs_resp.content.decode()
+        self.assertIn("Athena OS Docs Wiki", docs_html)
+        self.assertIn('data-testid="docs-search-input"', docs_html)
+        self.assertIn('data-testid="docs-toc"', docs_html)
+        self.assertIn("projects/docs.js", docs_html)
+        self.assertNotIn("<script>", docs_html)
+        for section_id in (
+            'id="overview"',
+            'id="setup-signin"',
+            'id="connect-ai"',
+            'id="run-inspection"',
+            'id="regions-reports"',
+            'id="custom-detectors"',
+            'id="check-screens"',
+            'id="access-roles"',
+            'id="cli-sdk"',
+        ):
+            self.assertIn(section_id, docs_html)
