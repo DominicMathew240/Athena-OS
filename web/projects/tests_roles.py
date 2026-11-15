@@ -470,6 +470,8 @@ class EveryRouteDeclaresItsRole(RoleBase):
         "inspections/<uuid:inspection_id>": {},
         "settings/ai": {},
         "docs": {},
+        "robots.txt": {},
+        "sitemap.xml": {},
         "api/vision/templates": {},
         "api/vision/connection": {"PUT": LABEL, "DELETE": LABEL},
         "api/vision/connection/test": {"POST": LABEL},

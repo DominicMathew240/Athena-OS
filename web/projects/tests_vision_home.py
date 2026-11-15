@@ -92,5 +92,30 @@ class LandingCoversOnFrontViewTests(TestCase):
             'id="check-screens"',
             'id="access-roles"',
             'id="cli-sdk"',
+            'id="faq"',
         ):
             self.assertIn(section_id, docs_html)
+
+    def test_unregistered_users_and_crawlers_can_access_docs_seo_aeo_and_sitemap(self) -> None:
+        self.client.logout()
+        landing_html = self.client.get("/").content.decode()
+        self.assertIn('data-testid="landing-nav-docs"', landing_html)
+
+        docs_resp = self.client.get("/docs")
+        self.assertEqual(docs_resp.status_code, 200)
+        html = docs_resp.content.decode()
+        self.assertIn('data-testid="public-docs-nav"', html)
+        self.assertIn('<meta name="robots" content="index, follow">', html)
+        self.assertIn('<link rel="canonical"', html)
+        self.assertIn('itemtype="https://schema.org/TechArticle"', html)
+        self.assertIn('itemtype="https://schema.org/FAQPage"', html)
+        self.assertNotIn("<script>", html)
+
+        robots = self.client.get("/robots.txt")
+        self.assertEqual(robots.status_code, 200)
+        self.assertIn("Allow: /docs", robots.content.decode())
+        self.assertIn("Sitemap:", robots.content.decode())
+
+        sitemap = self.client.get("/sitemap.xml")
+        self.assertEqual(sitemap.status_code, 200)
+        self.assertIn("/docs</loc>", sitemap.content.decode())

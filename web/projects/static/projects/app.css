@@ -626,6 +626,30 @@
 .wiki-cmd strong { display: block; font-size: 14px; margin-bottom: 4px; }
 .wiki-cmd code { display: block; font: 400 13px/1.45 var(--font-mono); color: var(--c-text); word-break: break-word; }
 .wiki-empty { margin: 0; color: var(--c-text-2); text-align: center; }
+.wiki-faq { display: grid; gap: 14px; }
+.wiki-faq-item { padding: 14px 16px; border: 1px solid var(--c-line); border-radius: var(--r-md); background: var(--c-surface-2); }
+.wiki-faq-item h3 { margin: 0 0 6px; font: 700 16px/1.35 var(--font-body); color: var(--c-text); }
+.wiki-faq-item p { margin: 0; font-size: 14.5px; }
+
+/* ---------- public docs shell (unregistered visitors & crawlers) ---------- */
+.pub-nav { position: sticky; top: 0; z-index: 30; background: var(--sb-bg); color: var(--sb-text); border-bottom: 1px solid var(--sb-line); }
+.pub-nav-inner { max-width: 1240px; margin: 0 auto; padding: 12px clamp(20px, 3.4vw, 52px); display: flex; flex-wrap: wrap; align-items: center; gap: 12px 20px; }
+.pub-nav a { text-decoration: none; }
+.pub-links { display: flex; align-items: center; gap: 6px; margin-right: auto; }
+.pub-links a { padding: 7px 12px; border-radius: var(--r-sm); color: var(--sb-text); font-size: 14.5px; font-weight: 500; }
+.pub-links a:hover { background: var(--sb-hover); color: #fff; }
+.pub-links a[aria-current="page"] { background: var(--sb-active-bg); color: var(--sb-active); font-weight: 650; }
+.pub-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 8px; }
+.pub-theme { color: var(--sb-text); border-color: var(--sb-line); }
+.pub-theme:hover { color: #fff; background: var(--sb-hover); }
+.pub-main::before { left: 0; }
+.pub-foot { border-top: 1px solid var(--c-line); padding: 24px clamp(20px, 3.4vw, 52px); color: var(--c-text-3); font-size: 14px; }
+.pub-foot-inner { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; }
+.pub-foot-inner p { margin: 0; }
+.pub-foot-links { display: flex; gap: 16px; }
+.pub-foot-links a { color: var(--c-text-2); text-decoration: none; font-weight: 500; }
+.pub-foot-links a:hover { color: var(--c-accent); }
+
 @media (max-width: 960px) {
   .wiki-grid { grid-template-columns: 1fr; }
   .wiki-toc-wrap { position: static; }

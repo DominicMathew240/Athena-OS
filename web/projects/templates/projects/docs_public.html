@@ -1,0 +1,64 @@
+{% load static athena_ui %}<!doctype html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <title>Athena OS Docs Wiki · Step-by-Step User Guide</title>
+  <meta name="description" content="Step-by-step documentation for Athena OS: first-run setup, connecting Qwen or OpenAI-compatible vision models, running photo and video inspections, marking regions, building custom detectors, check screens, and team roles.">
+  <meta name="robots" content="index, follow">
+  {% if canonical_url %}<link rel="canonical" href="{{ canonical_url }}">{% endif %}
+  <meta property="og:type" content="article">
+  <meta property="og:title" content="Athena OS Docs Wiki · Step-by-Step User Guide">
+  <meta property="og:description" content="Learn how to set up Athena OS, connect a vision-language model, run photo/video inspections, mark regions, train custom detectors, and manage team roles.">
+  {% if canonical_url %}<meta property="og:url" content="{{ canonical_url }}">{% endif %}
+  <meta name="twitter:card" content="summary">
+  <meta name="twitter:title" content="Athena OS Docs Wiki · Step-by-Step User Guide">
+  <meta name="twitter:description" content="Step-by-step guide to visual inspections, custom detectors, check screens, and team access in Athena OS.">
+  <link rel="icon" type="image/png" href="{% static 'projects/brand/athena-mark-32.png' %}">
+  <script src="{% static 'projects/theme.js' %}"></script>
+  <link rel="stylesheet" href="{% static 'projects/tokens.css' %}">
+  <link rel="stylesheet" href="{% static 'projects/app.css' %}">
+</head>
+<body class="a-body pub-body">
+  <a class="a-skip" href="#main">Skip to main content</a>
+  <header class="pub-nav" data-testid="public-docs-nav">
+    <div class="pub-nav-inner">
+      <a class="sb-brand" href="/" aria-label="Athena OS home"><span class="sb-mark" aria-hidden="true"></span><span class="sb-name">Athena<em>OS</em></span></a>
+      <nav class="pub-links" aria-label="Public navigation">
+        <a href="/">Overview</a>
+        <a href="{% url 'docs-page' %}" aria-current="page" data-testid="public-nav-docs">Docs wiki</a>
+      </nav>
+      <div class="pub-actions">
+        <button class="a-btn a-btn--sm a-btn--ghost pub-theme" type="button" data-theme-toggle aria-pressed="false" aria-label="Toggle control-room mode">{% icon "moon" 16 %}<span data-theme-label>Control-room mode</span></button>
+        <a class="a-btn a-btn--sm" href="{% url 'login' %}" data-testid="public-docs-signin">Sign in</a>
+        <a class="a-btn a-btn--sm a-btn--primary" href="{% url 'login' %}?next=/inspect/new" data-testid="public-docs-cta">Start inspecting{% icon "arrow" 16 %}</a>
+      </div>
+    </div>
+  </header>
+
+  <main class="a-main pub-main" id="main" tabindex="-1" itemscope itemtype="https://schema.org/TechArticle">
+    <meta itemprop="headline" content="Athena OS Docs Wiki · Step-by-Step User Guide">
+    <meta itemprop="description" content="Step-by-step documentation for Athena OS visual inspections, custom detectors, check screens, and team roles.">
+    <div class="a-wrap" itemprop="articleBody">
+      {% include "projects/_docs_content.html" %}
+    </div>
+  </main>
+
+  <footer class="pub-foot">
+    <div class="a-wrap pub-foot-inner">
+      <p>Athena OS · Open-source computer vision for operations teams (Apache-2.0).</p>
+      <div class="pub-foot-links">
+        <a href="/">Home</a>
+        <a href="{% url 'docs-page' %}">Docs wiki</a>
+        <a href="{% url 'login' %}">Sign in</a>
+      </div>
+    </div>
+  </footer>
+
+  {% icon_data %}
+  <script src="{% static 'projects/ui_common.js' %}"></script>
+  <script src="{% static 'projects/app.js' %}"></script>
+  <script src="{% static 'projects/docs.js' %}"></script>
+</body>
+</html>

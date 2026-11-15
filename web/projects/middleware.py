@@ -7,7 +7,7 @@ from django.shortcuts import redirect
 from django.utils.http import url_has_allowed_host_and_scheme
 from django.utils.http import urlencode
 
-PUBLIC_PATHS = ("/", "/login/", "/setup/", "/healthz")
+PUBLIC_PATHS = ("/", "/docs", "/login/", "/setup/", "/healthz", "/robots.txt", "/sitemap.xml")
 # Views that need no role: they are about signing in or out (anyone signed in may sign out).
 UNGUARDED_URL_NAMES = frozenset({"login", "logout", "setup", "healthz", "home"})
 
