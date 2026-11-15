@@ -117,6 +117,7 @@
 .a-btn--sm { min-height: 36px; padding: 7px 12px; font-size: 14px; }
 .a-btn[disabled], .a-btn[aria-disabled="true"] { cursor: not-allowed; opacity: .55; transform: none; box-shadow: none; }
 .a-btn .a-spin { animation: a-spin 1s linear infinite; }
+.a-btn .ico { color: currentColor; }
 .a-iconbtn { display: inline-grid; place-items: center; width: 40px; height: 40px; border: 1px solid var(--c-line-strong); border-radius: var(--r-md); background: var(--c-surface); color: var(--c-text-2); cursor: pointer; transition: background-color .15s var(--ease), color .15s var(--ease); }
 .a-iconbtn:hover { background: var(--c-surface-2); color: var(--c-text); }
 
@@ -278,7 +279,7 @@
 .insp-sub { display: block; margin-top: 3px; color: var(--c-text-3); font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .insp-when { color: var(--c-text-3); font-size: 13px; white-space: nowrap; text-align: right; }
 .empty { display: grid; justify-items: start; gap: 10px; padding: 30px 24px; }
-.empty .ico { color: var(--c-accent); }
+.empty > .ico { color: var(--c-accent); }
 .empty p { margin: 0; color: var(--c-text-3); max-width: 52ch; }
 
 .promo { display: grid; grid-template-columns: auto minmax(0, 1fr) auto; align-items: center; gap: 18px; padding: 20px 22px; }
