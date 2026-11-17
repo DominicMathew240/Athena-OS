@@ -965,6 +965,17 @@ class OperationDraft(models.Model):
     name = models.CharField(max_length=120)
     line = models.JSONField(null=True, blank=True)
     reference_events = models.JSONField(default=list)
+    # The component versions this draft currently builds on. Pins are recorded per revision
+    # into the draft-version snapshot; they are configuration references, not a release.
+    geometry_version = models.ForeignKey(
+        GeometryVersion, null=True, blank=True, on_delete=models.PROTECT, related_name="drafts"
+    )
+    recipe_version = models.ForeignKey(
+        RecipeVersion, null=True, blank=True, on_delete=models.PROTECT, related_name="drafts"
+    )
+    policy_version = models.ForeignKey(
+        PolicyVersion, null=True, blank=True, on_delete=models.PROTECT, related_name="drafts"
+    )
     revision = models.PositiveIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)

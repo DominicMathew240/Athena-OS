@@ -1,4 +1,5 @@
 """Private, bounded recorded-video intake for an operation draft."""
+
 from __future__ import annotations
 
 import re
@@ -49,7 +50,11 @@ def operation_recording(request, draft_id):
     if request.method == "DELETE":
         with transaction.atomic():
             changed = rows.filter(revision=revision, recording__isnull=False).update(
-                revision=F("revision") + 1, updated_at=timezone.now(), line=None, reference_events=[]
+                revision=F("revision") + 1,
+                updated_at=timezone.now(),
+                line=None,
+                reference_events=[],
+                geometry_version=None,
             )
             if not changed:
                 return _error("The recording or draft changed elsewhere. Reload it before continuing.", 409)
@@ -70,10 +75,12 @@ def operation_recording(request, draft_id):
     try:
         with transaction.atomic():
             changed = rows.filter(revision=revision, recording__isnull=True).update(
-                revision=F("revision") + 1, updated_at=timezone.now(), line=None
+                revision=F("revision") + 1, updated_at=timezone.now(), line=None, geometry_version=None
             )
             if changed:
-                OperationRecording.objects.create(draft_id=draft_id, storage_key=key, filename=_safe_filename(upload.name), **metadata)
+                OperationRecording.objects.create(
+                    draft_id=draft_id, storage_key=key, filename=_safe_filename(upload.name), **metadata
+                )
                 _record_draft_version(rows.get())
         if not changed:
             recordings.queue_cleanup(key)

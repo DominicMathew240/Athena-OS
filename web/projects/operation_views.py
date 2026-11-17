@@ -60,7 +60,48 @@ def _data(row):
         "status": "draft",
         "updated_at": row.updated_at.isoformat(),
         "recording": video,
+        "pins": {
+            "geometry_version_id": None if row.geometry_version_id is None else str(row.geometry_version_id),
+            "recipe_version_id": None if row.recipe_version_id is None else str(row.recipe_version_id),
+            "policy_version_id": None if row.policy_version_id is None else str(row.policy_version_id),
+        },
     }
+
+
+def _snapshot_pins(row):
+    """References to the immutable component versions the draft builds on.
+
+    The source-view pin is derived from the geometry pin: a geometry version is
+    only valid with the exact source-view version it was created against.
+    """
+    pins = {"source_view": None, "geometry": None, "recipe": None, "model": None, "screen": None, "policy": None}
+    if row.geometry_version_id:
+        geometry = row.geometry_version
+        source_view = geometry.source_view_version
+        pins["geometry"] = {
+            "id": str(geometry.id),
+            "version": geometry.version,
+            "sha256": geometry.geometry_sha256,
+            "source_view_version_id": str(source_view.id),
+        }
+        pins["source_view"] = {
+            "id": str(source_view.id),
+            "source_id": str(source_view.source_id),
+            "version": source_view.version,
+            "sha256": source_view.configuration_sha256,
+        }
+    if row.recipe_version_id:
+        recipe = row.recipe_version
+        pins["recipe"] = {
+            "id": str(recipe.id),
+            "version": recipe.version,
+            "recipe_key": recipe.recipe_key,
+            "sha256": recipe.configuration_sha256,
+        }
+    if row.policy_version_id:
+        policy = row.policy_version
+        pins["policy"] = {"id": str(policy.id), "version": policy.version, "sha256": policy.configuration_sha256}
+    return pins
 
 
 def _version_snapshot(row):
@@ -88,6 +129,7 @@ def _version_snapshot(row):
             "duration_seconds": recording.duration_seconds,
         }
     )
+    pins = _snapshot_pins(row)
     return {
         "schema_version": 1,
         "draft": {
@@ -97,18 +139,15 @@ def _version_snapshot(row):
             "operation_id": None if row.operation_id is None else str(row.operation_id),
         },
         "source": source,
-        "geometry": {"line": row.line, "state": "draft_configuration"},
-        "recipe": {"key": "people_counting", "state": "specification_only", "version": None},
+        "geometry": {"line": row.line, "state": "pinned_version" if pins["geometry"] else "draft_configuration"},
+        "recipe": {
+            "key": "people_counting",
+            "state": "pinned_version" if pins["recipe"] else "specification_only",
+            "version": None if pins["recipe"] is None else pins["recipe"]["version"],
+        },
         "recording": recording_data,
         "reference_events": row.reference_events,
-        "component_pins": {
-            "source_view": None,
-            "geometry": None,
-            "recipe": None,
-            "model": None,
-            "screen": None,
-            "policy": None,
-        },
+        "component_pins": pins,
         "release_ready": False,
     }
 
@@ -281,7 +320,7 @@ def _version_data(version):
 
 
 def _validate(payload, *, update=False, recording_duration=None, existing_events=None, existing_line=None):
-    allowed = {"name", "line", "reference_events"} | ({"revision"} if update else set())
+    allowed = {"name", "line", "reference_events"} | set(_PIN_FIELDS) | ({"revision"} if update else set())
     if payload.keys() - allowed:
         raise ValueError("These draft details are not supported.")
     name = payload.get("name")
@@ -348,6 +387,72 @@ def _validate(payload, *, update=False, recording_duration=None, existing_events
     if update and (type(revision) is not int or revision < 1):
         raise ValueError("Provide the current draft revision.")
     return name.strip(), line, normalized_events, revision
+
+
+_PIN_FIELDS = ("geometry_version_id", "recipe_version_id", "policy_version_id")
+
+
+def _validate_pins(payload, operation, line):
+    """Resolve optional component-version pins for one draft save.
+
+    Pins must reference immutable versions of the draft's own operation, and a
+    geometry pin is only valid while the draft line still matches the pinned
+    geometry. The caller resolves ownership; this returns the model instances.
+    """
+    pins = {}
+    for field in _PIN_FIELDS:
+        if field in payload:
+            value = payload[field]
+            if value is None:
+                pins[field] = None
+                continue
+            try:
+                pins[field] = uuid.UUID(value)
+            except (ValueError, AttributeError, TypeError) as error:
+                raise ValueError(f"Provide a valid {field.replace('_', ' ')}.") from error
+    if not pins:
+        return None
+    resolved = {}
+    if "geometry_version_id" in pins:
+        geometry_id = pins["geometry_version_id"]
+        if geometry_id is None:
+            resolved["geometry"] = None
+        else:
+            if operation is None:
+                raise ValueError("Bind the draft to an operation before pinning component versions.")
+            geometry = (
+                GeometryVersion.objects.select_related("source_view_version")
+                .filter(id=geometry_id, operation=operation)
+                .first()
+            )
+            if geometry is None:
+                raise ValueError("Choose a geometry version that belongs to this draft's operation.")
+            if line is None or geometry.geometry.get("line") != line:
+                raise ValueError("Save the matching counting line before pinning this geometry version.")
+            resolved["geometry"] = geometry
+    if "recipe_version_id" in pins:
+        recipe_id = pins["recipe_version_id"]
+        if recipe_id is None:
+            resolved["recipe"] = None
+        else:
+            if operation is None:
+                raise ValueError("Bind the draft to an operation before pinning component versions.")
+            recipe = RecipeVersion.objects.filter(id=recipe_id, operation=operation).first()
+            if recipe is None:
+                raise ValueError("Choose a recipe version that belongs to this draft's operation.")
+            resolved["recipe"] = recipe
+    if "policy_version_id" in pins:
+        policy_id = pins["policy_version_id"]
+        if policy_id is None:
+            resolved["policy"] = None
+        else:
+            if operation is None:
+                raise ValueError("Bind the draft to an operation before pinning component versions.")
+            policy = PolicyVersion.objects.filter(id=policy_id, operation=operation).first()
+            if policy is None:
+                raise ValueError("Choose a policy version that belongs to this draft's operation.")
+            resolved["policy"] = policy
+    return resolved
 
 
 def _scope_name(payload):
@@ -609,21 +714,39 @@ def operation_policy_versions(request: HttpRequest, operation_id):
 @require_http_methods(["GET", "POST"])
 def operation_drafts(request: HttpRequest):
     if request.method == "GET":
-        rows = OperationDraft.objects.filter(created_by=request.user).select_related("operation", "recording")[:200]
+        rows = OperationDraft.objects.filter(created_by=request.user).select_related(
+            "operation", "recording", "geometry_version", "recipe_version", "policy_version"
+        )[:200]
         return _no_store(JsonResponse({"drafts": [_data(row) for row in rows]}))
     try:
         payload = _json_body(request)
         operation = None
         if "operation_id" in payload:
             operation_id = _scope_uuid(payload, "operation_id")
-            operation = get_object_or_404(Operation, id=operation_id, created_by=request.user)
+            operation = get_object_or_404(
+                Operation.objects.select_related("site", "source"), id=operation_id, created_by=request.user
+            )
             payload = {key: value for key, value in payload.items() if key != "operation_id"}
         name, line, reference_events, _ = _validate(payload)
+        pins = _validate_pins(payload, operation, line)
     except ValueError as error:
         return _error(str(error))
     with transaction.atomic():
         row = OperationDraft.objects.create(
-            created_by=request.user, operation=operation, name=name, line=line, reference_events=reference_events
+            created_by=request.user,
+            operation=operation,
+            name=name,
+            line=line,
+            reference_events=reference_events,
+            **(
+                {}
+                if pins is None
+                else {
+                    "geometry_version": pins.get("geometry"),
+                    "recipe_version": pins.get("recipe"),
+                    "policy_version": pins.get("policy"),
+                }
+            ),
         )
         _record_draft_version(row)
     return _no_store(JsonResponse({"draft": _data(row)}, status=201))
@@ -633,7 +756,7 @@ def operation_drafts(request: HttpRequest):
 @require_http_methods(["GET", "PUT", "DELETE"])
 def operation_draft(request: HttpRequest, draft_id):
     rows = OperationDraft.objects.filter(created_by=request.user)
-    row = get_object_or_404(rows, id=draft_id)
+    row = get_object_or_404(rows.select_related("operation"), id=draft_id)
     if request.method == "GET":
         return _no_store(JsonResponse({"draft": _data(row)}))
     if request.method == "DELETE":
@@ -643,26 +766,37 @@ def operation_draft(request: HttpRequest, draft_id):
         return response
     try:
         recording = getattr(row, "recording", None)
+        payload = _json_body(request)
         name, line, reference_events, revision = _validate(
-            _json_body(request),
+            payload,
             update=True,
             recording_duration=None if recording is None else recording.duration_seconds,
             existing_events=row.reference_events,
             existing_line=row.line,
         )
+        pins = _validate_pins(payload, row.operation, line)
     except ValueError as error:
         return _error(str(error))
+    updates = {"name": name, "line": line, "reference_events": reference_events}
+    if pins is not None:
+        updates["geometry_version"] = pins.get("geometry", row.geometry_version_id and row.geometry_version)
+        updates["recipe_version"] = pins.get("recipe", row.recipe_version_id and row.recipe_version)
+        updates["policy_version"] = pins.get("policy", row.policy_version_id and row.policy_version)
+    if line != row.line and row.geometry_version_id and not (pins and "geometry" in pins):
+        # A geometry pin is only valid while the draft line matches the pinned geometry; a
+        # changed line invalidates a kept pin, exactly as it clears reference crossings. A
+        # pin in this same save was already checked against the new line and survives.
+        updates["geometry_version"] = None
     with transaction.atomic():
         changed = rows.filter(id=draft_id, revision=revision).update(
-            name=name,
-            line=line,
-            reference_events=reference_events,
-            revision=F("revision") + 1,
-            updated_at=timezone.now(),
+            **updates, revision=F("revision") + 1, updated_at=timezone.now()
         )
         if not changed:
             return _error("This draft changed elsewhere. Reload it before saving.", 409)
-        row = get_object_or_404(rows, id=draft_id)
+        row = get_object_or_404(
+            rows.select_related("operation", "recording", "geometry_version", "recipe_version", "policy_version"),
+            id=draft_id,
+        )
         _record_draft_version(row)
     return _no_store(JsonResponse({"draft": _data(row)}))
 
