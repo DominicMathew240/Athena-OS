@@ -8,6 +8,7 @@ venv/
 
 # Testing
 .pytest_cache/
+.ruff_cache/
 .coverage
 htmlcov/
 
@@ -30,9 +31,7 @@ web/.env
 *.sqlite3
 .venv-web/
 
-# Preview data
-backend/athena_data/
-frontend/node_modules/
+# Local secrets and environment files must never ship
 .env
 .env.*
 *.env
