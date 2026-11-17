@@ -24,6 +24,7 @@
         <span class="sb-username" title="Signed in as {{ request.user.get_username }}" data-testid="sidebar-username">{{ request.user.get_username }}</span>
         <form method="post" action="{% url 'logout' %}" aria-label="Sign out">{% csrf_token %}<button class="sb-signout" type="submit" aria-label="Sign out" title="Sign out" data-testid="sidebar-signout-button">{% icon "logout" 17 %}</button></form>
       </div>
+      <p class="sb-version" data-testid="sidebar-version">Athena OS {% include_version %}</p>
     </div>
   </div>
 </header>

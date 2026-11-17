@@ -4,12 +4,12 @@ from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import redirect
-from django.utils.http import url_has_allowed_host_and_scheme
-from django.utils.http import urlencode
+from django.utils.http import url_has_allowed_host_and_scheme, urlencode
 
-PUBLIC_PATHS = ("/", "/docs", "/login/", "/setup/", "/healthz", "/robots.txt", "/sitemap.xml")
-# Views that need no role: they are about signing in or out (anyone signed in may sign out).
-UNGUARDED_URL_NAMES = frozenset({"login", "logout", "setup", "healthz", "home"})
+PUBLIC_PATHS = ("/", "/docs", "/login/", "/setup/", "/healthz", "/api/version", "/robots.txt", "/sitemap.xml")
+# Views that need no role: they are about signing in or out (anyone signed in may sign out),
+# or they disclose only the software version.
+UNGUARDED_URL_NAMES = frozenset({"login", "logout", "setup", "healthz", "home", "version"})
 
 
 class ConsoleLoginRequiredMiddleware:
@@ -25,11 +25,7 @@ class ConsoleLoginRequiredMiddleware:
 
     def __call__(self, request: HttpRequest):
         path = request.path
-        if (
-            request.user.is_authenticated
-            or path in PUBLIC_PATHS
-            or path.startswith(self.static_prefix)
-        ):
+        if request.user.is_authenticated or path in PUBLIC_PATHS or path.startswith(self.static_prefix):
             return self.get_response(request)
         if path.startswith("/api/"):
             response = JsonResponse({"error": "Sign in to continue."}, status=401)
@@ -40,7 +36,6 @@ class ConsoleLoginRequiredMiddleware:
         target = path if url_has_allowed_host_and_scheme(path, allowed_hosts=None) else "/"
         query = urlencode({"next": target}) if target != "/" else ""
         return redirect(f"{settings.LOGIN_URL}?{query}" if query else settings.LOGIN_URL)
-
 
     def process_view(self, request: HttpRequest, view_func, view_args, view_kwargs):
         """Fail closed: a console view that never declared its role with ``@access`` is refused.

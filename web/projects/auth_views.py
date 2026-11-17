@@ -58,9 +58,7 @@ class ThrottledLoginView(LoginView):
         if any(cache.get(key, 0) >= settings.LOGIN_MAX_FAILURES for key in _throttle_keys(request)):
             minutes = max(1, settings.LOGIN_LOCKOUT_SECONDS // 60)
             form = self.get_form()
-            form.add_error(
-                None, f"Too many failed sign-in attempts. Wait about {minutes} minutes and try again."
-            )
+            form.add_error(None, f"Too many failed sign-in attempts. Wait about {minutes} minutes and try again.")
             response = self.render_to_response(self.get_context_data(form=form))
             response.status_code = 429
             return response
@@ -127,7 +125,9 @@ class SetupView(View):
                 errors.extend(exc.messages)
         return errors
 
-    def _validate_ai_config(self, ai_mode: str, base_url: str, model: str, api_key: str) -> tuple[dict | None, list[str]]:
+    def _validate_ai_config(
+        self, ai_mode: str, base_url: str, model: str, api_key: str
+    ) -> tuple[dict | None, list[str]]:
         """Validate and normalize the selected initial AI connection option."""
         if ai_mode == "skip":
             return None, []
@@ -221,4 +221,9 @@ def healthz(request: HttpRequest) -> JsonResponse:
         except OSError:
             pass
     ok = all(checks.values())
-    return JsonResponse({"status": "ok" if ok else "unavailable", **checks}, status=200 if ok else 503)
+    from athena_web.version import current
+
+    return JsonResponse(
+        {"status": "ok" if ok else "unavailable", "version": current(), **checks},
+        status=200 if ok else 503,
+    )

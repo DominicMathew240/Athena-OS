@@ -639,7 +639,8 @@ class EveryRouteDeclaresItsRole(RoleBase):
         "login/",
         "logout/",
         "setup/",
-    }  # about signing in, out, and first-run setup; no role applies
+        "api/version",
+    }  # about signing in/out, first-run setup, or disclosing the software version; no role applies
 
     def callbacks(self):
         from django.urls import get_resolver

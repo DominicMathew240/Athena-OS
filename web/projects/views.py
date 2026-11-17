@@ -10,17 +10,18 @@ from typing import Any
 from django.core.exceptions import RequestDataTooBig, ValidationError
 from django.core.files.storage import default_storage
 from django.db import transaction
-from django.db.models import CharField, Case, Count, Q, Value, When
+from django.db.models import Case, CharField, Count, Q, Value, When
 from django.http import FileResponse, Http404, HttpRequest, JsonResponse
 from django.shortcuts import get_object_or_404, render
 from django.utils import timezone
+from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 from PIL import Image, UnidentifiedImageError
 
+from . import permissions
 from .forms import ProjectCreateForm, normalize_label_names
 from .models import Asset, AutoLabelJob, BoxAnnotation, FeedbackImport, Project
-from . import permissions
 from .permissions import access
 
 MAX_REQUEST_BYTES = 1_048_576
@@ -53,6 +54,18 @@ def api_me(request: HttpRequest) -> JsonResponse:
     """What the signed-in person may do. The console reads this to switch off buttons they cannot use;
     the server still refuses the call itself. No username or e-mail address is included."""
     response = JsonResponse(permissions.describe(request.user))
+    response["Cache-Control"] = "no-store"
+    return response
+
+
+@require_http_methods(["GET"])
+@never_cache
+def api_version(request: HttpRequest) -> JsonResponse:
+    """The console's software version. Public (no sign-in): version disclosure is not a secret,
+    and operators asked to report a bug need it without an account."""
+    from athena_web.version import current
+
+    response = JsonResponse({"name": "athena-console", "version": current()})
     response["Cache-Control"] = "no-store"
     return response
 
@@ -130,9 +143,7 @@ def _with_label_counts(projects):
     counts = _label_counts([project.id for project in projects])
     for project in projects:
         project.label_counts = {
-            label: counts.get(project.id, {})[label]
-            for label in project.labels
-            if label in counts.get(project.id, {})
+            label: counts.get(project.id, {})[label] for label in project.labels if label in counts.get(project.id, {})
         }
     return projects
 
@@ -187,10 +198,7 @@ def _validated_annotation_data(
 
     data: dict[str, Any] = {
         "label": current.label if current else None,
-        **{
-            field: getattr(current, field) if current else None
-            for field in BOX_COORDINATE_FIELDS
-        },
+        **{field: getattr(current, field) if current else None for field in BOX_COORDINATE_FIELDS},
         **payload,
     }
     if not isinstance(data["label"], str) or data["label"] not in project.labels:
@@ -279,9 +287,7 @@ def _validate_uploaded_image(upload) -> dict[str, Any]:
 @require_http_methods(["GET", "POST"])
 def project_collection(request: HttpRequest) -> JsonResponse:
     if request.method == "GET":
-        response = JsonResponse(
-            {"projects": [_project_data(p) for p in _with_label_counts(_projects_with_counts())]}
-        )
+        response = JsonResponse({"projects": [_project_data(p) for p in _with_label_counts(_projects_with_counts())]})
         response["Cache-Control"] = "no-store"
         return response
 
@@ -337,12 +343,10 @@ def _read_label_edit(request: HttpRequest) -> dict[str, Any]:
     except (json.JSONDecodeError, UnicodeDecodeError):
         raise LabelEditError("The label changes were not valid JSON. Reload the page and try again.")
     if not isinstance(payload, dict):
-        raise LabelEditError("The label changes must be a JSON object with a \"labels\" list.")
+        raise LabelEditError('The label changes must be a JSON object with a "labels" list.')
     unsupported = payload.keys() - {"labels", "reassign", "based_on"}
     if unsupported:
-        raise LabelEditError(
-            f"Only labels can be changed here. Remove {_quoted(sorted(unsupported))} and try again."
-        )
+        raise LabelEditError(f"Only labels can be changed here. Remove {_quoted(sorted(unsupported))} and try again.")
     if "labels" not in payload:
         raise LabelEditError("Send the full list of labels to save.")
     return payload
@@ -385,9 +389,7 @@ def _plan_label_edit(project: Project, payload: dict[str, Any]) -> tuple[list[st
                 "Reload the page to see the current labels, then make your change again."
             )
         if was in used_was:
-            raise LabelEditError(
-                f"The label “{was}” was listed twice. Reload the page and make your change again."
-            )
+            raise LabelEditError(f"The label “{was}” was listed twice. Reload the page and make your change again.")
         used_was.add(was)
 
     renames = {was: name for was, name in zip(was_for, names) if was is not None and was != name}
@@ -464,10 +466,7 @@ def _update_project_labels(request: HttpRequest, project_id) -> JsonResponse:
             }
             blocked = {label: usage[label] for label in removed if label in usage and label not in reassign}
             if blocked:
-                parts = [
-                    f"“{label}” ({count} {'box' if count == 1 else 'boxes'})"
-                    for label, count in blocked.items()
-                ]
+                parts = [f"“{label}” ({count} {'box' if count == 1 else 'boxes'})" for label, count in blocked.items()]
                 if len(blocked) == 1:
                     label, count = next(iter(blocked.items()))
                     message = (
@@ -484,9 +483,7 @@ def _update_project_labels(request: HttpRequest, project_id) -> JsonResponse:
             moves = {**renames, **reassign}
             boxes_updated = 0
             if moves:
-                boxes_updated = BoxAnnotation.objects.filter(
-                    asset__project=project, label__in=list(moves)
-                ).update(
+                boxes_updated = BoxAnnotation.objects.filter(asset__project=project, label__in=list(moves)).update(
                     label=Case(
                         *[When(label=old, then=Value(new)) for old, new in moves.items()],
                         output_field=CharField(),
@@ -510,7 +507,9 @@ def project_assets(request: HttpRequest, project_id) -> JsonResponse:
         return JsonResponse({"error": "Image files can only be added to image projects."}, status=400)
 
     if request.method == "GET":
-        taken_from = dict(FeedbackImport.objects.filter(asset__project=project).values_list("asset_id", "observation_id"))
+        taken_from = dict(
+            FeedbackImport.objects.filter(asset__project=project).values_list("asset_id", "observation_id")
+        )
         assets = [_asset_data(asset, taken_from.get(asset.id)) for asset in _assets_with_counts(project)]
         response = JsonResponse({"assets": assets})
         response["Cache-Control"] = "no-store"
@@ -530,7 +529,12 @@ def project_assets(request: HttpRequest, project_id) -> JsonResponse:
             validated.append((upload, _validate_uploaded_image(upload)))
         except ValueError as error:
             # Name the file, so the person knows which one to leave out. Nothing from this batch is saved.
-            return JsonResponse({"error": f"“{_safe_filename(upload.name)}”: {error} Nothing was added; take that file out and try again."}, status=400)
+            return JsonResponse(
+                {
+                    "error": f"“{_safe_filename(upload.name)}”: {error} Nothing was added; take that file out and try again."
+                },
+                status=400,
+            )
 
     saved_keys: list[str] = []
     created: list[Asset] = []
@@ -570,9 +574,7 @@ def project_asset_detail(request: HttpRequest, project_id, asset_id) -> JsonResp
 
 @access(POST="label")
 @require_http_methods(["GET", "POST"])
-def project_asset_annotations(
-    request: HttpRequest, project_id, asset_id
-) -> JsonResponse:
+def project_asset_annotations(request: HttpRequest, project_id, asset_id) -> JsonResponse:
     asset = get_object_or_404(
         Asset.objects.select_related("project"),
         id=asset_id,
@@ -580,9 +582,7 @@ def project_asset_annotations(
         project__modality="image",
     )
     if request.method == "GET":
-        response = JsonResponse(
-            {"annotations": [_annotation_data(item) for item in asset.annotations.all()]}
-        )
+        response = JsonResponse({"annotations": [_annotation_data(item) for item in asset.annotations.all()]})
         response["Cache-Control"] = "no-store"
         return response
     try:
@@ -595,18 +595,14 @@ def project_asset_annotations(
 
 @access(PATCH="label", DELETE="label")
 @require_http_methods(["PATCH", "DELETE"])
-def box_annotation_detail(
-    request: HttpRequest, project_id, asset_id, annotation_id
-) -> JsonResponse:
+def box_annotation_detail(request: HttpRequest, project_id, asset_id, annotation_id) -> JsonResponse:
     asset = get_object_or_404(
         Asset.objects.select_related("project"),
         id=asset_id,
         project_id=project_id,
         project__modality="image",
     )
-    annotation = get_object_or_404(
-        BoxAnnotation, id=annotation_id, asset=asset
-    )
+    annotation = get_object_or_404(BoxAnnotation, id=annotation_id, asset=asset)
     if request.method == "DELETE":
         annotation.delete()
         return JsonResponse({"deleted": True})
@@ -637,9 +633,7 @@ def box_annotation_detail(
 @access()
 @require_http_methods(["GET"])
 def project_asset_content(request: HttpRequest, project_id, asset_id) -> FileResponse:
-    asset = get_object_or_404(
-        Asset, id=asset_id, project_id=project_id, project__modality="image"
-    )
+    asset = get_object_or_404(Asset, id=asset_id, project_id=project_id, project__modality="image")
     try:
         response = FileResponse(
             default_storage.open(asset.storage_key, "rb"),

@@ -38,6 +38,14 @@ def _list(name: str, default: list[str] | None = None) -> list[str]:
     return items or list(default or [])
 
 
+# The console's software version, shown in the UI footer, /api/version and /healthz.
+# Deployers may override it (ATHENA_VERSION) only to *add* a suffix identifying their own
+# packaging; it never hides or replaces the released version. Read it via
+# ``athena_web.version.current()`` (see athena_web/version.py) — plain module functions are
+# not visible through ``django.conf.settings``.
+RELEASE_VERSION = "1.0.0"
+
+
 DEBUG = _flag("DJANGO_DEBUG", False)
 
 SECRET_KEY = os.environ.get("DJANGO_SECRET_KEY")

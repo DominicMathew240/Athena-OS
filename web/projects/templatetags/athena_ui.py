@@ -80,3 +80,11 @@ def icon(name: str, size: int = 20, extra_class: str = ""):
 @register.simple_tag
 def icon_data():
     return json_script(PATHS, "athena-icons")
+
+
+@register.simple_tag
+def include_version():
+    """The console's software version, from settings (single source of truth)."""
+    from athena_web.version import current
+
+    return current()

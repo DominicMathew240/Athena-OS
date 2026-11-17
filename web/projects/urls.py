@@ -99,6 +99,7 @@ urlpatterns = [
         name="inspection-image",
     ),
     path("api/me", views.api_me, name="me"),
+    path("api/version", views.api_version, name="version"),
     # Who holds which role (administrators only): the screen, the people, and the record of changes
     path("access", access_views.access_page, name="access-page"),
     path("api/access", access_views.access_overview, name="access-overview"),
