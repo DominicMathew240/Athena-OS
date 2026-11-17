@@ -76,9 +76,7 @@ class AutoLabelJob(models.Model):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     project = models.ForeignKey(Project, on_delete=models.CASCADE, related_name="autolabel_jobs")
-    asset = models.ForeignKey(
-        Asset, null=True, blank=True, on_delete=models.CASCADE, related_name="autolabel_jobs"
-    )
+    asset = models.ForeignKey(Asset, null=True, blank=True, on_delete=models.CASCADE, related_name="autolabel_jobs")
     only_unlabeled = models.BooleanField(default=True)
     min_confidence = models.FloatField(default=0.45)
     max_boxes = models.PositiveSmallIntegerField(default=20)
@@ -123,9 +121,7 @@ class BoxAnnotation(models.Model):
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_ACCEPTED)
     confidence = models.FloatField(null=True, blank=True)
     model_name = models.CharField(max_length=200, blank=True)
-    job = models.ForeignKey(
-        AutoLabelJob, null=True, blank=True, on_delete=models.SET_NULL, related_name="annotations"
-    )
+    job = models.ForeignKey(AutoLabelJob, null=True, blank=True, on_delete=models.SET_NULL, related_name="annotations")
     reviewed_by = models.ForeignKey(
         settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
     )
@@ -231,9 +227,7 @@ class DatasetVersion(_FrozenModel):
 
     class Meta:
         ordering = ("-version",)
-        constraints = (
-            models.UniqueConstraint(fields=("project", "version"), name="datasetversion_unique_number"),
-        )
+        constraints = (models.UniqueConstraint(fields=("project", "version"), name="datasetversion_unique_number"),)
 
     def __str__(self) -> str:
         return f"{self.project_id} v{self.version}"
@@ -665,9 +659,7 @@ class FeedbackImport(_AppendOnlyModel):
 
     class Meta:
         ordering = ("-created_at", "-id")
-        constraints = (
-            models.UniqueConstraint(fields=("observation",), name="feedbackimport_one_per_observation"),
-        )
+        constraints = (models.UniqueConstraint(fields=("observation",), name="feedbackimport_one_per_observation"),)
 
     def __str__(self) -> str:
         return f"{self.observation_ref} -> {self.asset_ref or 'removed picture'}"
@@ -863,7 +855,11 @@ class Site(models.Model):
 class OperationSource(models.Model):
     """Private source metadata scoped to a site; connection and secret data are out of scope."""
 
-    KIND_CHOICES = (("recorded_video", "Recorded video"), ("camera", "Camera"), ("image_collection", "Image collection"))
+    KIND_CHOICES = (
+        ("recorded_video", "Recorded video"),
+        ("camera", "Camera"),
+        ("image_collection", "Image collection"),
+    )
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="sources")
@@ -903,9 +899,7 @@ class SourceViewVersion(_FrozenModel):
 
     class Meta:
         ordering = ("-version", "-id")
-        constraints = (
-            models.UniqueConstraint(fields=("source", "version"), name="sourceviewversion_unique_number"),
-        )
+        constraints = (models.UniqueConstraint(fields=("source", "version"), name="sourceviewversion_unique_number"),)
 
 
 class GeometryVersion(_FrozenModel):
@@ -913,7 +907,9 @@ class GeometryVersion(_FrozenModel):
 
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     operation = models.ForeignKey(Operation, on_delete=models.PROTECT, related_name="geometry_versions")
-    source_view_version = models.ForeignKey(SourceViewVersion, on_delete=models.PROTECT, related_name="geometry_versions")
+    source_view_version = models.ForeignKey(
+        SourceViewVersion, on_delete=models.PROTECT, related_name="geometry_versions"
+    )
     version = models.PositiveIntegerField()
     created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
     geometry = models.JSONField()
@@ -922,9 +918,42 @@ class GeometryVersion(_FrozenModel):
 
     class Meta:
         ordering = ("-version", "-id")
-        constraints = (
-            models.UniqueConstraint(fields=("operation", "version"), name="geometryversion_unique_number"),
-        )
+        constraints = (models.UniqueConstraint(fields=("operation", "version"), name="geometryversion_unique_number"),)
+
+
+class RecipeVersion(_FrozenModel):
+    """Immutable versioned declaration of one recipe's executable rule parameters."""
+
+    SUPPORTED_KEYS = ("people_counting",)
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    operation = models.ForeignKey(Operation, on_delete=models.PROTECT, related_name="recipe_versions")
+    recipe_key = models.CharField(max_length=64)
+    version = models.PositiveIntegerField()
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    configuration = models.JSONField()
+    configuration_sha256 = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-version", "-id")
+        constraints = (models.UniqueConstraint(fields=("operation", "version"), name="recipeversion_unique_number"),)
+
+
+class PolicyVersion(_FrozenModel):
+    """Immutable versioned operation policy: retention and coverage thresholds."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    operation = models.ForeignKey(Operation, on_delete=models.PROTECT, related_name="policy_versions")
+    version = models.PositiveIntegerField()
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    configuration = models.JSONField()
+    configuration_sha256 = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-version", "-id")
+        constraints = (models.UniqueConstraint(fields=("operation", "version"), name="policyversion_unique_number"),)
 
 
 class OperationDraft(models.Model):
@@ -959,7 +988,9 @@ class OperationDraftVersion(_GuardedModel):
 
     class Meta:
         ordering = ("-revision", "-id")
-        constraints = (models.UniqueConstraint(fields=("draft", "revision"), name="operationdraftversion_unique_revision"),)
+        constraints = (
+            models.UniqueConstraint(fields=("draft", "revision"), name="operationdraftversion_unique_revision"),
+        )
 
 
 class OperationRecording(models.Model):

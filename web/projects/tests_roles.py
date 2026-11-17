@@ -24,11 +24,11 @@ from django.urls import path
 from django.utils.html import escape
 
 from . import permissions
-from .models import AutoLabelJob, DatasetVersion, ModelEvent, ModelVersion, Project
+from .models import DatasetVersion, ModelEvent, ModelVersion, Project
 from .permissions import ADMIN, APPROVE, LABEL, TRAIN, VIEW
 from .tests import grant
 from .tests_hardening import METHODS, SAMPLE, render, walk
-from .tests_inference import InferenceBase, image_upload
+from .tests_inference import InferenceBase
 
 User = get_user_model()
 STATIC = Path(__file__).resolve().parent / "static" / "projects"
@@ -172,11 +172,21 @@ class RoleMatrixTests(RoleBase):
         viewer, labeler = self.as_user("viewer"), self.as_user("labeler")
         pid = self.project.id
         for url in (
-            "/", "/api/projects", f"/api/projects/{pid}/assets", f"/api/projects/{pid}/assets/{self.asset.id}/annotations",
-            f"/api/projects/{pid}/assets/{self.asset.id}/content", f"/api/projects/{pid}/datasets",
-            f"/api/projects/{pid}/datasets/readiness", f"/api/projects/{pid}/training/runs", f"/api/projects/{pid}/models",
-            f"/api/projects/{pid}/inference/apps", f"/projects/{pid}/check-screen/setup", f"/check/{self.app['slug']}",
-            "/api/autolabel", f"/api/projects/{pid}/autolabel", "/api/me",
+            "/",
+            "/api/projects",
+            f"/api/projects/{pid}/assets",
+            f"/api/projects/{pid}/assets/{self.asset.id}/annotations",
+            f"/api/projects/{pid}/assets/{self.asset.id}/content",
+            f"/api/projects/{pid}/datasets",
+            f"/api/projects/{pid}/datasets/readiness",
+            f"/api/projects/{pid}/training/runs",
+            f"/api/projects/{pid}/models",
+            f"/api/projects/{pid}/inference/apps",
+            f"/projects/{pid}/check-screen/setup",
+            f"/check/{self.app['slug']}",
+            "/api/autolabel",
+            f"/api/projects/{pid}/autolabel",
+            "/api/me",
         ):
             with self.subTest(url=url):
                 self.assertEqual(viewer.get(url).status_code, labeler.get(url).status_code)
@@ -189,7 +199,9 @@ class UnassignedUserTests(RoleBase):
         user = self.as_user("unassigned")
         pid = self.project.id
         self.assertEqual(permissions.role_of(self.users["unassigned"]), "labeler")
-        self.assertNotEqual(self.send(user, "post", f"/api/projects/{pid}/assets/{self.asset.id}/annotations", {}).status_code, 403)
+        self.assertNotEqual(
+            self.send(user, "post", f"/api/projects/{pid}/assets/{self.asset.id}/annotations", {}).status_code, 403
+        )
         approve = self.send(user, "post", f"/api/projects/{pid}/models/{self.model.id}/approve", {"note": "ok"})
         rollback = self.send(user, "post", f"/api/projects/{pid}/models/{self.model.id}/rollback", {"note": "ok"})
         self.assertEqual((approve.status_code, rollback.status_code), (403, 403))
@@ -233,16 +245,26 @@ class SuperuserAndAnonymousTests(RoleBase):
         self.assertEqual(permissions.role_of(self.users["superuser"]), "approver")
         candidate = self.train_candidate_after_approved()
         client = self.as_user("superuser")
-        self.assertEqual(self.send(client, "post", f"/api/projects/{self.project.id}/models/{candidate.id}/stage", {}).status_code, 200)
-        response = self.send(client, "post", f"/api/projects/{self.project.id}/models/{candidate.id}/approve", {"note": "Checked by admin."})
+        self.assertEqual(
+            self.send(client, "post", f"/api/projects/{self.project.id}/models/{candidate.id}/stage", {}).status_code,
+            200,
+        )
+        response = self.send(
+            client,
+            "post",
+            f"/api/projects/{self.project.id}/models/{candidate.id}/approve",
+            {"note": "Checked by admin."},
+        )
         self.assertEqual(response.status_code, 200, response.content)
 
     def test_anonymous_callers_still_get_401_or_a_login_redirect(self) -> None:
         anonymous = Client()
         pid = self.project.id
         for method, url in (
-            ("get", "/api/me"), ("post", f"/api/projects/{pid}/models/{self.model.id}/approve"),
-            ("post", "/api/projects"), ("get", f"/api/projects/{pid}/models"),
+            ("get", "/api/me"),
+            ("post", f"/api/projects/{pid}/models/{self.model.id}/approve"),
+            ("post", "/api/projects"),
+            ("get", f"/api/projects/{pid}/models"),
         ):
             self.assertEqual(getattr(anonymous, method)(url).status_code, 401, url)
         self.assertEqual(anonymous.get("/").status_code, 200)  # public landing
@@ -253,11 +275,18 @@ class SuperuserAndAnonymousTests(RoleBase):
 class ApprovalTests(RoleBase):
     def staged(self, solid: bool = True) -> ModelVersion:
         candidate = self.train_candidate_after_approved(solid=solid)
-        self.assertEqual(self.send(self.as_user("trainer"), "post", f"/api/projects/{self.project.id}/models/{candidate.id}/stage", {}).status_code, 200)
+        self.assertEqual(
+            self.send(
+                self.as_user("trainer"), "post", f"/api/projects/{self.project.id}/models/{candidate.id}/stage", {}
+            ).status_code,
+            200,
+        )
         return candidate
 
     def approve(self, who: str, model, note="Reviewed the results with the team."):
-        return self.send(self.as_user(who), "post", f"/api/projects/{self.project.id}/models/{model.id}/approve", {"note": note})
+        return self.send(
+            self.as_user(who), "post", f"/api/projects/{self.project.id}/models/{model.id}/approve", {"note": note}
+        )
 
     def test_only_an_approver_approves_and_the_model_is_untouched_when_refused(self) -> None:
         model = self.staged()
@@ -279,8 +308,10 @@ class ApprovalTests(RoleBase):
         self.assertEqual(event.actor_id_snapshot, self.users["approver"].pk)
         # roll back: both events carry the tag too
         rollback = self.send(
-            self.as_user("superuser"), "post",
-            f"/api/projects/{self.project.id}/models/{model.id}/rollback", {"note": "Went back."},
+            self.as_user("superuser"),
+            "post",
+            f"/api/projects/{self.project.id}/models/{model.id}/rollback",
+            {"note": "Went back."},
         )
         self.assertEqual(rollback.status_code, 200, rollback.content)
         for kind in ("rollback_retired", "rollback_restored"):
@@ -298,7 +329,9 @@ class ApprovalTests(RoleBase):
         FakeBackend.boxes = []
         model = self.staged(solid=False)
         response = self.send(
-            self.as_user("approver"), "post", f"/api/projects/{self.project.id}/models/{model.id}/approve",
+            self.as_user("approver"),
+            "post",
+            f"/api/projects/{self.project.id}/models/{model.id}/approve",
             {"note": "Pilot only.", "acknowledge_weak_results": True},
         )
         self.assertEqual(response.status_code, 200, response.content)
@@ -310,7 +343,12 @@ class ApprovalTests(RoleBase):
     def test_second_person_rule_blocks_the_person_who_started_the_run(self) -> None:
         starter = self.users["trainer"]
         self.assertEqual(
-            self.send(self.as_user("trainer"), "post", f"/api/projects/{self.project.id}/training/runs", {"backend": "fake-backend", "dataset_id": str(self.dataset.id)}).status_code,
+            self.send(
+                self.as_user("trainer"),
+                "post",
+                f"/api/projects/{self.project.id}/training/runs",
+                {"backend": "fake-backend", "dataset_id": str(self.dataset.id)},
+            ).status_code,
             202,
         )
         from .training import runner
@@ -332,7 +370,15 @@ class ApprovalTests(RoleBase):
     def test_second_person_rule_also_binds_a_superuser_who_started_the_run(self) -> None:
         root = self.users["superuser"]
         client = self.as_user("superuser")
-        self.assertEqual(self.send(client, "post", f"/api/projects/{self.project.id}/training/runs", {"backend": "fake-backend", "dataset_id": str(self.dataset.id)}).status_code, 202)
+        self.assertEqual(
+            self.send(
+                client,
+                "post",
+                f"/api/projects/{self.project.id}/training/runs",
+                {"backend": "fake-backend", "dataset_id": str(self.dataset.id)},
+            ).status_code,
+            202,
+        )
         from .training import runner
 
         model = runner.run_training(runner.claim_next_run()).model_versions.get()
@@ -343,7 +389,15 @@ class ApprovalTests(RoleBase):
     def test_second_person_rule_is_off_by_default(self) -> None:
         self.assertFalse(permissions.requires_second_person())
         client = self.as_user("approver")
-        self.assertEqual(self.send(client, "post", f"/api/projects/{self.project.id}/training/runs", {"backend": "fake-backend", "dataset_id": str(self.dataset.id)}).status_code, 202)
+        self.assertEqual(
+            self.send(
+                client,
+                "post",
+                f"/api/projects/{self.project.id}/training/runs",
+                {"backend": "fake-backend", "dataset_id": str(self.dataset.id)},
+            ).status_code,
+            202,
+        )
         from .training import runner
 
         model = self.set_solid_evaluation(runner.run_training(runner.claim_next_run()).model_versions.get())
@@ -356,7 +410,10 @@ class ApprovalTests(RoleBase):
         self.assertEqual(self.approve("approver", model).status_code, 200)
         # the run was started by the test's own user, the rollback is by someone else and by the starter alike
         response = self.send(
-            self.as_user("approver"), "post", f"/api/projects/{self.project.id}/models/{model.id}/rollback", {"note": "Back."}
+            self.as_user("approver"),
+            "post",
+            f"/api/projects/{self.project.id}/models/{model.id}/rollback",
+            {"note": "Back."},
         )
         self.assertEqual(response.status_code, 200, response.content)
 
@@ -368,7 +425,10 @@ class ApprovalTests(RoleBase):
 
     def decide(self, who: str, model, action: str = "approve", **extra):
         return self.send(
-            self.as_user(who), "post", f"/api/projects/{self.project.id}/models/{model.id}/{action}", {"note": "Reviewed.", **extra}
+            self.as_user(who),
+            "post",
+            f"/api/projects/{self.project.id}/models/{model.id}/{action}",
+            {"note": "Reviewed.", **extra},
         )
 
     def test_only_an_approver_can_ask_for_the_check_screens_to_be_moved_and_a_refusal_moves_nothing(self) -> None:
@@ -380,7 +440,9 @@ class ApprovalTests(RoleBase):
                 self.assertEqual(self.decide(who, model, **extra).status_code, 403, (who, extra))
         model.refresh_from_db()
         self.assertEqual((model.stage, self.pinned(self.app)), ("staged", self.model.id))
-        self.assertFalse(ModelEvent.objects.filter(model_version=model, kind__in=("approved", "apps_repointed")).exists())
+        self.assertFalse(
+            ModelEvent.objects.filter(model_version=model, kind__in=("approved", "apps_repointed")).exists()
+        )
         response = self.decide("approver", model, repoint_apps=True)
         self.assertEqual(response.status_code, 200, response.content)
         self.assertEqual(response.json()["repointed"], [{"app_id": self.app["id"], "name": self.app["name"]}])
@@ -402,7 +464,12 @@ class ApprovalTests(RoleBase):
         from .training import runner
 
         self.assertEqual(
-            self.send(self.as_user("trainer"), "post", f"/api/projects/{self.project.id}/training/runs", {"backend": "fake-backend", "dataset_id": str(self.dataset.id)}).status_code,
+            self.send(
+                self.as_user("trainer"),
+                "post",
+                f"/api/projects/{self.project.id}/training/runs",
+                {"backend": "fake-backend", "dataset_id": str(self.dataset.id)},
+            ).status_code,
             202,
         )
         model = self.set_solid_evaluation(runner.run_training(runner.claim_next_run()).model_versions.get())
@@ -416,7 +483,9 @@ class ApprovalTests(RoleBase):
         refused = self.decide("trainer", model, repoint_apps=True)
         self.assertEqual(refused.status_code, 403)
         self.assertIn("someone else has to approve it", refused.json()["error"])
-        self.assertEqual((self.pinned(self.app), ModelEvent.objects.filter(kind="apps_repointed").count()), (self.model.id, 0))
+        self.assertEqual(
+            (self.pinned(self.app), ModelEvent.objects.filter(kind="apps_repointed").count()), (self.model.id, 0)
+        )
         model.refresh_from_db()
         self.assertEqual(model.stage, "staged")
         self.assertEqual(self.decide("approver", model, repoint_apps=True).status_code, 200)  # a different person
@@ -431,8 +500,12 @@ class ApprovalTests(RoleBase):
 class WhoAmITests(RoleBase):
     def test_capabilities_per_role_without_any_username_or_email(self) -> None:
         expected = {
-            "viewer": (False, False, False), "labeler": (True, False, False), "trainer": (True, True, False),
-            "approver": (True, True, True), "superuser": (True, True, True), "unassigned": (True, False, False),
+            "viewer": (False, False, False),
+            "labeler": (True, False, False),
+            "trainer": (True, True, False),
+            "approver": (True, True, True),
+            "superuser": (True, True, True),
+            "unassigned": (True, False, False),
         }
         for who, (label, train, approve) in expected.items():
             with self.subTest(who=who):
@@ -440,7 +513,10 @@ class WhoAmITests(RoleBase):
                 self.assertEqual(response.status_code, 200)
                 self.assertEqual(response["Cache-Control"], "no-store")
                 body = response.json()
-                self.assertEqual((body["can_view"], body["can_label"], body["can_train"], body["can_approve"]), (True, label, train, approve))
+                self.assertEqual(
+                    (body["can_view"], body["can_label"], body["can_train"], body["can_approve"]),
+                    (True, label, train, approve),
+                )
                 self.assertEqual(body["id"], f"u{self.users[who].pk}")
                 text = response.content.decode()
                 self.assertNotIn("@example.com", text)
@@ -486,6 +562,8 @@ class EveryRouteDeclaresItsRole(RoleBase):
         "api/operations/<uuid:operation_id>": {},
         "api/operations/<uuid:operation_id>/source-views": {"POST": LABEL},
         "api/operations/<uuid:operation_id>/geometry-versions": {"POST": LABEL},
+        "api/operations/<uuid:operation_id>/recipe-versions": {"POST": LABEL},
+        "api/operations/<uuid:operation_id>/policy-versions": {"POST": LABEL},
         "api/operation-drafts/<uuid:draft_id>/recording": {"POST": LABEL, "DELETE": LABEL},
         "api/operation-drafts/<uuid:draft_id>/recording/content": {},
         "api/inspections": {"POST": LABEL},
@@ -507,7 +585,10 @@ class EveryRouteDeclaresItsRole(RoleBase):
         "api/projects/<uuid:project_id>/assets/<uuid:asset_id>": {"DELETE": LABEL},
         "api/projects/<uuid:project_id>/assets/<uuid:asset_id>/content": {},
         "api/projects/<uuid:project_id>/assets/<uuid:asset_id>/annotations": {"POST": LABEL},
-        "api/projects/<uuid:project_id>/assets/<uuid:asset_id>/annotations/<uuid:annotation_id>": {"PATCH": LABEL, "DELETE": LABEL},
+        "api/projects/<uuid:project_id>/assets/<uuid:asset_id>/annotations/<uuid:annotation_id>": {
+            "PATCH": LABEL,
+            "DELETE": LABEL,
+        },
         "api/autolabel": {},
         "api/projects/<uuid:project_id>/autolabel": {"POST": LABEL},
         "api/projects/<uuid:project_id>/autolabel/<uuid:job_id>/cancel": {"POST": LABEL},
@@ -538,15 +619,24 @@ class EveryRouteDeclaresItsRole(RoleBase):
         "api/projects/<uuid:project_id>/inference/apps/<uuid:app_id>/observations": {},
         "api/projects/<uuid:project_id>/inference/apps/<uuid:app_id>/observations/<uuid:observation_id>": {},
         "api/projects/<uuid:project_id>/inference/apps/<uuid:app_id>/observations/<uuid:observation_id>/image": {},
-        "api/projects/<uuid:project_id>/inference/apps/<uuid:app_id>/observations/<uuid:observation_id>/feedback": {"POST": LABEL},
-        "api/projects/<uuid:project_id>/inference/apps/<uuid:app_id>/observations/<uuid:observation_id>/decision": {"POST": LABEL},
+        "api/projects/<uuid:project_id>/inference/apps/<uuid:app_id>/observations/<uuid:observation_id>/feedback": {
+            "POST": LABEL
+        },
+        "api/projects/<uuid:project_id>/inference/apps/<uuid:app_id>/observations/<uuid:observation_id>/decision": {
+            "POST": LABEL
+        },
         "api/projects/<uuid:project_id>/inference/apps/<uuid:app_id>/feedback/export": {},
         "api/projects/<uuid:project_id>/feedback/corrections": {},
         "api/projects/<uuid:project_id>/feedback/corrections/import": {"POST": LABEL},
         "projects/<uuid:project_id>/check-screen/setup": {},
         "check/<slug:slug>": {},
     }
-    UNGUARDED = {"healthz", "login/", "logout/", "setup/"}  # about signing in, out, and first-run setup; no role applies
+    UNGUARDED = {
+        "healthz",
+        "login/",
+        "logout/",
+        "setup/",
+    }  # about signing in, out, and first-run setup; no role applies
 
     def callbacks(self):
         from django.urls import get_resolver
@@ -565,16 +655,24 @@ class EveryRouteDeclaresItsRole(RoleBase):
 
     def test_every_route_is_in_the_table_and_declares_what_the_table_says(self) -> None:
         callbacks = self.callbacks()
-        undeclared = [route for route, view in callbacks.items() if route not in self.UNGUARDED and not hasattr(view, "athena_access")]
+        undeclared = [
+            route
+            for route, view in callbacks.items()
+            if route not in self.UNGUARDED and not hasattr(view, "athena_access")
+        ]
         self.assertEqual(undeclared, [], f"These routes have no @access(...) declaration: {undeclared}")
-        self.assertEqual(sorted(set(callbacks) - self.UNGUARDED), sorted(self.DECLARED),
-                         "A route was added or removed: declare it in DECLARED on purpose.")
+        self.assertEqual(
+            sorted(set(callbacks) - self.UNGUARDED),
+            sorted(self.DECLARED),
+            "A route was added or removed: declare it in DECLARED on purpose.",
+        )
         for route, expected in self.DECLARED.items():
             declared = {m: a for m, a in callbacks[route].athena_access.items() if not (m == "GET" and a == VIEW)}
             self.assertEqual(declared, expected, route)
 
     def test_viewer_cannot_modify_or_test_an_ai_connection(self) -> None:
         from unittest.mock import patch
+
         from .models import AIConnection
 
         viewer = self.as_user("viewer")
@@ -583,8 +681,11 @@ class EveryRouteDeclaresItsRole(RoleBase):
         payload = {"use_own": False, "label": "Changed"}
         self.assertEqual(viewer.get("/api/vision/connection").status_code, 200)
         with patch("projects.vision_views.client.test_connection") as test_connection:
-            for method, url in (("put", "/api/vision/connection"), ("delete", "/api/vision/connection"),
-                                ("post", "/api/vision/connection/test")):
+            for method, url in (
+                ("put", "/api/vision/connection"),
+                ("delete", "/api/vision/connection"),
+                ("post", "/api/vision/connection/test"),
+            ):
                 self.assertEqual(self.send(viewer, method, url, payload).status_code, 403)
             test_connection.assert_not_called()
         self.assertFalse(AIConnection.objects.filter(user=self.users["viewer"]).exists())
@@ -613,14 +714,18 @@ class EveryRouteDeclaresItsRole(RoleBase):
             declared = callbacks[route].athena_access
             for method in METHODS:
                 with self.subTest(route=route, method=method):
-                    kwargs = {"data": "{}", "content_type": "application/json"} if method in ("post", "put", "patch") else {}
+                    kwargs = (
+                        {"data": "{}", "content_type": "application/json"} if method in ("post", "put", "patch") else {}
+                    )
                     status = getattr(viewer, method)(path_, **kwargs).status_code
                     probed += 1
                     if method == "get":
                         self.assertEqual(status == 403, declared["GET"] != VIEW, f"GET {path_} -> {status}")
                         continue
                     self.assertIn(status, (403, 405), f"{method.upper()} {path_} answered {status} to a Viewer")
-                    self.assertEqual(status == 403, method.upper() in declared, f"{method.upper()} {path_}: {status} vs {declared}")
+                    self.assertEqual(
+                        status == 403, method.upper() in declared, f"{method.upper()} {path_}: {status} vs {declared}"
+                    )
                     refused += status == 403
         self.assertGreater(probed, 200)
         self.assertGreaterEqual(refused, 20)
@@ -660,7 +765,8 @@ class PerViewMessageTests(RoleBase):
                 self.assertEqual(response.json()["error"], permissions.denial_message(role, TRAIN))
             self.assertEqual(self.as_user("trainer").get("/api/messaged").status_code, 200)
             self.assertEqual(
-                self.as_user("superuser").put("/api/messaged", data="{}", content_type="application/json").status_code, 200
+                self.as_user("superuser").put("/api/messaged", data="{}", content_type="application/json").status_code,
+                200,
             )
 
     def test_signed_out_callers_still_get_the_401_sentence(self) -> None:
@@ -740,14 +846,22 @@ class ConsoleMarkerTests(RoleBase):
 
     def test_dashboard_markers_follow_the_role_of_the_signed_in_user(self) -> None:
         expect = {
-            "viewer": ("viewer", "0", "0", "0"), "labeler": ("labeler", "1", "0", "0"),
-            "trainer": ("trainer", "1", "1", "0"), "approver": ("approver", "1", "1", "1"),
-            "superuser": ("approver", "1", "1", "1"), "unassigned": ("labeler", "1", "0", "0"),
+            "viewer": ("viewer", "0", "0", "0"),
+            "labeler": ("labeler", "1", "0", "0"),
+            "trainer": ("trainer", "1", "1", "0"),
+            "approver": ("approver", "1", "1", "1"),
+            "superuser": ("approver", "1", "1", "1"),
+            "unassigned": ("labeler", "1", "0", "0"),
         }
         for who, (role, label, train, approve) in expect.items():
             with self.subTest(who=who):
                 tag = self.body_tag(who)
-                for attribute, value in (("data-role", role), ("data-can-label", label), ("data-can-train", train), ("data-can-approve", approve)):
+                for attribute, value in (
+                    ("data-role", role),
+                    ("data-can-label", label),
+                    ("data-can-train", train),
+                    ("data-can-approve", approve),
+                ):
                     self.assertIn(f'{attribute}="{value}"', tag)
 
     def test_the_role_shows_in_words_and_viewers_get_a_reason_up_front(self) -> None:
@@ -785,9 +899,13 @@ class ConsoleMarkerTests(RoleBase):
     def test_the_console_names_the_buttons_it_gates(self) -> None:
         html = self.as_user("viewer").get("/detectors").content.decode()
         for marker in (
-            'id="open-project-dialog" type="button" data-needs="label"', 'id="image-upload-form" data-needs="label"',
-            'id="dataset-form" data-needs="label"', 'id="tr-form" data-needs="train"', 'id="tr-cancel" type="button" data-needs="train"',
-            'id="delete-selected-project" type="button" data-needs="train"', 'id="keyboard-box-form" data-needs="label"',
+            'id="open-project-dialog" type="button" data-needs="label"',
+            'id="image-upload-form" data-needs="label"',
+            'id="dataset-form" data-needs="label"',
+            'id="tr-form" data-needs="train"',
+            'id="tr-cancel" type="button" data-needs="train"',
+            'id="delete-selected-project" type="button" data-needs="train"',
+            'id="keyboard-box-form" data-needs="label"',
             'id="autolabel-form" data-needs="label"',
         ):
             self.assertIn(marker, html)
@@ -863,7 +981,12 @@ class SettingsParsingTests(SimpleTestCase):
 
         root = Path(__file__).resolve().parent.parent
         code = "import django; django.setup()"
-        env = {"PATH": "/usr/bin", "DJANGO_DEBUG": "1", "ATHENA_UNASSIGNED_ROLE": "admin", "DJANGO_SETTINGS_MODULE": "athena_web.settings"}
+        env = {
+            "PATH": "/usr/bin",
+            "DJANGO_DEBUG": "1",
+            "ATHENA_UNASSIGNED_ROLE": "admin",
+            "DJANGO_SETTINGS_MODULE": "athena_web.settings",
+        }
         result = subprocess.run([sys.executable, "-c", code], cwd=root, env=env, capture_output=True, text=True)
         self.assertNotEqual(result.returncode, 0)
         self.assertIn("ATHENA_UNASSIGNED_ROLE must be 'labeler' or 'viewer'", result.stderr)

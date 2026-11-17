@@ -34,21 +34,55 @@ urlpatterns = [
     path("api/vision/status", vision_views.vision_status, name="vision-status"),
     path("api/operation-drafts", operation_views.operation_drafts, name="operation-drafts"),
     path("api/operation-drafts/<uuid:draft_id>", operation_views.operation_draft, name="operation-draft"),
-    path("api/operation-drafts/<uuid:draft_id>/versions", operation_views.operation_draft_versions, name="operation-draft-versions"),
+    path(
+        "api/operation-drafts/<uuid:draft_id>/versions",
+        operation_views.operation_draft_versions,
+        name="operation-draft-versions",
+    ),
     path("api/operation-sites", operation_views.operation_sites, name="operation-sites"),
     path("api/operation-sources", operation_views.operation_sources, name="operation-sources"),
     path("api/operations", operation_views.operations, name="operations"),
     path("api/operations/<uuid:operation_id>", operation_views.operation_detail, name="operation-detail"),
-    path("api/operations/<uuid:operation_id>/source-views", operation_views.operation_source_views, name="operation-source-views"),
-    path("api/operations/<uuid:operation_id>/geometry-versions", operation_views.operation_geometry_versions, name="operation-geometry-versions"),
-    path("api/operation-drafts/<uuid:draft_id>/recording", recording_views.operation_recording, name="operation-recording"),
-    path("api/operation-drafts/<uuid:draft_id>/recording/content", recording_views.operation_recording_content, name="operation-recording-content"),
+    path(
+        "api/operations/<uuid:operation_id>/source-views",
+        operation_views.operation_source_views,
+        name="operation-source-views",
+    ),
+    path(
+        "api/operations/<uuid:operation_id>/geometry-versions",
+        operation_views.operation_geometry_versions,
+        name="operation-geometry-versions",
+    ),
+    path(
+        "api/operations/<uuid:operation_id>/recipe-versions",
+        operation_views.operation_recipe_versions,
+        name="operation-recipe-versions",
+    ),
+    path(
+        "api/operations/<uuid:operation_id>/policy-versions",
+        operation_views.operation_policy_versions,
+        name="operation-policy-versions",
+    ),
+    path(
+        "api/operation-drafts/<uuid:draft_id>/recording",
+        recording_views.operation_recording,
+        name="operation-recording",
+    ),
+    path(
+        "api/operation-drafts/<uuid:draft_id>/recording/content",
+        recording_views.operation_recording_content,
+        name="operation-recording-content",
+    ),
     path("api/inspections", vision_views.inspection_collection, name="inspection-list"),
     path("api/inspections/summary", vision_views.inspection_summary, name="inspection-summary"),
     path("api/inspections/<uuid:inspection_id>", vision_views.inspection_detail, name="inspection-detail"),
     path("api/inspections/<uuid:inspection_id>/rerun", vision_views.inspection_rerun, name="inspection-rerun"),
     path("api/inspections/<uuid:inspection_id>/feedback", vision_views.inspection_feedback, name="inspection-feedback"),
-    path("api/inspections/<uuid:inspection_id>/images/<int:position>", vision_views.inspection_image, name="inspection-image"),
+    path(
+        "api/inspections/<uuid:inspection_id>/images/<int:position>",
+        vision_views.inspection_image,
+        name="inspection-image",
+    ),
     path("api/me", views.api_me, name="me"),
     # Who holds which role (administrators only): the screen, the people, and the record of changes
     path("access", access_views.access_page, name="access-page"),
@@ -126,10 +160,15 @@ urlpatterns = [
         dataset_views.project_dataset_exports,
         name="project-dataset-exports",
     ),
-
     # Training runs, model versions and staged approval
-    path("api/projects/<uuid:project_id>/training/backends", training_views.training_backends, name="training-backends"),
-    path("api/projects/<uuid:project_id>/training/readiness", training_views.training_readiness, name="training-readiness"),
+    path(
+        "api/projects/<uuid:project_id>/training/backends", training_views.training_backends, name="training-backends"
+    ),
+    path(
+        "api/projects/<uuid:project_id>/training/readiness",
+        training_views.training_readiness,
+        name="training-readiness",
+    ),
     path("api/projects/<uuid:project_id>/training/runs", training_views.training_runs, name="training-runs"),
     path(
         "api/projects/<uuid:project_id>/training/runs/<uuid:run_id>",
@@ -150,7 +189,9 @@ urlpatterns = [
     ),
     path("api/projects/<uuid:project_id>/models/<uuid:model_id>/stage", training_views.model_stage, name="model-stage"),
     path(
-        "api/projects/<uuid:project_id>/models/<uuid:model_id>/approve", training_views.model_approve, name="model-approve"
+        "api/projects/<uuid:project_id>/models/<uuid:model_id>/approve",
+        training_views.model_approve,
+        name="model-approve",
     ),
     path(
         "api/projects/<uuid:project_id>/models/<uuid:model_id>/rollback",
@@ -212,12 +253,24 @@ urlpatterns = [
     ),
     path("check/<slug:slug>", inference_pages.checkscreen_operator, name="checkscreen-operator"),
     # Operator feedback pulled into the project as reviewable pictures (Needs-review boxes only)
-    path("api/projects/<uuid:project_id>/feedback/corrections", feedback_views.feedback_corrections, name="feedback-corrections"),
+    path(
+        "api/projects/<uuid:project_id>/feedback/corrections",
+        feedback_views.feedback_corrections,
+        name="feedback-corrections",
+    ),
     path(
         "api/projects/<uuid:project_id>/feedback/corrections/import",
         feedback_views.feedback_corrections_import,
         name="feedback-corrections-import",
     ),
-    path("api/projects/<uuid:project_id>/datasets/health", dataset_views.project_dataset_health, name="project-dataset-health"),
-    path("api/projects/<uuid:project_id>/models/<uuid:model_id>/results/plain", results_views.model_results_plain, name="model-results-plain"),
+    path(
+        "api/projects/<uuid:project_id>/datasets/health",
+        dataset_views.project_dataset_health,
+        name="project-dataset-health",
+    ),
+    path(
+        "api/projects/<uuid:project_id>/models/<uuid:model_id>/results/plain",
+        results_views.model_results_plain,
+        name="model-results-plain",
+    ),
 ]

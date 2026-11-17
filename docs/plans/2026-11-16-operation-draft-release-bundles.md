@@ -25,6 +25,8 @@ The snapshot has explicit slots for the components required by a future release:
 
 Initial source-view and geometry version APIs now create immutable, numbered records with canonical SHA-256 digests. A geometry version points to an exact source-view version; both are returned only through an owner-scoped operation route. The supported source-view manifest currently captures image dimensions, quarter-turn rotation and horizontal/vertical flips; the supported geometry is a normalized counting line. These records are not yet automatically pinned into draft snapshots or bound to the uploaded recording's transform.
 
+**17 November 2026 update:** recipe and policy version records now exist too. `RecipeVersion` stores an immutable, numbered `people_counting` rule configuration (crossing dead band, side confirmations, maximum track gap, reference-comparison tolerance) keyed by recipe and hashed canonically; `PolicyVersion` stores an immutable evidence-retention period and maximum coverage gap. Both are created and listed through owner-scoped operation routes (`POST/GET /api/operations/<id>/{recipe-versions,policy-versions}`), follow the same frozen-model/immutability rules as source-view and geometry versions, and their parameters mirror the `CrossingCounter` and comparison semantics already implemented in `projects/operations`. They are executable parameter records only: no runtime consumes them yet, and they are not automatically pinned into draft snapshots.
+
 Accordingly each draft snapshot has `release_ready: false`. It is a historical draft version, not a release candidate, published result, or inference configuration. No endpoint publishes or activates a release.
 
 ## Required immutable bundle shape

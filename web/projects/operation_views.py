@@ -2,6 +2,7 @@
 
 These drafts do not run, publish, or share an operation.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -18,8 +19,15 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from .models import (
-    GeometryVersion, Operation, OperationDraft, OperationDraftVersion, OperationSource,
-    Site, SourceViewVersion,
+    GeometryVersion,
+    Operation,
+    OperationDraft,
+    OperationDraftVersion,
+    OperationSource,
+    PolicyVersion,
+    RecipeVersion,
+    Site,
+    SourceViewVersion,
 )
 from .permissions import access
 from .vision_views import _error, _json_body, _no_store
@@ -27,16 +35,32 @@ from .vision_views import _error, _json_body, _no_store
 
 def _data(row):
     recording = getattr(row, "recording", None)
-    video = None if recording is None else {
-        "id": str(recording.id), "filename": recording.filename, "sha256": recording.sha256,
-        "size_bytes": recording.size_bytes, "width": recording.width, "height": recording.height,
-        "duration_seconds": recording.duration_seconds,
-        "content_url": f"/api/operation-drafts/{row.id}/recording/content",
+    video = (
+        None
+        if recording is None
+        else {
+            "id": str(recording.id),
+            "filename": recording.filename,
+            "sha256": recording.sha256,
+            "size_bytes": recording.size_bytes,
+            "width": recording.width,
+            "height": recording.height,
+            "duration_seconds": recording.duration_seconds,
+            "content_url": f"/api/operation-drafts/{row.id}/recording/content",
+        }
+    )
+    return {
+        "id": str(row.id),
+        "operation_id": None if row.operation_id is None else str(row.operation_id),
+        "name": row.name,
+        "line": row.line,
+        "reference_events": row.reference_events,
+        "revision": row.revision,
+        "outcome": "people_counting",
+        "status": "draft",
+        "updated_at": row.updated_at.isoformat(),
+        "recording": video,
     }
-    return {"id": str(row.id), "operation_id": None if row.operation_id is None else str(row.operation_id),
-            "name": row.name, "line": row.line, "reference_events": row.reference_events,
-            "revision": row.revision, "outcome": "people_counting", "status": "draft",
-            "updated_at": row.updated_at.isoformat(), "recording": video}
 
 
 def _version_snapshot(row):
@@ -53,17 +77,23 @@ def _version_snapshot(row):
             "source_kind": operation.source.kind,
         }
     recording = getattr(row, "recording", None)
-    recording_data = None if recording is None else {
-        "sha256": recording.sha256,
-        "size_bytes": recording.size_bytes,
-        "width": recording.width,
-        "height": recording.height,
-        "duration_seconds": recording.duration_seconds,
-    }
+    recording_data = (
+        None
+        if recording is None
+        else {
+            "sha256": recording.sha256,
+            "size_bytes": recording.size_bytes,
+            "width": recording.width,
+            "height": recording.height,
+            "duration_seconds": recording.duration_seconds,
+        }
+    )
     return {
         "schema_version": 1,
         "draft": {
-            "id": str(row.id), "revision": row.revision, "name": row.name,
+            "id": str(row.id),
+            "revision": row.revision,
+            "name": row.name,
             "operation_id": None if row.operation_id is None else str(row.operation_id),
         },
         "source": source,
@@ -71,7 +101,14 @@ def _version_snapshot(row):
         "recipe": {"key": "people_counting", "state": "specification_only", "version": None},
         "recording": recording_data,
         "reference_events": row.reference_events,
-        "component_pins": {"source_view": None, "geometry": None, "recipe": None, "model": None, "screen": None, "policy": None},
+        "component_pins": {
+            "source_view": None,
+            "geometry": None,
+            "recipe": None,
+            "model": None,
+            "screen": None,
+            "policy": None,
+        },
         "release_ready": False,
     }
 
@@ -90,8 +127,11 @@ def _source_view_data(version):
     if _component_sha256(version.configuration) != version.configuration_sha256:
         raise ValueError("A source-view version failed its integrity check.")
     return {
-        "id": str(version.id), "source_id": str(version.source_id), "version": version.version,
-        "configuration": version.configuration, "sha256": version.configuration_sha256,
+        "id": str(version.id),
+        "source_id": str(version.source_id),
+        "version": version.version,
+        "configuration": version.configuration,
+        "sha256": version.configuration_sha256,
         "created_at": version.created_at.isoformat(),
     }
 
@@ -101,9 +141,41 @@ def _geometry_data(version):
     if _component_sha256(payload) != version.geometry_sha256:
         raise ValueError("A geometry version failed its integrity check.")
     return {
-        "id": str(version.id), "operation_id": str(version.operation_id), "version": version.version,
+        "id": str(version.id),
+        "operation_id": str(version.operation_id),
+        "version": version.version,
         "source_view_version_id": str(version.source_view_version_id),
-        "geometry": version.geometry, "sha256": version.geometry_sha256,
+        "geometry": version.geometry,
+        "sha256": version.geometry_sha256,
+        "created_at": version.created_at.isoformat(),
+    }
+
+
+def _recipe_data(version):
+    payload = {"recipe_key": version.recipe_key, "configuration": version.configuration}
+    if _component_sha256(payload) != version.configuration_sha256:
+        raise ValueError("A recipe version failed its integrity check.")
+    return {
+        "id": str(version.id),
+        "operation_id": str(version.operation_id),
+        "recipe_key": version.recipe_key,
+        "version": version.version,
+        "configuration": version.configuration,
+        "sha256": version.configuration_sha256,
+        "created_at": version.created_at.isoformat(),
+    }
+
+
+def _policy_data(version):
+    payload = {"configuration": version.configuration}
+    if _component_sha256(payload) != version.configuration_sha256:
+        raise ValueError("A policy version failed its integrity check.")
+    return {
+        "id": str(version.id),
+        "operation_id": str(version.operation_id),
+        "version": version.version,
+        "configuration": version.configuration,
+        "sha256": version.configuration_sha256,
         "created_at": version.created_at.isoformat(),
     }
 
@@ -123,6 +195,35 @@ def _source_view_configuration(value):
     return value
 
 
+def _recipe_configuration(value):
+    fields = {"dead_band", "confirmations", "max_gap_seconds", "comparison_tolerance_seconds"}
+    if not isinstance(value, dict) or value.keys() != fields:
+        raise ValueError("Provide the recipe dead band, confirmations, maximum gap, and comparison tolerance.")
+    for key in ("dead_band",):
+        item = value[key]
+        if isinstance(item, bool) or not isinstance(item, (int, float)) or not math.isfinite(item) or not 0 <= item < 1:
+            raise ValueError("The recipe dead band must be a number between 0 and 1.")
+    if type(value["confirmations"]) is not int or not 1 <= value["confirmations"] <= 100:
+        raise ValueError("Recipe confirmations must be an integer from 1 to 100.")
+    for key in ("max_gap_seconds", "comparison_tolerance_seconds"):
+        item = value[key]
+        if isinstance(item, bool) or not isinstance(item, (int, float)) or not math.isfinite(item) or item <= 0:
+            raise ValueError(f"The recipe {key.replace('_', ' ')} must be a positive number.")
+    return value
+
+
+def _policy_configuration(value):
+    fields = {"evidence_retention_days", "max_coverage_gap_seconds"}
+    if not isinstance(value, dict) or value.keys() != fields:
+        raise ValueError("Provide the evidence retention period and the maximum coverage gap.")
+    if type(value["evidence_retention_days"]) is not int or not 1 <= value["evidence_retention_days"] <= 3650:
+        raise ValueError("Evidence retention must be an integer from 1 to 3,650 days.")
+    gap = value["max_coverage_gap_seconds"]
+    if isinstance(gap, bool) or not isinstance(gap, (int, float)) or not math.isfinite(gap) or gap <= 0:
+        raise ValueError("The maximum coverage gap must be a positive number of seconds.")
+    return value
+
+
 def _operation_line(value):
     fields = {"start", "end", "positive_label", "negative_label"}
     if not isinstance(value, dict) or value.keys() != fields:
@@ -130,9 +231,16 @@ def _operation_line(value):
     points = []
     for key in ("start", "end"):
         point = value[key]
-        if not isinstance(point, list) or len(point) != 2 or any(
-            isinstance(item, bool) or not isinstance(item, (int, float)) or not math.isfinite(item) or not 0 <= item <= 1
-            for item in point
+        if (
+            not isinstance(point, list)
+            or len(point) != 2
+            or any(
+                isinstance(item, bool)
+                or not isinstance(item, (int, float))
+                or not math.isfinite(item)
+                or not 0 <= item <= 1
+                for item in point
+            )
         ):
             raise ValueError("Geometry coordinates must be finite numbers between 0 and 1.")
         points.append(point)
@@ -142,14 +250,21 @@ def _operation_line(value):
         label = value[key]
         if not isinstance(label, str) or not label.strip() or len(label.strip()) > 40:
             raise ValueError("Direction labels must contain 1 to 40 characters.")
-    return {**value, "positive_label": value["positive_label"].strip(), "negative_label": value["negative_label"].strip()}
+    return {
+        **value,
+        "positive_label": value["positive_label"].strip(),
+        "negative_label": value["negative_label"].strip(),
+    }
 
 
 def _record_draft_version(row):
     snapshot = _version_snapshot(row)
     return OperationDraftVersion.objects.create(
-        draft=row, revision=row.revision, created_by_id=row.created_by_id,
-        snapshot=snapshot, snapshot_sha256=_snapshot_sha256(snapshot),
+        draft=row,
+        revision=row.revision,
+        created_by_id=row.created_by_id,
+        snapshot=snapshot,
+        snapshot_sha256=_snapshot_sha256(snapshot),
     )
 
 
@@ -157,8 +272,10 @@ def _version_data(version):
     if _snapshot_sha256(version.snapshot) != version.snapshot_sha256:
         raise ValueError("A saved draft version failed its integrity check.")
     return {
-        "id": str(version.id), "revision": version.revision,
-        "sha256": version.snapshot_sha256, "created_at": version.created_at.isoformat(),
+        "id": str(version.id),
+        "revision": version.revision,
+        "sha256": version.snapshot_sha256,
+        "created_at": version.created_at.isoformat(),
         "snapshot": version.snapshot,
     }
 
@@ -177,9 +294,13 @@ def _validate(payload, *, update=False, recording_duration=None, existing_events
         points = []
         for key in ("start", "end"):
             point = line[key]
-            if not isinstance(point, list) or len(point) != 2 or any(
-                isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 1 or not math.isfinite(v)
-                for v in point
+            if (
+                not isinstance(point, list)
+                or len(point) != 2
+                or any(
+                    isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 1 or not math.isfinite(v)
+                    for v in point
+                )
             ):
                 raise ValueError("Line coordinates must be numbers between 0 and 1.")
             points.append(point)
@@ -189,11 +310,17 @@ def _validate(payload, *, update=False, recording_duration=None, existing_events
             value = line[key]
             if not isinstance(value, str) or not value.strip() or len(value.strip()) > 40:
                 raise ValueError("Enter both direction labels, up to 40 characters each.")
-        line = {**line, "positive_label": line["positive_label"].strip(), "negative_label": line["negative_label"].strip()}
+        line = {
+            **line,
+            "positive_label": line["positive_label"].strip(),
+            "negative_label": line["negative_label"].strip(),
+        }
     line_changed = update and line != existing_line
     if line_changed and existing_line is not None and line is None and payload.get("reference_events"):
         raise ValueError("Save the changed line before clearing its reference crossings.")
-    events = [] if line_changed and existing_line is not None else payload.get("reference_events", existing_events or [])
+    events = (
+        [] if line_changed and existing_line is not None else payload.get("reference_events", existing_events or [])
+    )
     if not isinstance(events, list) or len(events) > 1000:
         raise ValueError("Provide up to 1,000 reference crossings.")
     if events and (line is None or recording_duration is None):
@@ -205,9 +332,12 @@ def _validate(payload, *, update=False, recording_duration=None, existing_events
         event_time = event["time"]
         finite_time = not isinstance(event_time, float) or math.isfinite(event_time)
         if (
-            isinstance(event_time, bool) or not isinstance(event_time, (int, float))
-            or not finite_time or event_time < 0
-            or recording_duration is None or event_time > recording_duration
+            isinstance(event_time, bool)
+            or not isinstance(event_time, (int, float))
+            or not finite_time
+            or event_time < 0
+            or recording_duration is None
+            or event_time > recording_duration
         ):
             raise ValueError("Reference crossing times must be within the recording.")
         direction = event["direction"]
@@ -247,8 +377,11 @@ def _source_data(source):
 
 def _operation_data(operation):
     return {
-        "id": str(operation.id), "name": operation.name, "site_id": str(operation.site_id),
-        "source_id": str(operation.source_id), "visibility": "private",
+        "id": str(operation.id),
+        "name": operation.name,
+        "site_id": str(operation.site_id),
+        "source_id": str(operation.source_id),
+        "visibility": "private",
         "created_at": operation.created_at.isoformat(),
     }
 
@@ -341,9 +474,7 @@ def operation_detail(request: HttpRequest, operation_id):
 @access(POST="label")
 @require_http_methods(["GET", "POST"])
 def operation_source_views(request: HttpRequest, operation_id):
-    operation = get_object_or_404(
-        Operation.objects.select_related("source"), id=operation_id, created_by=request.user
-    )
+    operation = get_object_or_404(Operation.objects.select_related("source"), id=operation_id, created_by=request.user)
     versions = SourceViewVersion.objects.filter(source=operation.source)
     if request.method == "GET":
         try:
@@ -361,8 +492,11 @@ def operation_source_views(request: HttpRequest, operation_id):
     with transaction.atomic():
         version = (versions.order_by("-version").values_list("version", flat=True).first() or 0) + 1
         row = SourceViewVersion.objects.create(
-            source=operation.source, version=version, created_by=request.user,
-            configuration=configuration, configuration_sha256=_component_sha256(configuration),
+            source=operation.source,
+            version=version,
+            created_by=request.user,
+            configuration=configuration,
+            configuration_sha256=_component_sha256(configuration),
         )
     return _no_store(JsonResponse({"source_view": _source_view_data(row)}, status=201))
 
@@ -370,9 +504,7 @@ def operation_source_views(request: HttpRequest, operation_id):
 @access(POST="label")
 @require_http_methods(["GET", "POST"])
 def operation_geometry_versions(request: HttpRequest, operation_id):
-    operation = get_object_or_404(
-        Operation.objects.select_related("source"), id=operation_id, created_by=request.user
-    )
+    operation = get_object_or_404(Operation.objects.select_related("source"), id=operation_id, created_by=request.user)
     versions = GeometryVersion.objects.filter(operation=operation).select_related("source_view_version")
     if request.method == "GET":
         try:
@@ -398,10 +530,79 @@ def operation_geometry_versions(request: HttpRequest, operation_id):
     with transaction.atomic():
         version = (versions.order_by("-version").values_list("version", flat=True).first() or 0) + 1
         row = GeometryVersion.objects.create(
-            operation=operation, source_view_version=source_view, version=version, created_by=request.user,
-            geometry=geometry, geometry_sha256=_component_sha256(hash_payload),
+            operation=operation,
+            source_view_version=source_view,
+            version=version,
+            created_by=request.user,
+            geometry=geometry,
+            geometry_sha256=_component_sha256(hash_payload),
         )
     return _no_store(JsonResponse({"geometry_version": _geometry_data(row)}, status=201))
+
+
+@access(POST="label")
+@require_http_methods(["GET", "POST"])
+def operation_recipe_versions(request: HttpRequest, operation_id):
+    operation = get_object_or_404(Operation, id=operation_id, created_by=request.user)
+    versions = RecipeVersion.objects.filter(operation=operation)
+    if request.method == "GET":
+        try:
+            data = [_recipe_data(row) for row in versions]
+        except (TypeError, ValueError):
+            return _error("A recipe version failed its integrity check.", 500)
+        return _no_store(JsonResponse({"recipe_versions": data}))
+    try:
+        payload = _json_body(request)
+        if payload.keys() != {"recipe_key", "configuration"}:
+            raise ValueError("Provide only a recipe key and configuration.")
+        if payload["recipe_key"] not in RecipeVersion.SUPPORTED_KEYS:
+            raise ValueError("Choose a supported recipe key.")
+        configuration = _recipe_configuration(payload["configuration"])
+    except ValueError as error:
+        return _error(str(error))
+    with transaction.atomic():
+        version = (versions.order_by("-version").values_list("version", flat=True).first() or 0) + 1
+        row = RecipeVersion.objects.create(
+            operation=operation,
+            recipe_key=payload["recipe_key"],
+            version=version,
+            created_by=request.user,
+            configuration=configuration,
+            configuration_sha256=_component_sha256(
+                {"recipe_key": payload["recipe_key"], "configuration": configuration}
+            ),
+        )
+    return _no_store(JsonResponse({"recipe_version": _recipe_data(row)}, status=201))
+
+
+@access(POST="label")
+@require_http_methods(["GET", "POST"])
+def operation_policy_versions(request: HttpRequest, operation_id):
+    operation = get_object_or_404(Operation, id=operation_id, created_by=request.user)
+    versions = PolicyVersion.objects.filter(operation=operation)
+    if request.method == "GET":
+        try:
+            data = [_policy_data(row) for row in versions]
+        except (TypeError, ValueError):
+            return _error("A policy version failed its integrity check.", 500)
+        return _no_store(JsonResponse({"policy_versions": data}))
+    try:
+        payload = _json_body(request)
+        if payload.keys() != {"configuration"}:
+            raise ValueError("Provide only the policy configuration.")
+        configuration = _policy_configuration(payload["configuration"])
+    except ValueError as error:
+        return _error(str(error))
+    with transaction.atomic():
+        version = (versions.order_by("-version").values_list("version", flat=True).first() or 0) + 1
+        row = PolicyVersion.objects.create(
+            operation=operation,
+            version=version,
+            created_by=request.user,
+            configuration=configuration,
+            configuration_sha256=_component_sha256({"configuration": configuration}),
+        )
+    return _no_store(JsonResponse({"policy_version": _policy_data(row)}, status=201))
 
 
 @access(POST="label")
@@ -443,16 +644,21 @@ def operation_draft(request: HttpRequest, draft_id):
     try:
         recording = getattr(row, "recording", None)
         name, line, reference_events, revision = _validate(
-            _json_body(request), update=True,
+            _json_body(request),
+            update=True,
             recording_duration=None if recording is None else recording.duration_seconds,
-            existing_events=row.reference_events, existing_line=row.line,
+            existing_events=row.reference_events,
+            existing_line=row.line,
         )
     except ValueError as error:
         return _error(str(error))
     with transaction.atomic():
         changed = rows.filter(id=draft_id, revision=revision).update(
-            name=name, line=line, reference_events=reference_events,
-            revision=F("revision") + 1, updated_at=timezone.now()
+            name=name,
+            line=line,
+            reference_events=reference_events,
+            revision=F("revision") + 1,
+            updated_at=timezone.now(),
         )
         if not changed:
             return _error("This draft changed elsewhere. Reload it before saving.", 409)
