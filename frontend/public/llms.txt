@@ -1,16 +1,16 @@
 # Athena OS
-> Athena OS is open-source vision AI for operations teams. Show it a photo or a short video, ask a question in plain words, and get counts, marked areas and next steps. Self-hosted. Apache-2.0.
+> Athena OS is an open-source, self-hosted no-code AI training and visual inspection platform across photos, video, audio, handwriting, documents, motion, and spreadsheets. Apache-2.0.
 
 ## Start here
-- [Home](https://dominicmathew240.github.io/Athena-OS/): Public landing page (no backend, no sign-in)
+- [Home](https://dominicmathew240.github.io/Athena-OS/): Public landing page and interactive multimodal studio + docs wiki (no backend)
 - [Portfolio](https://dominic.strateticsxp.com/): Ts. Dominic Mathew, Co-Founder and CTO of Stratetics Experts
 - [Inspec-Ther](https://inspec-ther.com/): AI-driven thermal inspection of solar PV assets
 
-## What it does
-- Ask a camera photo a question in plain words
-- Ready-made checks: parking occupancy, store foot traffic, corrosion, surface defects, safety gear
-- Built-in open Qwen vision model, or any OpenAI-compatible endpoint
-- Optional path to label pictures and train a dedicated detector
+## Capabilities & Roadmap
+- Today: plain-language inspection of photos and 6-frame video clips, plus custom object detector training
+- Multimodal Roadmap (Waves 0-4): Computer Vision, Acoustic AI, Handwriting OCR (TrOCR), Documents & NLP, Spreadsheets & Signals, Human Pose & Gestures, and Wave 4 Cross-modal Fusion
+- Shared Resource Lifecycle: Project -> Task -> Observation -> Annotation -> Dataset Version -> Training Run -> Model Version -> Evaluation -> Deployment -> Feedback
+- Built-in open Qwen vision model or any OpenAI-compatible endpoint, running on local CPU/GPU or optional Athena Nodes
 
 ## Athena Vision
 In-house Segment and Detect models for assisted annotation: label one picture, then review AI drafts on the rest. Bounding boxes, masks, and export to COCO, YOLO or VOC. This is the vision stack behind Inspec-Ther.

@@ -1,14 +1,14 @@
 {
   "siteUrl": "https://dominicmathew240.github.io/Athena-OS",
   "name": "Athena OS",
-  "headline": "Ask your cameras anything.",
-  "definition": "Athena OS is open-source vision AI for operations teams. Show it a photo or a short video, ask a question in plain words, and get counts, marked areas and next steps. Self-hosted. Apache-2.0.",
-  "description": "Athena OS is open-source vision AI for operations teams. Show it a photo, ask in plain words, get counts and next steps. Self-hosted, Apache-2.0.",
+  "headline": "Train AI on all your data.",
+  "definition": "Athena OS is an open-source, self-hosted no-code AI training and visual inspection platform across photos, video, audio, handwriting, documents, motion, and spreadsheets. Apache-2.0.",
+  "description": "Train AI on all your data: photos, audio, handwriting, documents, motion, and spreadsheets. Self-hosted, no-code, Apache-2.0.",
   "features": [
-    "Ask a question in plain words about a photo or short video",
-    "Ready-made checks for parking, foot traffic, corrosion, defects and safety gear",
-    "Open-source Qwen by default, or any OpenAI-compatible AI",
-    "Runs on your own server with no Athena cloud"
+    "No-code multimodal training recipes across Vision, Audio, Handwriting OCR, Documents, Motion, and Spreadsheets",
+    "Ask plain-language questions on photos or 6-frame video clips with counts and marked regions",
+    "Consistent Project to Feedback lifecycle with modality-specific quality gates",
+    "Open-source Qwen by default or any OpenAI-compatible AI, self-hosted under Apache-2.0"
   ],
   "founder": {
     "name": "Ts. Dominic Mathew",
@@ -16,7 +16,7 @@
     "jobTitle": "Co-Founder & CTO",
     "worksFor": "Stratetics Experts",
     "url": "https://dominic.strateticsxp.com/",
-    "summary": "Ts. Dominic Mathew is Co-Founder and CTO of Stratetics Experts. He publishes Athena OS as open-source vision tooling and builds Inspec-Ther for solar inspection."
+    "summary": "Ts. Dominic Mathew is Co-Founder and CTO of Stratetics Experts. He publishes Athena OS as open-source multimodal AI training tooling and builds Inspec-Ther for solar inspection."
   },
   "athenaVision": {
     "name": "Athena Vision",
@@ -31,19 +31,19 @@
   "faq": [
     {
       "q": "What is Athena OS?",
-      "a": "Athena OS is open-source vision AI for operations teams. Show it a photo or a short video and ask a question in plain words. It counts, spots and explains — then tells you what to do next."
+      "a": "Athena OS is an open-source, self-hosted AI training and inspection platform. Today you can inspect photos or 6-frame clips in plain words and train custom detectors, while the multimodal roadmap expands no-code training across sound, handwriting, documents, motion, and spreadsheets."
     },
     {
       "q": "Do I need to write code?",
-      "a": "No. Pick a ready-made check like parking occupancy, or write your question the way you would ask a colleague. No data science."
+      "a": "No. Pick an intended outcome recipe or ready-made inspection check, label samples visually, and review quality in plain words — no ML boilerplate required."
     },
     {
       "q": "Where does it run?",
-      "a": "On your own server. Apache-2.0. Pictures can stay on your network. There is no Athena cloud on this page."
+      "a": "On your own server or local CPU/GPU (with optional Athena Nodes). Apache-2.0. Your media and training data stay on your network."
     },
     {
       "q": "Which AI does it use?",
-      "a": "It ships with the open Qwen vision-language model. You can also plug in any AI that speaks the OpenAI-compatible API, including OpenAI, Gemini, OpenRouter, vLLM, Ollama and LM Studio."
+      "a": "It ships with open Qwen vision-language support and modular training recipes, or connects to any OpenAI-compatible endpoint including OpenAI, Gemini, OpenRouter, vLLM, Ollama, and LM Studio."
     },
     {
       "q": "Who built Athena OS?",
