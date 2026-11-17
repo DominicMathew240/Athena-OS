@@ -41,6 +41,12 @@ The first auto-label job downloads the SAM (`facebook/sam-vit-base`, ~360 MB) an
 separate from Athena's, and **CLIP ships enabled by default with an unresolved licence caveat** (see
 [Licences and model terms](#licences-and-model-terms) before enabling the worker). Once cached, set `ATHENA_AUTOLABEL_ALLOW_DOWNLOAD=0` to forbid further downloads.
 
+## Private test recordings (early development)
+
+People-counting drafts can store one H.264 MP4 (up to 50 MB, five minutes, and 1920×1080); rotated files must first be exported with rotation applied. Upload preflight requires `ffprobe` on the **web** process PATH; the Dockerfile installs FFmpeg, while a non-Docker installation must provide it separately. Missing `ffprobe` returns an actionable error. Preflight inspects container metadata; it does not prove every frame decodes, run a detector, or establish counting accuracy. Recording analysis, camera streaming, and publishing are not available yet.
+
+Videos are retained in the private configured media storage until a user removes the recording or draft. Removal queues storage cleanup transactionally and attempts it after commit; if storage is unavailable or the process stops before cleanup, an administrator must run `python manage.py cleanup_operation_recordings` after storage recovers. There is no automatic retry worker or retention policy yet. Apply a proxy upload limit and host disk/resource controls: the 50 MB application limit is checked after the server receives a multipart upload. The preflight invokes an external parser; use a maintained FFmpeg build and do not treat this as a hardened multi-tenant media sandbox. Test private object-store access and recovery on the actual deployment before using sensitive footage.
+
 ## Without Docker
 
 ```bash

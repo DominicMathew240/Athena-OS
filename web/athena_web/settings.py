@@ -229,6 +229,7 @@ SECURE_CSP = {
     "script-src": [CSP.SELF],
     "style-src": [CSP.SELF],
     "img-src": [CSP.SELF, "data:", "blob:"],
+    "media-src": [CSP.SELF, "blob:"],
     "connect-src": [CSP.SELF],
     "font-src": [CSP.SELF],
     "form-action": [CSP.SELF],

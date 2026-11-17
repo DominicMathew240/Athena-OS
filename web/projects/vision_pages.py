@@ -32,6 +32,13 @@ landing_or_home.athena_access = {"GET": "view"}
 @access()
 @require_http_methods(["GET", "HEAD"])
 @ensure_csrf_cookie
+def operations_page(request: HttpRequest):
+    return render(request, "projects/operations.html", _ctx(request, "operations"))
+
+
+@access()
+@require_http_methods(["GET", "HEAD"])
+@ensure_csrf_cookie
 def inspect_new(request: HttpRequest):
     chosen = request.GET.get("template", "")
     return render(request, "projects/inspect_new.html", _ctx(

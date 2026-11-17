@@ -18,6 +18,12 @@ console-wide role, up or down; on every other project the console-wide role stil
 never lowered. Changing who holds a role is the one action only a superuser may take (``admin``), and every
 change is written to ``RoleChange`` by ``projects.access_admin``.
 
+Site, source, operation, draft, and recording data are separately owner-scoped; a console/project role does
+not grant access to another person's private operation data. Operation routes use the console role because
+they are not project routes. Their current capability map is deliberately limited: reads require ``view``;
+scope creation, draft edits, recording intake, and human reference labels require ``label``. Operation-level
+sharing, operation training, metrics/exports, and publication have no endpoints yet.
+
 Enforcement is one decorator, :func:`access`, put on every view; it reads ``project_id`` from the URL so the project's own role applies. ``ConsoleLoginRequiredMiddleware`` refuses
 (403) any view that was not declared that way, and ``tests_roles`` walks the URL configuration to prove
 every non-GET route names its required role.

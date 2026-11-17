@@ -1,11 +1,26 @@
 from django.urls import path
 
-from . import access_views, autolabel_views, dataset_views, inference_pages, inference_views, training_views, views
-from . import feedback_views, results_views, settings_views, vision_pages, vision_views
+from . import (
+    access_views,
+    autolabel_views,
+    dataset_views,
+    feedback_views,
+    inference_pages,
+    inference_views,
+    operation_views,
+    recording_views,
+    results_views,
+    settings_views,
+    training_views,
+    views,
+    vision_pages,
+    vision_views,
+)
 
 urlpatterns = [
     path("", vision_pages.landing_or_home, name="home"),
     path("detectors", views.dashboard, name="dashboard"),
+    path("operations", vision_pages.operations_page, name="operations-page"),
     path("inspect/new", vision_pages.inspect_new, name="inspect-new"),
     path("inspections", vision_pages.inspections_page, name="inspections-page"),
     path("inspections/<uuid:inspection_id>", vision_pages.inspection_report, name="inspection-report"),
@@ -17,6 +32,17 @@ urlpatterns = [
     path("api/vision/connection", vision_views.vision_connection, name="vision-connection"),
     path("api/vision/connection/test", vision_views.vision_connection_test, name="vision-connection-test"),
     path("api/vision/status", vision_views.vision_status, name="vision-status"),
+    path("api/operation-drafts", operation_views.operation_drafts, name="operation-drafts"),
+    path("api/operation-drafts/<uuid:draft_id>", operation_views.operation_draft, name="operation-draft"),
+    path("api/operation-drafts/<uuid:draft_id>/versions", operation_views.operation_draft_versions, name="operation-draft-versions"),
+    path("api/operation-sites", operation_views.operation_sites, name="operation-sites"),
+    path("api/operation-sources", operation_views.operation_sources, name="operation-sources"),
+    path("api/operations", operation_views.operations, name="operations"),
+    path("api/operations/<uuid:operation_id>", operation_views.operation_detail, name="operation-detail"),
+    path("api/operations/<uuid:operation_id>/source-views", operation_views.operation_source_views, name="operation-source-views"),
+    path("api/operations/<uuid:operation_id>/geometry-versions", operation_views.operation_geometry_versions, name="operation-geometry-versions"),
+    path("api/operation-drafts/<uuid:draft_id>/recording", recording_views.operation_recording, name="operation-recording"),
+    path("api/operation-drafts/<uuid:draft_id>/recording/content", recording_views.operation_recording_content, name="operation-recording-content"),
     path("api/inspections", vision_views.inspection_collection, name="inspection-list"),
     path("api/inspections/summary", vision_views.inspection_summary, name="inspection-summary"),
     path("api/inspections/<uuid:inspection_id>", vision_views.inspection_detail, name="inspection-detail"),

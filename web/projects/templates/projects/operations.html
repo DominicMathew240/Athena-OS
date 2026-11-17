@@ -1,0 +1,74 @@
+{% extends "projects/app_base.html" %}{% load static %}
+{% block title %}People counting drafts{% endblock %}
+{% block extra_css %}<link rel="stylesheet" href="{% static 'projects/operation-drafts.css' %}">{% endblock %}
+{% block content %}
+<header class="a-pagehead">
+  <div><p class="a-eyebrow">Early setup</p><h1 class="a-h1">People counting drafts</h1>
+    <p>Save a private draft now and return to it later. Recorded-video replay is not available yet; these drafts cannot count people or connect to a camera.</p>
+  </div>
+</header>
+<section class="a-card step" aria-labelledby="draft-heading">
+  <h2 class="a-h2" id="draft-heading">Create or edit a draft</h2>
+  <p class="a-help">Save the name first, then add one private recording and mark a line on its picture. Testing counts is still being built. Drafts are visible only to their creator.</p>
+  <form id="draft-form">
+    <div class="a-field"><label class="a-label" for="draft-name">Operation name</label>
+      <input class="a-input" id="draft-name" maxlength="120" required placeholder="e.g. Main shop entrance">
+    </div>
+    <p id="draft-status" role="status" aria-live="polite"></p>
+    <p id="draft-error" class="a-error" role="alert"></p>
+    <button class="a-btn a-btn--primary" id="draft-save" type="submit" data-needs="label">Save draft</button>
+    <button class="a-btn" id="draft-new" type="button">Start another</button>
+    <button class="a-btn" id="draft-delete" type="button" data-needs="label" hidden>Delete draft</button>
+  </form>
+</section>
+<section class="a-card step" id="recording-section" aria-labelledby="recording-heading" hidden>
+  <h2 class="a-h2" id="recording-heading">Test recording</h2>
+  <p class="a-help">Add an H.264 MP4 up to 50 MB, 5 minutes and 1920×1080 pixels. The recording is stored privately. This checks its file information only; replay analysis and counting are not available yet.</p>
+  <div id="recording-add">
+    <label class="a-label" for="recording-file">Choose an MP4</label>
+    <input id="recording-file" type="file" accept="video/mp4,.mp4" data-needs="label">
+    <button class="a-btn" type="button" id="recording-upload" data-needs="label">Upload recording</button>
+  </div>
+  <div id="recording-saved" hidden>
+    <p id="recording-info"></p>
+    <video id="recording-preview" class="recording-preview" controls preload="metadata" aria-label="Test recording preview"></video>
+    <p><button class="a-btn" type="button" id="recording-delete" data-needs="label">Remove recording</button></p>
+  </div>
+  <p id="recording-status" role="status" aria-live="polite"></p>
+  <p id="recording-error" class="a-error" role="alert"></p>
+</section>
+<section class="a-card step" id="line-section" aria-labelledby="line-heading" hidden>
+  <h2 class="a-h2" id="line-heading">Mark a counting line</h2>
+  <p class="a-help">Pause the recording at a clear view, then choose two points on the picture. The arrow points towards one side of the line; name movement towards and against it. You can also enter the point positions below using percentages from the top-left corner.</p>
+  <button class="a-btn" id="line-frame" type="button">Use current video frame</button>
+  <canvas id="line-canvas" class="line-canvas" width="640" height="360" aria-label="Video frame for choosing two line endpoints; use the position fields below for keyboard entry"></canvas>
+  <div class="line-fields">
+    <div class="a-field"><label class="a-label" for="line-start-x">Start: left to right (%)</label><input class="a-input" type="number" id="line-start-x" min="0" max="100" step="any" data-needs="label"></div>
+    <div class="a-field"><label class="a-label" for="line-start-y">Start: top to bottom (%)</label><input class="a-input" type="number" id="line-start-y" min="0" max="100" step="any" data-needs="label"></div>
+    <div class="a-field"><label class="a-label" for="line-end-x">End: left to right (%)</label><input class="a-input" type="number" id="line-end-x" min="0" max="100" step="any" data-needs="label"></div>
+    <div class="a-field"><label class="a-label" for="line-end-y">End: top to bottom (%)</label><input class="a-input" type="number" id="line-end-y" min="0" max="100" step="any" data-needs="label"></div>
+    <div class="a-field"><label class="a-label" for="line-positive">Movement towards the arrow</label><input class="a-input" id="line-positive" maxlength="40" data-needs="label" placeholder="e.g. Entering"></div>
+    <div class="a-field"><label class="a-label" for="line-negative">Movement against the arrow</label><input class="a-input" id="line-negative" maxlength="40" data-needs="label" placeholder="e.g. Leaving"></div>
+  </div>
+  <div class="reference-event-editor" id="reference-events" aria-labelledby="reference-events-heading">
+    <h3 id="reference-events-heading">Mark expected crossings</h3>
+    <p class="a-help">Use this as a manual reference for later testing. Mark each real crossing while the recording plays. These are your labels, not Athena detections or an automatic count.</p>
+    <div class="reference-event-actions">
+      <button class="a-btn" id="mark-positive-event" type="button" data-needs="label">Mark current time: towards the arrow</button>
+      <button class="a-btn" id="mark-negative-event" type="button" data-needs="label">Mark current time: against the arrow</button>
+    </div>
+    <p id="reference-events-status" class="a-help" role="status" aria-live="polite">No reference crossings marked.</p>
+    <ul id="reference-event-list" aria-label="Expected crossings in this recording"></ul>
+  </div>
+  <p id="line-status" class="a-help" role="status" aria-live="polite"></p>
+  <p id="line-error" class="a-error" role="alert"></p>
+  <button class="a-btn a-btn--primary" id="line-save" type="button" data-needs="label">Save draft and line</button>
+  <button class="a-btn" id="line-clear" type="button" data-needs="label">Clear line</button>
+</section>
+<section class="section" aria-labelledby="draft-list-heading">
+  <h2 class="a-h2" id="draft-list-heading">Your saved drafts</h2>
+  <p id="draft-list-status" role="status">Loading drafts…</p>
+  <ul id="draft-list"></ul>
+</section>
+{% endblock %}
+{% block scripts %}<script src="{% static 'projects/operation-line.js' %}"></script><script src="{% static 'projects/operation-drafts.js' %}"></script>{% endblock %}

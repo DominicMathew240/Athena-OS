@@ -7,9 +7,13 @@ class ProjectsConfig(AppConfig):
 
     def ready(self) -> None:
         from django.contrib.auth import get_user_model
-        from django.db.models.signals import m2m_changed
+        from django.db.models.signals import m2m_changed, post_delete
 
         from . import access_admin
+        from .models import OperationRecording
+        from .operations.recordings import delete_storage_file
+
+        post_delete.connect(delete_storage_file, sender=OperationRecording, dispatch_uid="athena_delete_operation_recording")
 
         # Role changes made by any other tool (a shell, a user-admin add-on) are written down too.
         m2m_changed.connect(

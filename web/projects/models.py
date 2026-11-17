@@ -847,6 +847,143 @@ class AIConnection(models.Model):
         return f"{self.user_id} {self.base_url} {self.model}"
 
 
+class Site(models.Model):
+    """A user's private operational location; this stores no source credentials."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="operation_sites")
+    name = models.CharField(max_length=120)
+    timezone_name = models.CharField(max_length=64, default="UTC")
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("name", "id")
+
+
+class OperationSource(models.Model):
+    """Private source metadata scoped to a site; connection and secret data are out of scope."""
+
+    KIND_CHOICES = (("recorded_video", "Recorded video"), ("camera", "Camera"), ("image_collection", "Image collection"))
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    site = models.ForeignKey(Site, on_delete=models.CASCADE, related_name="sources")
+    name = models.CharField(max_length=120)
+    kind = models.CharField(max_length=32, choices=KIND_CHOICES)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("name", "id")
+
+
+class Operation(models.Model):
+    """A private operation explicitly bound to one site and one source."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="operations")
+    site = models.ForeignKey(Site, on_delete=models.PROTECT, related_name="operations")
+    source = models.ForeignKey(OperationSource, on_delete=models.PROTECT, related_name="operations")
+    name = models.CharField(max_length=120)
+    is_private = models.BooleanField(default=True, editable=False)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+
+
+class SourceViewVersion(_FrozenModel):
+    """Immutable capture orientation and dimensions for an operation source."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    source = models.ForeignKey(OperationSource, on_delete=models.PROTECT, related_name="view_versions")
+    version = models.PositiveIntegerField()
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    configuration = models.JSONField()
+    configuration_sha256 = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-version", "-id")
+        constraints = (
+            models.UniqueConstraint(fields=("source", "version"), name="sourceviewversion_unique_number"),
+        )
+
+
+class GeometryVersion(_FrozenModel):
+    """Immutable operation geometry pinned to the exact source-view version it uses."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    operation = models.ForeignKey(Operation, on_delete=models.PROTECT, related_name="geometry_versions")
+    source_view_version = models.ForeignKey(SourceViewVersion, on_delete=models.PROTECT, related_name="geometry_versions")
+    version = models.PositiveIntegerField()
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    geometry = models.JSONField()
+    geometry_sha256 = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-version", "-id")
+        constraints = (
+            models.UniqueConstraint(fields=("operation", "version"), name="geometryversion_unique_number"),
+        )
+
+
+class OperationDraft(models.Model):
+    """Private unpublished configuration, optionally bound to an operation; it does not produce results."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="operation_drafts")
+    operation = models.ForeignKey("Operation", null=True, blank=True, on_delete=models.PROTECT, related_name="drafts")
+    name = models.CharField(max_length=120)
+    line = models.JSONField(null=True, blank=True)
+    reference_events = models.JSONField(default=list)
+    revision = models.PositiveIntegerField(default=1)
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-updated_at", "-id")
+
+
+class OperationDraftVersion(_GuardedModel):
+    """Immutable snapshot of one saved draft revision; deleting the draft erases its snapshots too."""
+
+    IMMUTABLE_FIELDS = ("draft", "revision", "created_by", "snapshot", "snapshot_sha256", "created_at")
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    draft = models.ForeignKey(OperationDraft, on_delete=models.CASCADE, related_name="versions")
+    revision = models.PositiveIntegerField()
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    snapshot = models.JSONField()
+    snapshot_sha256 = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-revision", "-id")
+        constraints = (models.UniqueConstraint(fields=("draft", "revision"), name="operationdraftversion_unique_revision"),)
+
+
+class OperationRecording(models.Model):
+    """One private test recording attached to an unpublished draft."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    draft = models.OneToOneField(OperationDraft, on_delete=models.CASCADE, related_name="recording")
+    storage_key = models.CharField(max_length=500)
+    filename = models.CharField(max_length=255)
+    sha256 = models.CharField(max_length=64)
+    size_bytes = models.PositiveIntegerField()
+    width = models.PositiveIntegerField()
+    height = models.PositiveIntegerField()
+    duration_seconds = models.FloatField()
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
+class OperationRecordingCleanup(models.Model):
+    """Durable deletion retry when a private recording cannot be removed immediately."""
+
+    storage_key = models.CharField(max_length=500, unique=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+
 class Inspection(models.Model):
     """One question asked about one to six pictures (or frames of a short video), and the model's answer."""
 

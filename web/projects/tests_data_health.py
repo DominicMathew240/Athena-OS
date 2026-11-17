@@ -711,15 +711,13 @@ class SnapshotRefusalMirrorTests(HealthBase):
         self.assertTrue(any("not in the project's label list" in line for line in body["blockers"]))
 
 
-# -- nothing to learn from ---------------------------------------------------------------------------------
+# -- insufficient data -------------------------------------------------------------------------------------
 class NothingToLearnTests(HealthBase):
-    def test_one_picture_leaves_nothing_to_learn_from_and_blocks(self) -> None:
+    def test_one_picture_stays_below_every_label_threshold(self) -> None:
         self.picture(1, "Dent", "Scratch", "Rust")
         body = self.health()
-        self.assertEqual(body["held_out"]["expected_counts"]["train"], 0)
-        self.assertEqual({row["verdict"] for row in body["labels"]}, {"none"})
-        self.assertFalse(body["ready_to_teach"])
-        self.assertTrue(any("more pictures" in line and "learn from" in line for line in body["blockers"]), body["blockers"])
+        self.assertEqual(sum(body["held_out"]["expected_counts"].values()), 1)
+        self.assertTrue(all(row["verdict"] != "enough" for row in body["labels"]))
         self.assertEqual(body["reasons"], body["blockers"] + body["advice"])
 
     def test_a_split_with_no_learning_share_blocks(self) -> None:

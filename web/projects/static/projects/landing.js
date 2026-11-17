@@ -21,10 +21,10 @@
     },
     footfall: {
       img: "store-entrance.jpg", alt: "People at a store entrance",
-      q: "“How many people are walking in and out?”", v: "attention", word: "Needs attention",
-      h: "Two people are heading in and one is leaving. Parked bikes are narrowing the doorway.",
-      counts: [["6", "People in view"], ["2", "Walking in"], ["1", "Walking out"]],
-      items: [["info", "Walking in, centre left"], ["info", "Walking out, by the doors"], ["medium", "Bikes narrowing the entrance"]],
+      q: "“What is visible near the entrance?”", v: "attention", word: "Needs attention",
+      h: "People are visible near the entrance. Parked bikes are narrowing the doorway. A still picture cannot establish crossing totals.",
+      counts: [["6", "People in view"]],
+      items: [["info", "People near the entrance"], ["info", "Person by the doors"], ["medium", "Bikes narrowing the entrance"]],
       boxes: [[25, 38, 16, 47, "info"], [44, 39, 10, 33, "info"], [17, 66, 32, 34, "medium"]]
     }
   };

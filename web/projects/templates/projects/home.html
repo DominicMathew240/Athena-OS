@@ -7,6 +7,7 @@
     <h1 class="a-h1">What do you want to check today?</h1>
   </div>
   <div class="a-pagehead-actions">
+    <a class="a-btn" href="{% url 'operations-page' %}">People counting drafts</a>
     <a class="a-btn" href="{% url 'docs-page' %}" data-testid="home-docs-link">{% icon "book" 18 %}Step-by-step guide</a>
     <a class="a-btn" href="{% url 'inspections-page' %}" data-testid="home-all-inspections-link">{% icon "list" 18 %}All inspections</a>
   </div>
@@ -25,8 +26,8 @@
       </div>
       <div class="ask-chips" aria-label="Example questions">
         <button class="ask-chip" type="button" data-example="Is there any rust or corrosion on these pipes and flanges?">Corrosion on pipes</button>
-        <button class="ask-chip" type="button" data-example="How many parking spaces are free and how many are taken?">Free parking spaces</button>
-        <button class="ask-chip" type="button" data-example="How many people are walking in and how many are walking out?">People in and out</button>
+        <button class="ask-chip" type="button" data-example="Which visible parking spaces appear free or taken in this photo?">Free parking spaces in this photo</button>
+        <button class="ask-chip" type="button" data-example="What people are visible in these pictures? Acknowledge that still frames cannot establish every arrival or departure.">People visible in pictures</button>
         <button class="ask-chip" type="button" data-example="Is everyone wearing a hard hat and safety vest?">Safety gear (PPE)</button>
       </div>
     </form>
@@ -46,6 +47,10 @@
       </div>
     </section>
   </div>
+</div>
+
+<div class="a-note" role="note" data-testid="photo-inspection-limits">
+  <p>Photo inspections explain what is visible in the pictures; they are not live monitoring or a complete count of arrivals and departures. Videos are sampled into six still frames, so movement between frames can be missed. Training a custom detector is a separate advanced workflow.</p>
 </div>
 
 <section class="section" aria-labelledby="tpl-heading">

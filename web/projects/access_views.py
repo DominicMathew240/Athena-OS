@@ -26,10 +26,10 @@ PAGE_SIZE = 50
 MAX_PAGE_SIZE = 200
 
 ROLE_SUMMARY = {
-    permissions.VIEWER: "Can look at everything, change nothing.",
-    permissions.LABELER: "Can also add pictures, draw boxes, save snapshots and run a check screen.",
-    permissions.TRAINER: "Can also teach models, move one to trial, set up check screens and delete a project.",
-    permissions.APPROVER: "Can also approve a model for use or go back to the previous one.",
+    permissions.VIEWER: "Can view records they are allowed to access. Private operation records remain visible only to their owner.",
+    permissions.LABELER: "Can also add pictures, draw boxes, save snapshots, run a check screen, create private sites/sources/operations, and manage their own drafts, recordings and reference labels.",
+    permissions.TRAINER: "Can also teach models, move one to trial, set up check screens and delete a project. Operation-specific training is not available yet.",
+    permissions.APPROVER: "Can also approve a model for use or go back to the previous one. Operations do not yet have a publication action.",
 }
 
 

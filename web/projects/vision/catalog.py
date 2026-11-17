@@ -37,8 +37,8 @@ TEMPLATES: list[dict] = [
         "name": "Parking occupancy",
         "industry": "Facilities & smart city",
         "icon": "car",
-        "tagline": "Count free and taken parking spaces.",
-        "blurb": "Free, taken and badly parked — counted from a camera or drone photo.",
+        "tagline": "Inspect parking spaces in a photo.",
+        "blurb": "Ask about visible free and taken spaces in a camera or drone photo; not live monitoring.",
         "cover": "projects/landing/parking-aerial.jpg",
         "featured": False,
         "question": "How many parking spaces are free, and how many are taken?",
@@ -58,17 +58,17 @@ TEMPLATES: list[dict] = [
         "name": "Store foot traffic",
         "industry": "Retail & hospitality",
         "icon": "users",
-        "tagline": "See how many people come in and go out.",
-        "blurb": "Who is walking in, who is leaving, and how long the queue is.",
+        "tagline": "Inspect people and queues visible in pictures.",
+        "blurb": "Review a snapshot of people and queues; this does not count every crossing.",
         "cover": "projects/landing/store-entrance.jpg",
         "featured": False,
-        "question": "How many people are walking in, and how many are walking out?",
-        "counts": ["People in view", "Walking in", "Walking out", "Waiting in a queue"],
+        "question": "What people and queues are visible in these pictures?",
+        "counts": ["People in view", "Waiting in a queue"],
         "source_hint": "A camera pointed at a shop door or a short video of it",
         "focus": (
-            "Count the people you can see. Decide for each person whether they are walking into the store, walking out, "
-            "or just passing or standing, using which way they face and move (across video frames when there are several). "
-            "Note queues at tills or doors and crowding. Never try to identify anyone; describe people only by position. "
+            "Describe and count people visible in each picture. Sparse still frames cannot establish complete entry or exit "
+            "crossings, unique visitors, or a queue's waiting duration; say when movement and direction are uncertain. "
+            "Note visible queues at tills or doors and crowding. Never try to identify anyone; describe people only by position. "
             "Findings: crowding near the door, a long queue, a blocked entrance, a person who looks like they need help. "
             "Verdict: clear for normal traffic; attention for a long queue or crowding; critical for a blocked exit or an "
             "unsafe crowd."

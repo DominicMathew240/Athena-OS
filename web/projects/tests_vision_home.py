@@ -26,6 +26,29 @@ class LandingCoversOnFrontViewTests(TestCase):
         user = get_user_model().objects.create_user("operator")
         self.client.force_login(user)
 
+    def test_photo_counting_examples_are_clearly_limited_to_snapshots(self) -> None:
+        home = self.client.get("/")
+        self.assertContains(home, "Photo inspections explain what is visible in the pictures")
+        self.assertContains(home, "not live monitoring or a complete count of arrivals and departures")
+        self.assertContains(home, "Train a custom detector")
+
+        self.client.logout()
+        landing = self.client.get("/")
+        self.assertContains(landing, "Videos are sampled into six still frames")
+        self.assertContains(landing, "not a complete crossing count or live monitor")
+        self.assertContains(landing, "A snapshot of people and queues")
+        self.assertContains(landing, "does not count every crossing or measure waiting time")
+
+    def test_sampled_video_limit_is_visible_on_setup_and_docs(self) -> None:
+        for path in ('/inspect/new', '/docs'):
+            with self.subTest(path=path):
+                self.assertContains(self.client.get(path), 'not a complete count of crossings')
+        footfall = catalog.BY_KEY['footfall']
+        self.assertNotIn('Walking in', footfall['counts'])
+        self.assertNotIn('Walking out', footfall['counts'])
+        self.assertIn('cannot establish', footfall['focus'])
+        self.assertNotIn('"Walking in"', (STATIC / 'landing.js').read_text())
+
     def test_each_ready_made_check_has_the_landing_photo(self) -> None:
         by_key = {item["key"]: item for item in catalog.TEMPLATES}
         self.assertEqual(set(by_key), set(LANDING_COVERS))

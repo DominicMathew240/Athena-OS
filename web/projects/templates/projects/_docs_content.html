@@ -115,11 +115,11 @@
         <a class="a-btn a-btn--sm" href="{% url 'inspect-new' %}">New inspection{% icon "arrow" 16 %}</a>
       </header>
       <ol class="wiki-steps">
-        <li><strong>Choose what to check:</strong> On <a href="{% url 'home' %}">Home</a> or <a href="{% url 'inspect-new' %}">New inspection</a>, pick a ready-made template (such as <em>Corrosion check</em>, <em>Parking occupancy</em>, <em>Store foot traffic</em>, or <em>Safety gear (PPE)</em>) or choose <strong>Your own question</strong> and write what to look for in plain words.</li>
+        <li><strong>Choose what to check:</strong> On <a href="{% url 'home' %}">Home</a> or <a href="{% url 'inspect-new' %}">New inspection</a>, pick a ready-made visual question (such as <em>Parking occupancy</em>, <em>Store foot traffic</em> as a snapshot question, <em>Corrosion check</em>, or <em>Safety gear (PPE)</em>) or write your own. Parking and people templates interpret visible pictures; they are not live occupancy or footfall monitors.</li>
         <li><strong>Add photos or a short video:</strong>
           <ul>
             <li><strong>Photos tab:</strong> Drop up to 6 JPEG, PNG, or WebP images (max 20 MB each).</li>
-            <li><strong>Video tab:</strong> Drop one MP4, WebM, or MOV clip. Athena automatically extracts 6 evenly spaced still frames in your browser.</li>
+            <li><strong>Video tab:</strong> Drop one MP4, WebM, or MOV clip. Athena automatically extracts 6 evenly spaced still frames in your browser. This is not a complete count of crossings; movements between frames can be missed. Live tracking and parking monitoring are not available in this inspection.</li>
           </ul>
         </li>
         <li><strong>Optionally name &amp; run:</strong> Give the inspection a short name (or leave blank for an automatic title) and click <strong>Run inspection</strong>. Reports usually finish in 10–60 seconds and are saved even if you navigate away.</li>

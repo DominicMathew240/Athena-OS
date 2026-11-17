@@ -10,6 +10,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     ATHENA_STATIC_ROOT=/app/staticfiles \
     HF_HOME=/data/models
 
+RUN apt-get update && apt-get install -y --no-install-recommends ffmpeg \
+ && rm -rf /var/lib/apt/lists/*
+
 RUN useradd --system --uid 10001 --create-home athena && mkdir -p /data /app && chown athena /data /app
 WORKDIR /app
 
