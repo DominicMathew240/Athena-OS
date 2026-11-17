@@ -86,9 +86,39 @@
   </div>
 </section>
 
+<section class="section" aria-labelledby="new-model-heading" data-testid="home-new-model-section">
+  {% url 'dashboard' as detectors_url %}
+  {% include "projects/components/_section_head.html" with eyebrow_num="03" eyebrow="ATHENA OS · NEW MODEL" title="What do you want Athena to learn?" heading_id="new-model-heading" link_url=detectors_url link_label="Open custom projects" link_testid="home-open-detectors" %}
+  <div class="a-card outcome-shell">
+    <div class="outcome-tabs" id="home-outcome-tabs" role="tablist" aria-label="What do you want Athena to learn?">
+      <button type="button" role="tab" class="outcome-tab" id="home-outcome-tab-vision" aria-selected="false" tabindex="-1" data-outcome="vision" data-testid="home-outcome-vision">{% icon "image" 16 %}<span>Recognize objects in pictures</span></button>
+      <button type="button" role="tab" class="outcome-tab" id="home-outcome-tab-audio" aria-selected="true" tabindex="0" data-outcome="audio" data-testid="home-outcome-audio">{% icon "volume" 16 %}<span>Recognize sounds or equipment faults</span></button>
+      <button type="button" role="tab" class="outcome-tab" id="home-outcome-tab-ocr" aria-selected="false" tabindex="-1" data-outcome="ocr" data-testid="home-outcome-ocr">{% icon "file-text" 16 %}<span>Read handwriting</span></button>
+      <button type="button" role="tab" class="outcome-tab" id="home-outcome-tab-documents" aria-selected="false" tabindex="-1" data-outcome="documents" data-testid="home-outcome-documents">{% icon "book" 16 %}<span>Understand documents</span></button>
+      <button type="button" role="tab" class="outcome-tab" id="home-outcome-tab-movements" aria-selected="false" tabindex="-1" data-outcome="movements" data-testid="home-outcome-movements">{% icon "activity" 16 %}<span>Recognize movements</span></button>
+      <button type="button" role="tab" class="outcome-tab" id="home-outcome-tab-spreadsheets" aria-selected="false" tabindex="-1" data-outcome="spreadsheets" data-testid="home-outcome-spreadsheets">{% icon "table" 16 %}<span>Predict from spreadsheets</span></button>
+    </div>
+    <div class="outcome-panel" id="home-outcome-panel" role="tabpanel" aria-labelledby="home-outcome-tab-audio" tabindex="0" data-testid="home-outcome-card">
+      <div class="outcome-head">
+        <div>
+          <span class="a-tag" id="home-outcome-status">Wave 1 roadmap (coming soon)</span>
+          <h3 class="a-h2" id="home-outcome-title">Acoustic Event Detection</h3>
+        </div>
+        <a class="a-btn a-btn--primary" id="home-outcome-cta" href="{% url 'dashboard' %}?recipe=audio" data-testid="home-outcome-explore">Explore this training workflow{% icon "arrow" 16 %}</a>
+      </div>
+      <p class="outcome-summary" id="home-outcome-summary">Upload recordings of a healthy motor and known faults. Athena learns to classify characteristic sounds or flag unusual sounds against a normal baseline.</p>
+      <dl class="outcome-specs">
+        <div><dt>Data needed</dt><dd id="home-outcome-data">WAV recordings + event labels</dd></div>
+        <div><dt>How Athena will check quality</dt><dd id="home-outcome-quality">Missed sound events and false alarms</dd></div>
+        <div><dt>Guided steps</dt><dd id="home-outcome-steps">Choose a goal · Add examples · Teach with labels · Train · Check on held-out examples · Use and improve</dd></div>
+      </dl>
+    </div>
+  </div>
+</section>
+
 <section class="section" aria-labelledby="recent-heading">
   {% url 'inspections-page' as inspections_url %}
-  {% include "projects/components/_section_head.html" with eyebrow_num="03" eyebrow="Latest results" title="Recent inspections" heading_id="recent-heading" link_url=inspections_url link_label="See all" link_testid="home-recent-see-all" %}
+  {% include "projects/components/_section_head.html" with eyebrow_num="04" eyebrow="Latest results" title="Recent inspections" heading_id="recent-heading" link_url=inspections_url link_label="See all" link_testid="home-recent-see-all" %}
   <div class="a-card" id="recent" data-testid="home-recent-list">
     {% include "projects/components/_skeleton_rows.html" %}
   </div>

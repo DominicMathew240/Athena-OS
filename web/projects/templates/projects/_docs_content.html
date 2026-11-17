@@ -1,17 +1,17 @@
 {% load athena_ui %}
 {% if request.user.is_authenticated %}
   {% url 'inspect-new' as docs_cta_url %}
-  {% include "projects/components/_page_head.html" with eyebrow="Documentation" eyebrow_dot=True title="Athena OS Docs Wiki" lead="Step-by-step guides for running visual inspections, marking regions, building custom detectors, managing team roles, and connecting your AI." action_url=docs_cta_url action_label="New inspection" action_icon="plus" action_primary=True action_needs="label" action_testid="docs-new-inspection-button" %}
+  {% include "projects/components/_page_head.html" with eyebrow="Documentation" eyebrow_dot=True title="Athena OS Docs Wiki" lead="Guides for running visual inspections, building custom models without code, managing team roles, and exploring the multimodal platform roadmap." action_url=docs_cta_url action_label="New inspection" action_icon="plus" action_primary=True action_needs="label" action_testid="docs-new-inspection-button" %}
 {% else %}
   {% url 'login' as login_url %}
-  {% include "projects/components/_page_head.html" with eyebrow="Documentation" eyebrow_dot=True title="Athena OS Docs Wiki" lead="Step-by-step guides for running visual inspections, marking regions, building custom detectors, managing team roles, and connecting your AI." action_url=login_url action_label="Sign in to inspect" action_icon="arrow" action_primary=True action_testid="docs-new-inspection-button" %}
+  {% include "projects/components/_page_head.html" with eyebrow="Documentation" eyebrow_dot=True title="Athena OS Docs Wiki" lead="Guides for running visual inspections, building custom models without code, managing team roles, and exploring the multimodal platform roadmap." action_url=login_url action_label="Sign in to inspect" action_icon="arrow" action_primary=True action_testid="docs-new-inspection-button" %}
 {% endif %}
 
 <div class="wiki-toolbar a-card a-card--pad" data-testid="docs-toolbar">
   <div class="searchbox wiki-search">
     {% icon "search" 18 %}
     <label class="a-sr" for="wiki-search">Search the docs wiki</label>
-    <input class="a-input" id="wiki-search" type="search" placeholder="Search steps, e.g. region, Ollama, YOLO, check screen, role…" autocomplete="off" data-testid="docs-search-input">
+    <input class="a-input" id="wiki-search" type="search" placeholder="Search steps, e.g. region, acoustic, OCR, Wave 1, quality gates…" autocomplete="off" data-testid="docs-search-input">
     <button class="a-btn a-btn--sm a-btn--ghost" id="wiki-clear" type="button" hidden data-testid="docs-search-clear">Clear</button>
   </div>
   <div class="seg wiki-audience" role="group" aria-label="Filter by who is using Athena" id="wiki-audience">
@@ -38,6 +38,8 @@
         <li><a href="#access-roles" data-toc="access-roles">07 · Team access &amp; roles</a></li>
         <li><a href="#cli-sdk" data-toc="cli-sdk">08 · CLI, SDK &amp; connectors</a></li>
         <li><a href="#faq" data-toc="faq">09 · Frequently asked questions</a></li>
+        <li><a href="#multimodal-roadmap" data-toc="multimodal-roadmap">10 · Multimodal capability roadmap</a></li>
+        <li><a href="#delivery-waves" data-toc="delivery-waves">11 · Delivery waves &amp; quality gates</a></li>
       </ol>
     </nav>
   </aside>
@@ -45,15 +47,15 @@
   <div class="wiki-body" id="wiki-body" data-testid="docs-sections">
     <p class="a-card a-card--pad wiki-empty" id="wiki-empty" hidden>No wiki sections match your search. Clear the filter to see every step-by-step guide.</p>
 
-    <article class="a-card a-card--pad wiki-section" id="overview" data-audience="all operator trainer admin" data-keywords="overview workflow vision language model custom detector quick start">
+    <article class="a-card a-card--pad wiki-section" id="overview" data-audience="all operator trainer admin" data-keywords="overview workflow vision language model custom detector quick start multimodal no-code positioning six steps lifecycle">
       <header class="wiki-sec-head">
         <div>
           <p class="a-eyebrow"><b>00</b> Overview</p>
           <h2 class="a-h2">How Athena OS works</h2>
         </div>
-        <span class="a-tag">Start here</span>
+        <span class="a-tag">Teach AI what matters to your world</span>
       </header>
-      <p>Athena OS is a self-hosted visual inspection workspace with two ways to check pictures and video—pick the one that fits your job:</p>
+      <p>Athena OS is an open-source, self-hostable AI training and inspection platform designed so teams without a machine learning background can build, train, evaluate, improve and deploy models on their own data. While image object detection is the primary verified local workflow today, the platform centers the training task rather than the camera or file format.</p>
       <div class="wiki-cards">
         <div class="wiki-mini">
           <h3>{% icon "sparkle" 18 %}1. Instant visual inspections</h3>
@@ -61,11 +63,12 @@
           <a class="a-btn a-btn--sm" href="{% url 'inspect-new' %}">Start an inspection{% icon "arrow" 16 %}</a>
         </div>
         <div class="wiki-mini">
-          <h3>{% icon "detector" 18 %}2. Custom detectors &amp; check screens</h3>
-          <p>Label your own pictures, freeze a training set, teach a dedicated detector on your hardware, and publish a fast one-click operator check screen with a human-in-the-loop improve cycle.</p>
-          <a class="a-btn a-btn--sm" href="{% url 'dashboard' %}">Open custom detectors{% icon "arrow" 16 %}</a>
+          <h3>{% icon "detector" 18 %}2. No-code custom model training</h3>
+          <p>Follow six consistent steps across supported modalities: choose a goal, add examples, teach with labels, train the model, test against reality, and use and improve safely.</p>
+          <a class="a-btn a-btn--sm" href="{% url 'dashboard' %}">Open custom projects{% icon "arrow" 16 %}</a>
         </div>
       </div>
+      <p><strong>Shared lifecycle across every modality:</strong> Project, Task, Observation, Annotation, Dataset Version, Training Run, Model Version, Evaluation, Deployment, and Feedback.</p>
     </article>
 
     <article class="a-card a-card--pad wiki-section" id="setup-signin" data-audience="all operator admin" data-keywords="setup onboarding admin account login sign in theme control room dark mode">
@@ -266,6 +269,150 @@
           </div>
         </div>
       </div>
+    </article>
+
+    <article class="a-card a-card--pad wiki-section" id="multimodal-roadmap" data-audience="all operator trainer admin" data-keywords="multimodal roadmap architecture vision acoustic audio ocr handwriting trocr tabular spreadsheets speech asr text nlp sensor time-series pose hand tracking video face fusion athena forge lab nodes domain packs">
+      <header class="wiki-sec-head">
+        <div>
+          <p class="a-eyebrow"><b>10</b> Product direction · 17 November 2026 review</p>
+          <h2 class="a-h2">Multimodal capability roadmap</h2>
+        </div>
+        <span class="a-tag">Proposed priorities</span>
+      </header>
+      <p>Athena OS is expanding from computer vision into a general-purpose, open-source, self-hostable AI training operating system. Instead of building separate silos per data format, every modality shares one workspace, one guided training engine, and one governance lifecycle. Proprietary services such as Athena Forge remain optional through compatible, versioned interfaces where licensing permits.</p>
+
+      <h3 class="wiki-subhead">Proposed architecture &amp; system responsibilities</h3>
+      <div class="wiki-table-wrap">
+        <table class="wiki-table">
+          <thead>
+            <tr><th scope="col">System</th><th scope="col">Responsibility</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Athena OS</strong></td><td>Open-source, self-hostable no-code model training platform and shared lifecycle across Vision, Audio, Language, Motion, Signals and Fusion.</td></tr>
+            <tr><td><strong>Athena Forge</strong></td><td>Advanced training engines, experiments, specialized algorithms and existing ML integrations (reused via compatible interfaces where licensing permits).</td></tr>
+            <tr><td><strong>Athena Lab</strong></td><td>Research, expert review, benchmarking, governance and release qualification.</td></tr>
+            <tr><td><strong>Athena Nodes</strong></td><td>Optional distributed CPU/GPU computing and job execution after integration tests.</td></tr>
+            <tr><td><strong>Domain Packs</strong></td><td>Reusable industry-specific tasks, datasets, evaluation rules and deployment templates.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="wiki-subhead">Verified development status vs recommendation</h3>
+      <div class="wiki-table-wrap">
+        <table class="wiki-table">
+          <thead>
+            <tr><th scope="col">Component</th><th scope="col">Verified status</th><th scope="col">Recommendation</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Athena OS Core</strong></td><td>Django console, projects, auth, image imports, annotation, dataset snapshots and prototype training</td><td>Reuse and generalize</td></tr>
+            <tr><td><strong>Vision workflows</strong></td><td>T01–T04 locally completed; T05 partially completed; T06–T65 remain open</td><td>Keep as a vision-specific workstream</td></tr>
+            <tr><td><strong>OCR</strong></td><td>Handwriting training integrated in Forge (PR #82); document OCR supports inference</td><td>Integrate with OS</td></tr>
+            <tr><td><strong>Audio classification</strong></td><td>Basic WAV classifier and ONNX export exist in Forge</td><td>Extend to industrial acoustic tasks</td></tr>
+            <tr><td><strong>Speech recognition</strong></td><td>Local speech-to-text and Sarawak Malay ASR foundations exist</td><td>Complete validated fine-tuning workflow</td></tr>
+            <tr><td><strong>Spreadsheet AI</strong></td><td>Training workflow merged in Forge PR #79</td><td>Reuse its trainer</td></tr>
+            <tr><td><strong>Text / NLP &amp; Keypoints</strong></td><td>Text category and geometry contracts exist; no verified end-to-end user training yet</td><td>New development</td></tr>
+            <tr><td><strong>Face recognition</strong></td><td>No verified end-to-end trainable biometric workflow</td><td>New, separately gated with consent &amp; subgroup checks</td></tr>
+            <tr><td><strong>Multimodal fusion</strong></td><td>Architecture concepts and contracts exist</td><td>Longer-term development (Wave 4)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="wiki-subhead">Complete model-training capability roadmap (proposed priorities)</h3>
+      <div class="wiki-table-wrap">
+        <table class="wiki-table">
+          <thead>
+            <tr><th scope="col">Modality</th><th scope="col">What users can train</th><th scope="col">Priority</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Computer Vision</strong></td><td>Image classification, detection, segmentation, defects and anomalies</td><td><span class="wiki-prio">P0</span></td></tr>
+            <tr><td><strong>Acoustic AI</strong></td><td>Sound events, equipment faults, unusual motor/bearing sounds</td><td><span class="wiki-prio">P0</span></td></tr>
+            <tr><td><strong>OCR</strong></td><td>Handwriting recognition (TrOCR), printed text and document extraction</td><td><span class="wiki-prio">P0</span></td></tr>
+            <tr><td><strong>Tabular AI</strong></td><td>Classification and prediction from Excel/CSV spreadsheets</td><td><span class="wiki-prio">P0</span></td></tr>
+            <tr><td><strong>Speech AI</strong></td><td>Transcription, commands, keywords and dialect adaptation</td><td><span class="wiki-prio">P1</span></td></tr>
+            <tr><td><strong>Text AI</strong></td><td>Document classification, named entities, text extraction</td><td><span class="wiki-prio">P1</span></td></tr>
+            <tr><td><strong>Sensor AI</strong></td><td>Anomaly detection and forecasting from time-series data</td><td><span class="wiki-prio">P1</span></td></tr>
+            <tr><td><strong>Human Pose &amp; Hand Tracking</strong></td><td>Body keypoints, ergonomic posture actions, hand landmarks and gestures</td><td><span class="wiki-prio wiki-prio--p2">P2</span></td></tr>
+            <tr><td><strong>Video AI</strong></td><td>Tracking, event recognition and sequence analysis</td><td><span class="wiki-prio wiki-prio--p2">P2</span></td></tr>
+            <tr><td><strong>Face AI</strong></td><td>Face detection, verification and controlled recognition (explicit consent &amp; retention controls)</td><td><span class="wiki-prio wiki-prio--p2">P2 — restricted</span></td></tr>
+            <tr><td><strong>Multimodal AI</strong></td><td>Models combining audio, video, thermal/RGB, text and sensor inputs</td><td><span class="wiki-prio wiki-prio--p3">P3</span></td></tr>
+          </tbody>
+        </table>
+      </div>
+    </article>
+
+    <article class="a-card a-card--pad wiki-section" id="delivery-waves" data-audience="all trainer admin" data-keywords="wave 0 wave 1 wave 2 wave 3 wave 4 os-core os-vis os-aud os-ocr os-tab os-asr os-nlp os-doc os-sig task list t01 t05 t65 quality gates metrics mAP WER event f1 OKS PCK priorities">
+      <header class="wiki-sec-head">
+        <div>
+          <p class="a-eyebrow"><b>11</b> Engineering execution &amp; governance</p>
+          <h2 class="a-h2">Delivery waves, task hierarchy &amp; quality gates</h2>
+        </div>
+        <span class="a-tag">Waves 0 to 4</span>
+      </header>
+      <p>The roadmap organizes delivery into five waves (indicative sequence, not committed release dates). The recommended next milestone is <strong>Athena OS Multimodal MVP</strong>: four real, independently validated training workflows (Vision, Acoustics, Handwriting OCR, and Tabular prediction) sharing one lifecycle.</p>
+
+      <h3 class="wiki-subhead">Five delivery waves</h3>
+      <div class="wiki-table-wrap">
+        <table class="wiki-table">
+          <thead>
+            <tr><th scope="col">Wave</th><th scope="col">Horizon</th><th scope="col">Scope &amp; key requirements</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Wave 0 — Shared foundation</strong></td><td>0–6 weeks</td><td><span class="a-mono">OS-CORE-001</span> to <span class="a-mono">006</span>: task/recipe registry, modality plugins, shared observation/dataset/annotation contracts, durable job recovery, model registry, universal guided workflow.</td></tr>
+            <tr><td><strong>Wave 1 — Multi-task MVP</strong></td><td>2–4 months</td><td><span class="a-mono">OS-VIS-001</span> (Vision detection), <span class="a-mono">OS-AUD-001</span> (Acoustic classifier), <span class="a-mono">OS-OCR-001</span> (Handwriting TrOCR), <span class="a-mono">OS-TAB-001</span> (Excel/CSV tabular prediction).</td></tr>
+            <tr><td><strong>Wave 2 — Language &amp; signals</strong></td><td>4–7 months</td><td><span class="a-mono">OS-ASR-001/002</span> (Speech dataset editor &amp; ASR fine-tuning), <span class="a-mono">OS-NLP-001</span> (Text/NER), <span class="a-mono">OS-DOC-001</span> (Document fields/tables), <span class="a-mono">OS-SIG-001</span> (Time-series), <span class="a-mono">OS-AUD-002</span> (Normal-only acoustic anomaly).</td></tr>
+            <tr><td><strong>Wave 3 — Motion &amp; operations</strong></td><td>7–10 months</td><td>Pose/keypoint annotation, gesture/action models, video event labeling, industry Domain Packs, operational dashboards, and consent-gated biometric verification.</td></tr>
+            <tr><td><strong>Wave 4 — Multimodal &amp; edge</strong></td><td>10–15+ months</td><td>Synchronized cross-modal fusion (audio + vibration/temp, video + pose, thermal + RGB), modality ablations, qualified edge deployments and optional Athena Nodes.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="wiki-subhead">Preserving &amp; reparenting tasks T01–T65</h3>
+      <div class="wiki-table-wrap">
+        <table class="wiki-table">
+          <thead>
+            <tr><th scope="col">Existing tasks</th><th scope="col">Updated placement</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><span class="a-mono">T01–T04</span></td><td>Keep as verified local vision foundations.</td></tr>
+            <tr><td><span class="a-mono">T05</span></td><td>Complete the missing versioned release-bundle contract.</td></tr>
+            <tr><td><span class="a-mono">T06–T08</span></td><td>Generalize guided setup and preflight into OS Core.</td></tr>
+            <tr><td><span class="a-mono">T09–T31</span></td><td>Video Operations / Vision Domain Pack.</td></tr>
+            <tr><td><span class="a-mono">T32–T40</span></td><td>Extract shared review, training, comparison and approval logic (including T19 durable worker design).</td></tr>
+            <tr><td><span class="a-mono">T41–T50</span></td><td>Industry-specific operations and visual dashboards.</td></tr>
+            <tr><td><span class="a-mono">T51–T65</span></td><td>Apply reliability, deployment, security and usability gates across all modalities (reconciled with Forge <span class="a-mono">LAB-002/003</span>, <span class="a-mono">LAB-006</span>, <span class="a-mono">LAB-007B</span>, <span class="a-mono">LAB-104</span>, <span class="a-mono">LAB-107</span>, <span class="a-mono">LAB-009</span>).</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="wiki-subhead">Platform-wide quality gates</h3>
+      <p>Every training run preserves dataset/license provenance, label-review status, immutable splits, training configuration, hardware details, model version, evaluation evidence and approval history. A model is never presented as production-ready merely because training finished.</p>
+      <div class="wiki-table-wrap">
+        <table class="wiki-table">
+          <thead>
+            <tr><th scope="col">Task type</th><th scope="col">Primary quality checks</th></tr>
+          </thead>
+          <tbody>
+            <tr><td><strong>Object detection</strong></td><td>Recall, precision, mAP, false positives</td></tr>
+            <tr><td><strong>Acoustic events</strong></td><td>Event F1, missed events, false alarms per hour</td></tr>
+            <tr><td><strong>Speech recognition</strong></td><td>Word error rate (WER), character error rate (CER), speaker/dialect generalization</td></tr>
+            <tr><td><strong>OCR</strong></td><td>Character/word errors, field accuracy where applicable</td></tr>
+            <tr><td><strong>Text classification</strong></td><td>Class F1, confusion analysis, false classifications</td></tr>
+            <tr><td><strong>Pose estimation</strong></td><td>Keypoint accuracy, OKS/PCK and visibility failures</td></tr>
+            <tr><td><strong>Time-series anomalies</strong></td><td>Event recall, false-alert rate, detection delay</td></tr>
+            <tr><td><strong>Face verification</strong></td><td>False acceptance/rejection rates and subgroup testing</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <h3 class="wiki-subhead">Immediate execution priorities</h3>
+      <ol class="wiki-steps">
+        <li><strong>Reconcile Athena OS and Forge training contracts:</strong> Identify canonical schemas, remove duplication and define adapter boundaries.</li>
+        <li><strong>Finish OS T05 and the shared training-job lifecycle:</strong> Versioned release bundles, durable execution, artifact and model provenance.</li>
+        <li><strong>Create universal task/recipe and annotation plugin interfaces:</strong> Make sound, OCR and spreadsheet tasks first-class without duplicating the platform.</li>
+        <li><strong>Unify the beginner-friendly Teach workflow:</strong> One guided experience with appropriate controls for each task.</li>
+        <li><strong>Validate four real-data vertical slices:</strong> Vision, acoustic classification, handwriting OCR and spreadsheets.</li>
+        <li><strong>Complete evaluation, approval, deployment and recovery gates:</strong> End-to-end quality and operational truth before expanding further.</li>
+      </ol>
     </article>
   </div>
 </div>

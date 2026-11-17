@@ -39,7 +39,9 @@ Two different models are involved. The *trained task model* is for inference in 
 
 ## Positioning
 
-An open, extensible industrial labeling-to-inference platform—not a chatbot and not a proprietary hosted-only control plane. Core workflows should work in a self-hosted installation; optional managed services must remain optional and must not be prerequisites for labeling, training, or deployment.
+*Teach AI what matters to your world. No coding required.*
+
+An open, extensible, self-hostable multimodal AI training operating system and industrial data platform—not merely a single-purpose computer vision tool, chatbot, or proprietary hosted-only control plane. The platform centers the training task rather than the camera or file format. Core workflows must operate in a self-hosted open-source installation; optional Forge/Lab/Nodes services must remain optional and must not be prerequisites for labeling, training, or deployment. See [`docs/plans/2026-11-17-multimodal-platform-roadmap.md`](docs/plans/2026-11-17-multimodal-platform-roadmap.md) for the Waves 0–4 multimodal capability roadmap and quality gates.
 
 ## Operating Context
 

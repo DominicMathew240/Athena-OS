@@ -142,3 +142,112 @@ class LandingCoversOnFrontViewTests(TestCase):
         sitemap = self.client.get("/sitemap.xml")
         self.assertEqual(sitemap.status_code, 200)
         self.assertIn("/docs</loc>", sitemap.content.decode())
+
+    def test_landing_page_presents_multimodal_positioning_no_code_outcomes_and_roadmap(self) -> None:
+        self.client.logout()
+        landing = self.client.get("/")
+        self.assertEqual(landing.status_code, 200)
+        html = landing.content.decode()
+        for expected in (
+            "Teach AI what matters to your world. No coding required.",
+            'data-testid="landing-teach-workflow"',
+            'data-testid="landing-outcome-vision"',
+            'data-testid="landing-outcome-audio"',
+            'data-testid="landing-outcome-ocr"',
+            'data-testid="landing-outcome-documents"',
+            'data-testid="landing-outcome-movements"',
+            'data-testid="landing-outcome-spreadsheets"',
+            "Acoustic Event Detection",
+            "WAV recordings + event labels",
+            "Missed sound events and false alarms",
+            'data-testid="landing-six-steps"',
+            'data-testid="landing-stage-stepper"',
+            'data-testid="landing-stage-raw"',
+            'data-testid="landing-stage-label"',
+            'data-testid="landing-stage-eval"',
+            'data-testid="landing-stage-deploy"',
+            'data-testid="landing-multimodal-visualizer"',
+            'id="lp-vis-canvas"',
+            'data-testid="landing-vis-inspector"',
+            'data-testid="landing-modality-gallery"',
+            'data-mini-modality="audio"',
+            'data-mini-modality="ocr"',
+            'data-mini-modality="documents"',
+            'data-mini-modality="movements"',
+            'data-mini-modality="spreadsheets"',
+            'data-mini-modality="vision"',
+            'data-testid="landing-roadmap-section"',
+            'data-testid="landing-fusion-showcase"',
+            'id="lp-fusion-tabs"',
+            'id="lp-fusion-canvas"',
+            "OS-CORE-001",
+            "OS-VIS-001",
+            "OS-AUD-001",
+            "OS-OCR-001",
+            "OS-TAB-001",
+        ):
+            with self.subTest(expected=expected):
+                self.assertIn(expected, html)
+        landing_js = (STATIC / "landing.js").read_text()
+        self.assertIn("lp-outcome-tabs", landing_js)
+        self.assertIn("ArrowRight", landing_js)
+        self.assertIn("drawStudioCanvas", landing_js)
+        self.assertIn("renderMiniCanvases", landing_js)
+        self.assertIn("drawFusionCanvas", landing_js)
+        self.assertIn("contentvisibilityautostatechange", landing_js)
+
+    def test_home_and_console_surface_outcome_first_training_recipes(self) -> None:
+        home_html = self.client.get("/").content.decode()
+        for expected in (
+            'data-testid="home-new-model-section"',
+            'id="home-outcome-tabs"',
+            "What do you want Athena to learn?",
+            "Acoustic Event Detection",
+            "WAV recordings + event labels",
+            "Missed sound events and false alarms",
+            "/detectors?recipe=audio",
+        ):
+            with self.subTest(home=expected):
+                self.assertIn(expected, home_html)
+        self.assertIn("home-outcome-tabs", (STATIC / "home.js").read_text())
+
+        console_html = self.client.get("/detectors").content.decode()
+        for expected in (
+            'id="project-recipe-picker"',
+            'id="project-recipe-note"',
+            'data-testid="console-recipe-vision"',
+            'data-testid="console-recipe-audio"',
+            'data-testid="console-recipe-ocr"',
+            'data-testid="console-recipe-spreadsheets"',
+        ):
+            with self.subTest(console=expected):
+                self.assertIn(expected, console_html)
+        console_js = (STATIC / "console.js").read_text()
+        self.assertIn("applyProjectRecipe", console_js)
+        self.assertIn('params.get("recipe")', console_js)
+
+    def test_docs_wiki_includes_multimodal_roadmap_and_delivery_waves_for_all_visitors(self) -> None:
+        for signed_in in (True, False):
+            if not signed_in:
+                self.client.logout()
+            else:
+                self.client.force_login(get_user_model().objects.get(username="operator"))
+            html = self.client.get("/docs").content.decode()
+            with self.subTest(signed_in=signed_in):
+                for expected in (
+                    'id="multimodal-roadmap"',
+                    'id="delivery-waves"',
+                    'data-toc="multimodal-roadmap"',
+                    'data-toc="delivery-waves"',
+                    "OS-CORE-001",
+                    "OS-VIS-001",
+                    "OS-AUD-001",
+                    "OS-OCR-001",
+                    "OS-TAB-001",
+                    "Athena Forge",
+                    "Athena Lab",
+                    "Athena Nodes",
+                    "T01–T04",
+                    "Event F1, missed events, false alarms per hour",
+                ):
+                    self.assertIn(expected, html)

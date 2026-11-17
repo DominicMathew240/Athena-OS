@@ -1477,6 +1477,85 @@ function openProjectDialog() {
   document.getElementById("project-name").focus();
 }
 
+const PROJECT_RECIPES = {
+  vision: {
+    modality: "image",
+    task: "Spot items or surface defects in pictures",
+    labelsPlaceholder: "e.g. dent, scratch, missing_part",
+    note: "Available today · Data needed: JPEG, PNG or WebP pictures + boxes · Quality check: found vs missed items and false alarms."
+  },
+  audio: {
+    modality: "audio",
+    task: "Classify equipment sounds or unusual faults",
+    labelsPlaceholder: "e.g. healthy_motor, bearing_fault, belt_slip",
+    note: "Coming soon (Wave 1) · Data needed: WAV recordings + event labels · Quality check: missed sound events and false alarms. Saving now keeps your project name and labels."
+  },
+  ocr: {
+    modality: "image",
+    task: "Read handwritten forms and check recognized text",
+    labelsPlaceholder: "e.g. date_field, signature, total_amount",
+    note: "Coming soon (Wave 1) · Data needed: handwritten forms + corrected transcripts · Quality check: character and word errors. Picture projects can store images today; handwriting tools are next."
+  },
+  documents: {
+    modality: "text",
+    task: "Sort documents and pull out key fields",
+    labelsPlaceholder: "e.g. invoice, safety_report, supplier_name",
+    note: "Coming soon (Wave 2) · Data needed: text documents + category tags or spans · Quality check: wrongly grouped files and missed fields. Saving now keeps your project name and labels."
+  },
+  movements: {
+    modality: "video",
+    task: "Recognize postures and working movements",
+    labelsPlaceholder: "e.g. safe_lift, bend_alert, hand_signal",
+    note: "Coming soon (Wave 3) · Data needed: pictures or clips + body points and movement labels · Quality check: point accuracy and missed movements. Saving now keeps your project name and labels."
+  },
+  spreadsheets: {
+    modality: "table",
+    task: "Predict an outcome from spreadsheet rows",
+    labelsPlaceholder: "e.g. pass, fail, needs_service",
+    note: "Coming soon (Wave 1) · Data needed: Excel or CSV rows + target column · Quality check: errors on unseen rows. Saving now keeps your project name and labels."
+  }
+};
+const recipePicker = document.getElementById("project-recipe-picker");
+const recipeNote = document.getElementById("project-recipe-note");
+const projectModalitySelect = document.getElementById("project-modality");
+const projectTaskInput = document.getElementById("project-task");
+const projectLabelsInput = document.getElementById("project-labels");
+let activeRecipeKey = "";
+
+function applyProjectRecipe(key) {
+  const recipe = PROJECT_RECIPES[key];
+  activeRecipeKey = recipe ? key : "";
+  if (recipePicker) {
+    recipePicker.querySelectorAll("[data-recipe]").forEach(button => {
+      button.setAttribute("aria-pressed", String(button.dataset.recipe === activeRecipeKey));
+    });
+  }
+  if (!recipe) {
+    if (recipeNote) { recipeNote.textContent = ""; recipeNote.hidden = true; }
+    return;
+  }
+  if (projectModalitySelect) {
+    projectModalitySelect.value = recipe.modality;
+    updateCustomModalityField();
+  }
+  if (projectTaskInput && (!projectTaskInput.value.trim() || Object.values(PROJECT_RECIPES).some(item => item.task === projectTaskInput.value.trim()))) {
+    projectTaskInput.value = recipe.task;
+  }
+  if (projectLabelsInput) projectLabelsInput.placeholder = recipe.labelsPlaceholder;
+  if (recipeNote) {
+    recipeNote.textContent = recipe.note;
+    recipeNote.hidden = false;
+  }
+}
+
+if (recipePicker) {
+  recipePicker.addEventListener("click", event => {
+    const button = event.target.closest("[data-recipe]");
+    if (!button) return;
+    applyProjectRecipe(button.dataset.recipe === activeRecipeKey ? "" : button.dataset.recipe);
+  });
+}
+
 function updateCustomModalityField() {
   const isCustom = document.getElementById("project-modality").value === "custom";
   customModalityField.hidden = !isCustom;
@@ -1750,6 +1829,7 @@ projectForm.addEventListener("submit", async event => {
     // Same as selectProject(): the address must name the open project, or a reload/Back reopens another one.
     rememberProjectInAddress(selectedId);
     projectForm.reset();
+    applyProjectRecipe("");
     updateCustomModalityField();
     projectDialog.close();
     render();
@@ -5890,6 +5970,16 @@ function renderWorkspace() {
 updateCustomModalityField();
 void loadAutolabelStatus();
 loadProjects();
+
+(() => {
+  const params = new URLSearchParams(location.search);
+  const recipe = params.get("recipe");
+  if (!recipe || !PROJECT_RECIPES[recipe] || !Athena.can("label")) return;
+  applyProjectRecipe(recipe);
+  openProjectDialog();
+  const cleanUrl = location.pathname + location.hash;
+  history.replaceState(null, "", cleanUrl);
+})();
 
 /* ---- One part of the project at a time. The project used to be one very long page; now "Overview" is the home
    screen and each other part (Labels, Pictures, ...) opens on its own. A part shows only while it belongs to the

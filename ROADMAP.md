@@ -2,6 +2,8 @@
 
 **Release and timing:** no public release date is committed. This roadmap separates the Python developer foundation already present in the tree from the labeling, training, and deployment platform that still needs to be built. A milestone is not complete until its exit gate is demonstrated from a clean install and documented for nontechnical users.
 
+> **17 November 2026 Multimodal Platform Review:** See [`docs/plans/2026-11-17-multimodal-platform-roadmap.md`](docs/plans/2026-11-17-multimodal-platform-roadmap.md) for the updated platform positioning (*Teach AI what matters to your world. No coding required.*), Wave 0–4 delivery sequence, capability priorities (`P0–P3`), reparenting of `T01–T65` under OS Core / Vision Domain Pack, and modality-specific quality gates.
+
 ## Product goal
 
 Build one open-source industrial platform where teams can manage many data types, create reviewed datasets with task-appropriate annotation tools, train/evaluate models, and configure web interfaces for real-world inference. A shared multimodal project/data/model lifecycle plus documented modality and connector plugins is the cross-cutting foundation; each milestone still proves one concrete workflow end to end.
