@@ -956,6 +956,74 @@ class PolicyVersion(_FrozenModel):
         constraints = (models.UniqueConstraint(fields=("operation", "version"), name="policyversion_unique_number"),)
 
 
+class OperationModelBinding(_FrozenModel):
+    """Immutable, server-verified binding of an operation to one exact model version.
+
+    The binding record is the operation's model pin: it stores which model version was
+    checked, the compatibility checks the server performed, and their results. It does
+    not make the model run; nothing executes an operation yet.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    operation = models.ForeignKey(Operation, on_delete=models.PROTECT, related_name="model_bindings")
+    version = models.PositiveIntegerField()
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    model_version = models.ForeignKey("ModelVersion", on_delete=models.PROTECT, related_name="operation_bindings")
+    compatibility = models.JSONField()
+    compatibility_sha256 = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-version", "-id")
+        constraints = (
+            models.UniqueConstraint(fields=("operation", "version"), name="operationmodelbinding_unique_number"),
+        )
+
+
+class OperationScreenVersion(_FrozenModel):
+    """Immutable versioned operation board layout; validated configuration only."""
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    operation = models.ForeignKey(Operation, on_delete=models.PROTECT, related_name="screen_versions")
+    version = models.PositiveIntegerField()
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    configuration = models.JSONField()
+    configuration_sha256 = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-version", "-id")
+        constraints = (
+            models.UniqueConstraint(fields=("operation", "version"), name="operationscreenversion_unique_number"),
+        )
+
+
+class OperationReleaseBundle(_AppendOnlyModel):
+    """Append-only release bundle assembled from one draft revision's verified pins.
+
+    A bundle is a release candidate, not a publication: no endpoint activates or
+    deactivates it. It stores its own full snapshot and digest, so later edits to the
+    draft or its components cannot alter it. The PROTECT foreign keys intentionally
+    refuse deleting a draft or operation that a bundle was built from.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    operation = models.ForeignKey(Operation, on_delete=models.PROTECT, related_name="release_bundles")
+    draft = models.ForeignKey("OperationDraft", on_delete=models.PROTECT, related_name="release_bundles")
+    draft_revision = models.PositiveIntegerField()
+    number = models.PositiveIntegerField()
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    snapshot = models.JSONField()
+    snapshot_sha256 = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-number", "-id")
+        constraints = (
+            models.UniqueConstraint(fields=("operation", "number"), name="operationreleasebundle_unique_number"),
+        )
+
+
 class OperationDraft(models.Model):
     """Private unpublished configuration, optionally bound to an operation; it does not produce results."""
 
@@ -975,6 +1043,12 @@ class OperationDraft(models.Model):
     )
     policy_version = models.ForeignKey(
         PolicyVersion, null=True, blank=True, on_delete=models.PROTECT, related_name="drafts"
+    )
+    model_binding = models.ForeignKey(
+        OperationModelBinding, null=True, blank=True, on_delete=models.PROTECT, related_name="drafts"
+    )
+    screen_version = models.ForeignKey(
+        OperationScreenVersion, null=True, blank=True, on_delete=models.PROTECT, related_name="drafts"
     )
     revision = models.PositiveIntegerField(default=1)
     created_at = models.DateTimeField(auto_now_add=True)

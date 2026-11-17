@@ -350,6 +350,8 @@ class OperationDraftPinTests(TestCase):
                 "geometry_version_id": self.geometry["id"],
                 "recipe_version_id": self.recipe["id"],
                 "policy_version_id": self.policy["id"],
+                "model_binding_id": None,
+                "screen_version_id": None,
             },
         )
         snapshot = self.client.get(url + "/versions").json()["versions"][0]["snapshot"]

@@ -20,9 +20,12 @@ from django.views.decorators.http import require_http_methods
 
 from .models import (
     GeometryVersion,
+    ModelVersion,
     Operation,
     OperationDraft,
     OperationDraftVersion,
+    OperationModelBinding,
+    OperationScreenVersion,
     OperationSource,
     PolicyVersion,
     RecipeVersion,
@@ -64,6 +67,8 @@ def _data(row):
             "geometry_version_id": None if row.geometry_version_id is None else str(row.geometry_version_id),
             "recipe_version_id": None if row.recipe_version_id is None else str(row.recipe_version_id),
             "policy_version_id": None if row.policy_version_id is None else str(row.policy_version_id),
+            "model_binding_id": None if row.model_binding_id is None else str(row.model_binding_id),
+            "screen_version_id": None if row.screen_version_id is None else str(row.screen_version_id),
         },
     }
 
@@ -101,6 +106,17 @@ def _snapshot_pins(row):
     if row.policy_version_id:
         policy = row.policy_version
         pins["policy"] = {"id": str(policy.id), "version": policy.version, "sha256": policy.configuration_sha256}
+    if row.model_binding_id:
+        binding = row.model_binding
+        pins["model"] = {
+            "id": str(binding.id),
+            "version": binding.version,
+            "model_version_id": str(binding.model_version_id),
+            "sha256": binding.compatibility_sha256,
+        }
+    if row.screen_version_id:
+        screen = row.screen_version
+        pins["screen"] = {"id": str(screen.id), "version": screen.version, "sha256": screen.configuration_sha256}
     return pins
 
 
@@ -389,7 +405,13 @@ def _validate(payload, *, update=False, recording_duration=None, existing_events
     return name.strip(), line, normalized_events, revision
 
 
-_PIN_FIELDS = ("geometry_version_id", "recipe_version_id", "policy_version_id")
+_PIN_FIELDS = (
+    "geometry_version_id",
+    "recipe_version_id",
+    "policy_version_id",
+    "model_binding_id",
+    "screen_version_id",
+)
 
 
 def _validate_pins(payload, operation, line):
@@ -452,6 +474,28 @@ def _validate_pins(payload, operation, line):
             if policy is None:
                 raise ValueError("Choose a policy version that belongs to this draft's operation.")
             resolved["policy"] = policy
+    if "model_binding_id" in pins:
+        binding_id = pins["model_binding_id"]
+        if binding_id is None:
+            resolved["model_binding"] = None
+        else:
+            if operation is None:
+                raise ValueError("Bind the draft to an operation before pinning component versions.")
+            binding = OperationModelBinding.objects.filter(id=binding_id, operation=operation).first()
+            if binding is None:
+                raise ValueError("Choose a model binding that belongs to this draft's operation.")
+            resolved["model_binding"] = binding
+    if "screen_version_id" in pins:
+        screen_id = pins["screen_version_id"]
+        if screen_id is None:
+            resolved["screen"] = None
+        else:
+            if operation is None:
+                raise ValueError("Bind the draft to an operation before pinning component versions.")
+            screen = OperationScreenVersion.objects.filter(id=screen_id, operation=operation).first()
+            if screen is None:
+                raise ValueError("Choose a screen version that belongs to this draft's operation.")
+            resolved["screen"] = screen
     return resolved
 
 
@@ -715,7 +759,13 @@ def operation_policy_versions(request: HttpRequest, operation_id):
 def operation_drafts(request: HttpRequest):
     if request.method == "GET":
         rows = OperationDraft.objects.filter(created_by=request.user).select_related(
-            "operation", "recording", "geometry_version", "recipe_version", "policy_version"
+            "operation",
+            "recording",
+            "geometry_version",
+            "recipe_version",
+            "policy_version",
+            "model_binding",
+            "screen_version",
         )[:200]
         return _no_store(JsonResponse({"drafts": [_data(row) for row in rows]}))
     try:
@@ -745,6 +795,8 @@ def operation_drafts(request: HttpRequest):
                     "geometry_version": pins.get("geometry"),
                     "recipe_version": pins.get("recipe"),
                     "policy_version": pins.get("policy"),
+                    "model_binding": pins.get("model_binding"),
+                    "screen_version": pins.get("screen"),
                 }
             ),
         )
@@ -782,6 +834,8 @@ def operation_draft(request: HttpRequest, draft_id):
         updates["geometry_version"] = pins.get("geometry", row.geometry_version_id and row.geometry_version)
         updates["recipe_version"] = pins.get("recipe", row.recipe_version_id and row.recipe_version)
         updates["policy_version"] = pins.get("policy", row.policy_version_id and row.policy_version)
+        updates["model_binding"] = pins.get("model_binding", row.model_binding_id and row.model_binding)
+        updates["screen_version"] = pins.get("screen", row.screen_version_id and row.screen_version)
     if line != row.line and row.geometry_version_id and not (pins and "geometry" in pins):
         # A geometry pin is only valid while the draft line matches the pinned geometry; a
         # changed line invalidates a kept pin, exactly as it clears reference crossings. A
@@ -794,7 +848,15 @@ def operation_draft(request: HttpRequest, draft_id):
         if not changed:
             return _error("This draft changed elsewhere. Reload it before saving.", 409)
         row = get_object_or_404(
-            rows.select_related("operation", "recording", "geometry_version", "recipe_version", "policy_version"),
+            rows.select_related(
+                "operation",
+                "recording",
+                "geometry_version",
+                "recipe_version",
+                "policy_version",
+                "model_binding",
+                "screen_version",
+            ),
             id=draft_id,
         )
         _record_draft_version(row)
@@ -813,3 +875,231 @@ def operation_draft_versions(request: HttpRequest, draft_id):
     except (TypeError, ValueError):
         return _error("A saved draft version failed its integrity check.", 500)
     return _no_store(JsonResponse({"versions": data, "has_more": has_more}))
+
+
+@access(POST="label")
+@require_http_methods(["GET", "POST"])
+def operation_model_bindings(request: HttpRequest, operation_id):
+    operation = get_object_or_404(Operation, id=operation_id, created_by=request.user)
+    versions = OperationModelBinding.objects.filter(operation=operation).select_related("model_version")
+    if request.method == "GET":
+        try:
+            data = [_model_binding_data(row) for row in versions]
+        except (TypeError, ValueError):
+            return _error("A model binding failed its integrity check.", 500)
+        return _no_store(JsonResponse({"model_bindings": data}))
+    try:
+        payload = _json_body(request)
+        if payload.keys() != {"model_version_id"}:
+            raise ValueError("Provide only the model version to bind.")
+        model_version_id = _scope_uuid(payload, "model_version_id")
+    except ValueError as error:
+        return _error(str(error))
+    model_version = get_object_or_404(
+        ModelVersion.objects.select_related("training_run", "training_run__dataset_version"),
+        id=model_version_id,
+        training_run__created_by=request.user,
+    )
+    compatibility = _model_compatibility(operation, model_version)
+    if not compatibility["compatible"]:
+        return _error(compatibility["reason"], 409)
+    with transaction.atomic():
+        version = (versions.order_by("-version").values_list("version", flat=True).first() or 0) + 1
+        row = OperationModelBinding.objects.create(
+            operation=operation,
+            version=version,
+            created_by=request.user,
+            model_version=model_version,
+            compatibility=compatibility,
+            compatibility_sha256=_component_sha256(compatibility),
+        )
+    return _no_store(JsonResponse({"model_binding": _model_binding_data(row)}, status=201))
+
+
+def _model_compatibility(operation, model_version):
+    """Server-side compatibility checks for binding a model version to an operation.
+
+    The checks are intentionally conservative and recorded in the binding: the model
+    must be an approved version whose training run belongs to the operation's owner,
+    taught on a dataset version that same owner created. Models without a traceable
+    training run cannot be bound at all (the route's owner scoping 404s them). A high
+    detection score never establishes compatibility; artifact-digest re-checks and
+    recipe label compatibility remain future work (see the T05 contract).
+    """
+    checks = {
+        "compatible": True,
+        "reason": None,
+        "model_version_id": str(model_version.id),
+        "model_version_number": model_version.version,
+        "artifact_sha256": model_version.artifact_sha256,
+        "stage": model_version.stage,
+        "labels": list(model_version.label_names),
+    }
+    if model_version.stage != ModelVersion.APPROVED:
+        checks.update(compatible=False, reason="Only an approved model version can be bound to an operation.")
+        return checks
+
+    run = model_version.training_run
+    if run is not None and run.dataset_version.created_by_id != operation.created_by_id:
+        checks.update(compatible=False, reason="Choose a model version taught from your own project data.")
+        return checks
+    return checks
+
+
+def _model_binding_data(version):
+    if _component_sha256(version.compatibility) != version.compatibility_sha256:
+        raise ValueError("A model binding failed its integrity check.")
+    return {
+        "id": str(version.id),
+        "operation_id": str(version.operation_id),
+        "version": version.version,
+        "model_version_id": str(version.model_version_id),
+        "compatibility": version.compatibility,
+        "sha256": version.compatibility_sha256,
+        "created_at": version.created_at.isoformat(),
+    }
+
+
+@access(POST="label")
+@require_http_methods(["GET", "POST"])
+def operation_screen_versions(request: HttpRequest, operation_id):
+    operation = get_object_or_404(Operation, id=operation_id, created_by=request.user)
+    versions = OperationScreenVersion.objects.filter(operation=operation)
+    if request.method == "GET":
+        try:
+            data = [_screen_data(row) for row in versions]
+        except (TypeError, ValueError):
+            return _error("A screen version failed its integrity check.", 500)
+        return _no_store(JsonResponse({"screen_versions": data}))
+    try:
+        payload = _json_body(request)
+        if payload.keys() != {"configuration"}:
+            raise ValueError("Provide only the screen configuration.")
+        configuration = _screen_configuration(payload["configuration"])
+    except ValueError as error:
+        return _error(str(error))
+    with transaction.atomic():
+        version = (versions.order_by("-version").values_list("version", flat=True).first() or 0) + 1
+        row = OperationScreenVersion.objects.create(
+            operation=operation,
+            version=version,
+            created_by=request.user,
+            configuration=configuration,
+            configuration_sha256=_component_sha256({"configuration": configuration}),
+        )
+    return _no_store(JsonResponse({"screen_version": _screen_data(row)}, status=201))
+
+
+def _screen_configuration(value):
+    fields = {"title", "show_entries", "show_exits"}
+    if not isinstance(value, dict) or value.keys() != fields:
+        raise ValueError("Provide the board title and both metric toggles.")
+    title = value["title"]
+    if not isinstance(title, str) or not title.strip() or len(title.strip()) > 120:
+        raise ValueError("Enter a board title of up to 120 characters.")
+    if type(value["show_entries"]) is not bool or type(value["show_exits"]) is not bool:
+        raise ValueError("Both metric toggles must be true or false.")
+    return {**value, "title": title.strip()}
+
+
+def _screen_data(version):
+    payload = {"configuration": version.configuration}
+    if _component_sha256(payload) != version.configuration_sha256:
+        raise ValueError("A screen version failed its integrity check.")
+    return {
+        "id": str(version.id),
+        "operation_id": str(version.operation_id),
+        "version": version.version,
+        "configuration": version.configuration,
+        "sha256": version.configuration_sha256,
+        "created_at": version.created_at.isoformat(),
+    }
+
+
+@access(POST="approve")
+@require_http_methods(["GET", "POST"])
+def operation_release_bundles(request: HttpRequest, draft_id):
+    """Assemble an append-only release bundle from one draft revision's pins.
+
+    Creating a bundle requires every component pin to be present and coherent;
+    it never edits the draft or any component version. A bundle is a release
+    candidate only — no endpoint publishes or activates it.
+    """
+    from .models import OperationReleaseBundle
+
+    draft = get_object_or_404(
+        OperationDraft.objects.filter(created_by=request.user).select_related(
+            "operation",
+            "recording",
+            "geometry_version",
+            "recipe_version",
+            "policy_version",
+            "model_binding",
+            "screen_version",
+        ),
+        id=draft_id,
+    )
+    if draft.operation_id is None:
+        return _error("Bind the draft to an operation before assembling a release bundle.")
+    if request.method == "GET":
+        bundles = draft.release_bundles.order_by("-number", "-id")
+        try:
+            data = [_bundle_data(row) for row in bundles]
+        except (TypeError, ValueError):
+            return _error("A release bundle failed its integrity check.", 500)
+        return _no_store(JsonResponse({"release_bundles": data}))
+    snapshot = _version_snapshot(draft)
+    missing = [name for name, pin in snapshot["component_pins"].items() if pin is None]
+    if missing:
+        return _error(
+            "Pin every component before assembling a release bundle (still missing: "
+            + ", ".join(sorted(missing))
+            + ").",
+            409,
+        )
+    if snapshot["recording"] is None:
+        return _error("Attach a recording before assembling a release bundle.", 409)
+    bundle_snapshot = {
+        "schema_version": 1,
+        "kind": "operation_release_bundle",
+        "operation_id": str(draft.operation_id),
+        "draft_id": str(draft.id),
+        "draft_revision": draft.revision,
+        "component_pins": snapshot["component_pins"],
+        "recording": snapshot["recording"],
+        "reference_events": snapshot["reference_events"],
+        "release_ready": True,
+    }
+    with transaction.atomic():
+        number = (
+            OperationReleaseBundle.objects.filter(operation_id=draft.operation_id)
+            .order_by("-number")
+            .values_list("number", flat=True)
+            .first()
+            or 0
+        ) + 1
+        row = OperationReleaseBundle.objects.create(
+            operation_id=draft.operation_id,
+            draft=draft,
+            draft_revision=draft.revision,
+            number=number,
+            created_by=request.user,
+            snapshot=bundle_snapshot,
+            snapshot_sha256=_snapshot_sha256(bundle_snapshot),
+        )
+    return _no_store(JsonResponse({"release_bundle": _bundle_data(row)}, status=201))
+
+
+def _bundle_data(row):
+    if _snapshot_sha256(row.snapshot) != row.snapshot_sha256:
+        raise ValueError("A release bundle failed its integrity check.")
+    return {
+        "id": str(row.id),
+        "operation_id": str(row.operation_id),
+        "draft_id": str(row.draft_id),
+        "draft_revision": row.draft_revision,
+        "number": row.number,
+        "sha256": row.snapshot_sha256,
+        "created_at": row.created_at.isoformat(),
+        "snapshot": row.snapshot,
+    }

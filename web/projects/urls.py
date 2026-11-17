@@ -64,6 +64,21 @@ urlpatterns = [
         name="operation-policy-versions",
     ),
     path(
+        "api/operations/<uuid:operation_id>/model-bindings",
+        operation_views.operation_model_bindings,
+        name="operation-model-bindings",
+    ),
+    path(
+        "api/operations/<uuid:operation_id>/screen-versions",
+        operation_views.operation_screen_versions,
+        name="operation-screen-versions",
+    ),
+    path(
+        "api/operation-drafts/<uuid:draft_id>/release-bundles",
+        operation_views.operation_release_bundles,
+        name="operation-release-bundles",
+    ),
+    path(
         "api/operation-drafts/<uuid:draft_id>/recording",
         recording_views.operation_recording,
         name="operation-recording",

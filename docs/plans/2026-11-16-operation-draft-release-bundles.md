@@ -31,6 +31,12 @@ Initial source-view and geometry version APIs now create immutable, numbered rec
 
 Accordingly each draft snapshot has `release_ready: false`. It is a historical draft version, not a release candidate, published result, or inference configuration. No endpoint publishes or activates a release.
 
+**Final 17 November 2026 update — T05 bundle service:** all six component pins and the append-only bundle service now exist.
+
+- **Model pin:** `OperationModelBinding` (`POST/GET /api/operations/<id>/model-bindings`) binds one exact `ModelVersion` to an operation after server-side compatibility checks, and the check results are recorded immutably in the binding (stage must be `approved`; the model's training data must come from the owner's own project; artifact digest and labels are recorded). An incompatible model is refused with 409.
+- **Screen pin:** `OperationScreenVersion` (`POST/GET /api/operations/<id>/screen-versions`) stores an immutable, validated board-layout configuration (title plus metric toggles).
+- **Bundle service:** `POST/GET /api/operation-drafts/<id>/release-bundles` (Approver role to assemble; owner-scoped) builds an `OperationReleaseBundle` — an append-only record (no update, no edit, no delete) numbered per operation, storing its own full snapshot (all six pins with digests, recording checksum, reference events, draft revision) and canonical SHA-256. Assembly requires the draft to be bound to an operation, every component pin present, and a recording attached; each missing piece is named in the refusal. Later draft edits cannot alter an existing bundle, and PROTECT foreign keys refuse deleting a draft or operation a bundle was built from. A bundle is a release candidate only: publication/activation and rollback remain future audited state transitions, so nothing is live yet.
+
 ## Required immutable bundle shape
 
 A future release bundle must include a full, immutable snapshot and digest for all of the following, all scoped to the same operation and owner:
@@ -44,6 +50,6 @@ A future release bundle must include a full, immutable snapshot and digest for a
 
 The bundle must also pin the operation/draft revision and recording identity/checksum where relevant. Every reference must resolve to an owned/authorized version; client-provided IDs or role names are not proof of compatibility. Missing, mutable, incompatible, or unverifiable references block bundle creation. A draft save must never edit an existing bundle. Publication/activation and rollback are separate audited state transitions and remain future work.
 
-## Remaining T05 work
+## Remaining work after T05
 
-Still implement model and screen version references with server-verified compatibility, then build the append-only bundle service/API and prove that changes to a draft or source cannot alter an existing bundle. Source-view, geometry, recipe and policy versions exist and can be pinned coherently into draft snapshots; until model/screen pins and the compatibility checks exist, do not call a draft snapshot a release bundle or report publication readiness.
+The versioned-draft and release-bundle contract is implemented. What remains beyond it: publication/activation and rollback as separate audited state transitions (today a bundle is only a stored candidate); a runtime that consumes a bundle to produce results (T19+); and the replay/comparison loop (T26+). Do not describe a bundle as a published operation until activation exists.
