@@ -53,7 +53,8 @@ def inspect_upload(upload):
                     ["ffprobe", "-v", "error", "-protocol_whitelist", "file,pipe", "-f", "mov",
                      "-enable_drefs", "0", "-use_absolute_path", "0",
                      "-select_streams", "v:0", "-show_entries",
-                     "stream=codec_name,width,height:stream_tags=rotate:stream_side_data=rotation:format=duration",
+                     "stream=codec_name,width,height:stream_tags=rotate:stream_side_data=rotation:"
+                     "format=duration:format_tags=creation_time",
                      "-of", "json", temp.name],
                     capture_output=True, check=True, timeout=15,
                 )
@@ -65,6 +66,7 @@ def inspect_upload(upload):
                     item.get("rotation", 0) for item in stream.get("side_data_list", [])
                 ]
                 rotated = any(float(value) % 360 != 0 for value in rotations)
+                captured_at = _parse_creation_time(data["format"].get("tags", {}).get("creation_time"))
             except FileNotFoundError as error:
                 raise RecordingError("Video checking is unavailable. Ask an administrator to install ffprobe.", unavailable=True) from error
             except (subprocess.TimeoutExpired, subprocess.CalledProcessError, ValueError, TypeError, KeyError, IndexError, json.JSONDecodeError) as error:
@@ -75,9 +77,54 @@ def inspect_upload(upload):
                 raise RecordingError("Choose a recording no longer than 5 minutes.")
             if rotated:
                 raise RecordingError("Rotated video is not supported yet. Export it with rotation applied to the picture.")
-            return {"sha256": digest.hexdigest(), "size_bytes": count, "width": width, "height": height, "duration_seconds": duration}
+            if not decode_ok(temp.name):
+                raise RecordingError(
+                    "This recording's pictures could not be decoded. Re-export it as a standard H.264 MP4 and try again."
+                )
+            return {
+                "sha256": digest.hexdigest(), "size_bytes": count, "width": width, "height": height,
+                "duration_seconds": duration, "captured_at": captured_at,
+            }
     finally:
         upload.seek(0)
+
+
+def _parse_creation_time(value):
+    """MP4 creation_time tags are RFC 3339 strings in UTC; anything unparsable is simply absent."""
+    from datetime import datetime
+
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.strip().replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return None
+    return parsed
+
+
+def decode_ok(path, *, timeout=60):
+    """A real decode pass: demuxing is not enough, the pictures must decode.
+
+    A container can carry valid metadata while its samples are corrupt; a
+    recording like that would look imported and then fail at replay time. The
+    full file is decoded once here so a broken import is reported at import,
+    not later. No frames are kept — the output is discarded.
+    """
+    try:
+        result = subprocess.run(
+            ["ffmpeg", "-v", "error", "-xerror", "-nostdin", "-protocol_whitelist", "file",
+             "-i", str(path), "-f", "null", "-"],
+            capture_output=True, timeout=timeout,
+        )
+    except FileNotFoundError as error:
+        raise RecordingError(
+            "Video checking is unavailable. Ask an administrator to install ffmpeg.", unavailable=True
+        ) from error
+    except subprocess.TimeoutExpired as error:
+        raise RecordingError("Checking this recording took too long. Try a shorter or smaller file.") from error
+    return result.returncode == 0
 
 
 def try_cleanup(cleanup_id, *, using="default"):

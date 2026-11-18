@@ -1078,6 +1078,34 @@ class OperationDraftVersion(_GuardedModel):
         )
 
 
+class OperationSourceRecording(models.Model):
+    """A durable, whole-file recorded-video import attached to one source.
+
+    Unlike a draft's throwaway test recording, this is durable source material:
+    the file is preserved as-is (never reduced to sampled stills), and the row
+    records its checksum, dimensions, duration, the container's own creation
+    time when present, and the moment Athena ingested it. Nothing here decodes
+    the recording into events; that is later, separate work.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    source = models.ForeignKey(OperationSource, on_delete=models.CASCADE, related_name="recordings")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    storage_key = models.CharField(max_length=500)
+    filename = models.CharField(max_length=255)
+    sha256 = models.CharField(max_length=64)
+    size_bytes = models.PositiveIntegerField()
+    width = models.PositiveIntegerField()
+    height = models.PositiveIntegerField()
+    duration_seconds = models.FloatField()
+    # The recording's own clock: MP4 creation_time when the container carries it (UTC), else null.
+    captured_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+
+
 class OperationRecording(models.Model):
     """One private test recording attached to an unpublished draft."""
 

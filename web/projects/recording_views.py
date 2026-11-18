@@ -71,6 +71,8 @@ def operation_recording(request, draft_id):
         metadata = recordings.inspect_upload(upload)
     except recordings.RecordingError as error:
         return _error(str(error), 503 if error.unavailable else 400)
+    # A draft's test clip keeps the legacy shape; the source clock belongs to durable source imports.
+    metadata.pop("captured_at", None)
     key = default_storage.save(f"operation-recordings/{draft_id}/{uuid.uuid4()}.mp4", upload)
     try:
         with transaction.atomic():

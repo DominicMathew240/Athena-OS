@@ -570,6 +570,8 @@ class EveryRouteDeclaresItsRole(RoleBase):
         "api/operation-drafts/<uuid:draft_id>/release-bundles": {"POST": APPROVE},
         "api/operation-drafts/<uuid:draft_id>/recording": {"POST": LABEL, "DELETE": LABEL},
         "api/operation-drafts/<uuid:draft_id>/recording/content": {},
+        "api/operation-sources/<uuid:source_id>/recordings": {"POST": LABEL},
+        "api/operation-sources/<uuid:source_id>/recordings/<uuid:recording_id>/content": {},
         "api/inspections": {"POST": LABEL},
         "api/inspections/summary": {},
         "api/inspections/<uuid:inspection_id>": {"DELETE": LABEL},

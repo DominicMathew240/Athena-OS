@@ -12,6 +12,7 @@ from . import (
     recording_views,
     results_views,
     settings_views,
+    source_recording_views,
     training_views,
     views,
     vision_pages,
@@ -43,6 +44,16 @@ urlpatterns = [
     ),
     path("api/operation-sites", operation_views.operation_sites, name="operation-sites"),
     path("api/operation-sources", operation_views.operation_sources, name="operation-sources"),
+    path(
+        "api/operation-sources/<uuid:source_id>/recordings",
+        source_recording_views.source_recordings,
+        name="source-recordings",
+    ),
+    path(
+        "api/operation-sources/<uuid:source_id>/recordings/<uuid:recording_id>/content",
+        source_recording_views.source_recording_content,
+        name="source-recording-content",
+    ),
     path("api/operations", operation_views.operations, name="operations"),
     path("api/operations/<uuid:operation_id>", operation_views.operation_detail, name="operation-detail"),
     path(
