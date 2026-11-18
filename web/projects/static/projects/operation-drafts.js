@@ -98,6 +98,7 @@
     renderReferenceEvents();
     status.textContent = draft ? "Saved draft. Changes are saved when you select Save draft." : "New draft — not saved yet.";
     error.textContent = "";
+    document.dispatchEvent(new CustomEvent("athena:draft-shown", { detail: draft }));
   }
 
   async function loadList() {

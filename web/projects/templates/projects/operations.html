@@ -70,5 +70,78 @@
   <p id="draft-list-status" role="status">Loading drafts…</p>
   <ul id="draft-list"></ul>
 </section>
+<section class="a-card step" id="operation-setup" aria-labelledby="operation-heading">
+  <h2 class="a-h2" id="operation-heading">Operation setup</h2>
+  <p class="a-help">An operation is where a draft will one day run: one site, one source of pictures, and the frozen versions of every choice. Create the site, source and operation here; attach a draft to it below once one is selected.</p>
+  <p id="draft-operation-line" class="a-help" hidden></p>
+  <div id="attach-area"></div>
+  <p id="attach-status" class="a-help" role="status" aria-live="polite"></p>
+  <p id="attach-error" class="a-error" role="alert"></p>
+  <h3 class="a-h3">Your operations</h3>
+  <ul id="operation-list" class="op-rows"></ul>
+  <details class="op-details" id="create-site-details">
+    <summary>Create a site</summary>
+    <p class="a-help">A site is a place, like one shop. Sites are private to you.</p>
+    <div class="line-fields">
+      <div class="a-field"><label class="a-label" for="site-name">Site name</label><input class="a-input" id="site-name" maxlength="120" placeholder="e.g. Kuala Lumpur shop" data-needs="label"></div>
+      <div class="a-field"><label class="a-label" for="site-timezone">Time zone</label><input class="a-input" id="site-timezone" maxlength="64" placeholder="e.g. Asia/Kuala_Lumpur" data-needs="label"></div>
+    </div>
+    <p id="site-status" class="a-help" role="status" aria-live="polite"></p>
+    <p id="site-error" class="a-error" role="alert"></p>
+    <button class="a-btn" type="button" id="site-create" data-needs="label" data-testid="create-site">Create site</button>
+  </details>
+  <details class="op-details" id="create-source-details">
+    <summary>Add a source to a site</summary>
+    <p class="a-help">A source is where pictures come from, like one camera or a set of recordings.</p>
+    <div class="line-fields">
+      <div class="a-field"><label class="a-label" for="source-site">Site</label><select class="a-input" id="source-site" data-needs="label"></select></div>
+      <div class="a-field"><label class="a-label" for="source-name">Source name</label><input class="a-input" id="source-name" maxlength="120" placeholder="e.g. Front entrance" data-needs="label"></div>
+      <div class="a-field"><label class="a-label" for="source-kind">Kind</label><select class="a-input" id="source-kind" data-needs="label">
+        <option value="recorded_video">Recorded video</option>
+        <option value="camera">Camera</option>
+        <option value="image_collection">Image collection</option>
+      </select></div>
+    </div>
+    <p id="source-status" class="a-help" role="status" aria-live="polite"></p>
+    <p id="source-error" class="a-error" role="alert"></p>
+    <button class="a-btn" type="button" id="source-create" data-needs="label" data-testid="create-source">Add source</button>
+  </details>
+  <details class="op-details" id="create-operation-details">
+    <summary>Create an operation</summary>
+    <p class="a-help">An operation ties one site and one source to a name; a draft is attached to exactly one operation.</p>
+    <div class="line-fields">
+      <div class="a-field"><label class="a-label" for="operation-site">Site</label><select class="a-input" id="operation-site" data-needs="label"></select></div>
+      <div class="a-field"><label class="a-label" for="operation-source">Source (must belong to the site)</label><select class="a-input" id="operation-source" data-needs="label"></select></div>
+      <div class="a-field"><label class="a-label" for="operation-name">Operation name</label><input class="a-input" id="operation-name" maxlength="120" placeholder="e.g. Shop entrance counter" data-needs="label"></div>
+    </div>
+    <p id="operation-create-status" class="a-help" role="status" aria-live="polite"></p>
+    <p id="operation-create-error" class="a-error" role="alert"></p>
+    <button class="a-btn" type="button" id="operation-create" data-needs="label" data-testid="create-operation">Create operation</button>
+  </details>
+  <p id="operation-status" class="a-help" role="status" aria-live="polite" hidden></p>
+  <p id="operation-error" class="a-error" role="alert"></p>
+  <h3 class="a-h3">Your sites</h3>
+  <ul id="site-list" class="op-rows"></ul>
+</section>
+<section class="a-card step" id="pin-section" aria-labelledby="pins-heading" hidden>
+  <h2 class="a-h2" id="pins-heading">Frozen versions pinned to this draft</h2>
+  <p class="a-help">A pin locks one frozen version of a choice into the draft. A release candidate can only be assembled once every part is pinned.</p>
+  <div id="pin-fields" class="line-fields"></div>
+  <p id="pin-status" class="a-help" role="status" aria-live="polite"></p>
+  <p id="pin-error" class="a-error" role="alert"></p>
+</section>
+<section class="section" id="creator-section" aria-labelledby="creators-heading" hidden>
+  <h2 class="a-h2" id="creators-heading">Freeze new versions</h2>
+  <p class="a-help">Each card below saves today's choices as a new frozen version for this operation. Frozen versions never change afterwards.</p>
+  <p id="creator-status" class="a-help" role="status" aria-live="polite"></p>
+  <p id="creator-error" class="a-error" role="alert"></p>
+  <div id="operation-creators" class="op-creators"></div>
+</section>
+<section class="a-card step" id="release-section" aria-labelledby="release-heading" hidden>
+  <h2 class="a-h2" id="release-heading">Release candidates</h2>
+  <p id="release-status" class="a-help" role="status" aria-live="polite"></p>
+  <p id="release-error" class="a-error" role="alert"></p>
+  <div id="release-area"></div>
+</section>
 {% endblock %}
-{% block scripts %}<script src="{% static 'projects/operation-line.js' %}"></script><script src="{% static 'projects/operation-drafts.js' %}"></script>{% endblock %}
+{% block scripts %}<script src="{% static 'projects/operation-line.js' %}"></script><script src="{% static 'projects/operation-drafts.js' %}"></script><script src="{% static 'projects/operation-versions.js' %}"></script>{% endblock %}

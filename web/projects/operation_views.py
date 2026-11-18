@@ -819,6 +819,18 @@ def operation_draft(request: HttpRequest, draft_id):
     try:
         recording = getattr(row, "recording", None)
         payload = _json_body(request)
+        operation = row.operation
+        bind_to = None
+        if "operation_id" in payload:
+            # A draft joins its operation once, when it is first attached; after that the
+            # binding is permanent, like the component versions it makes possible.
+            if row.operation_id is not None:
+                raise ValueError("This draft already belongs to its operation.")
+            bind_to = _scope_uuid(payload, "operation_id")
+            payload.pop("operation_id")
+            operation = get_object_or_404(
+                Operation.objects.select_related("site", "source"), id=bind_to, created_by=request.user
+            )
         name, line, reference_events, revision = _validate(
             payload,
             update=True,
@@ -826,10 +838,12 @@ def operation_draft(request: HttpRequest, draft_id):
             existing_events=row.reference_events,
             existing_line=row.line,
         )
-        pins = _validate_pins(payload, row.operation, line)
+        pins = _validate_pins(payload, operation, line)
     except ValueError as error:
         return _error(str(error))
     updates = {"name": name, "line": line, "reference_events": reference_events}
+    if bind_to is not None:
+        updates["operation_id"] = bind_to
     if pins is not None:
         updates["geometry_version"] = pins.get("geometry", row.geometry_version_id and row.geometry_version)
         updates["recipe_version"] = pins.get("recipe", row.recipe_version_id and row.recipe_version)
