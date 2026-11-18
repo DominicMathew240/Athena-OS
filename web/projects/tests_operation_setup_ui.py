@@ -102,6 +102,20 @@ class OperationsPageTests(TestCase):
             with self.subTest(needle=needle):
                 self.assertContains(page, needle)
 
+    def test_page_includes_the_guided_setup_surfaces(self):
+        page = self.client.get("/operations")
+        self.assertEqual(page.status_code, 200)
+        for needle in (
+            'id="guide-card"',
+            'id="guide-steps"',
+            'id="guide-stage"',
+            'id="guide-exit"',
+            'id="draft-section"',
+            "operation-setup-guide.js",
+        ):
+            with self.subTest(needle=needle):
+                self.assertContains(page, needle)
+
     def test_scope_forms_are_gated_to_the_labeler_role(self):
         page = self.client.get("/operations")
         for needle in ('id="site-create" data-needs="label"', 'id="source-create" data-needs="label"', 'id="operation-create" data-needs="label"'):

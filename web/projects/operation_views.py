@@ -70,6 +70,7 @@ def _data(row):
             "model_binding_id": None if row.model_binding_id is None else str(row.model_binding_id),
             "screen_version_id": None if row.screen_version_id is None else str(row.screen_version_id),
         },
+        "release_bundles": row.release_bundles.count(),
     }
 
 

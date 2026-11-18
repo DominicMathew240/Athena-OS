@@ -7,7 +7,16 @@
     <p>Save a private draft now and return to it later. Recorded-video replay is not available yet; these drafts cannot count people or connect to a camera.</p>
   </div>
 </header>
-<section class="a-card step" aria-labelledby="draft-heading">
+<section class="a-card step" id="guide-card" aria-labelledby="guide-heading" data-testid="operation-guide">
+  <div class="guide-top">
+    <h2 class="a-h2" id="guide-heading">Set up an operation, one step at a time</h2>
+    <p class="a-help">Each step has one clear next action. Your draft saves as you go, and you can pick up where you left off after a reload. Nothing here counts people yet.</p>
+    <button class="a-btn" type="button" id="guide-exit" data-testid="guide-exit">Exit setup</button>
+  </div>
+  <ol class="guide-steps" id="guide-steps"></ol>
+  <div class="guide-stage" id="guide-stage"></div>
+</section>
+<section class="a-card step" id="draft-section" aria-labelledby="draft-heading">
   <h2 class="a-h2" id="draft-heading">Create or edit a draft</h2>
   <p class="a-help">Save the name first, then add one private recording and mark a line on its picture. Testing counts is still being built. Drafts are visible only to their creator.</p>
   <form id="draft-form">
@@ -144,4 +153,4 @@
   <div id="release-area"></div>
 </section>
 {% endblock %}
-{% block scripts %}<script src="{% static 'projects/operation-line.js' %}"></script><script src="{% static 'projects/operation-drafts.js' %}"></script><script src="{% static 'projects/operation-versions.js' %}"></script>{% endblock %}
+{% block scripts %}<script src="{% static 'projects/operation-line.js' %}"></script><script src="{% static 'projects/operation-drafts.js' %}"></script><script src="{% static 'projects/operation-versions.js' %}"></script><script src="{% static 'projects/operation-setup-guide.js' %}"></script>{% endblock %}

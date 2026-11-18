@@ -256,6 +256,15 @@ class ReleaseBundleHappyPathTests(ReleaseBundleBase):
         self.assertEqual([item["number"] for item in listed], [2, 1])
         self.assertEqual(set(OperationReleaseBundle.objects.values_list("number", flat=True)), {1, 2})
 
+    def test_draft_payload_counts_its_bundles_for_honest_resume(self):
+        # The guided setup reads this count to know the release step is done.
+        draft = self._create_draft()
+        detail = self.client.get(f"/api/operation-drafts/{draft['id']}").json()["draft"]
+        self.assertEqual(detail["release_bundles"], 0)
+        self._create_bundle(draft)
+        detail = self.client.get(f"/api/operation-drafts/{draft['id']}").json()["draft"]
+        self.assertEqual(detail["release_bundles"], 1)
+
 
 class ReleaseBundleRefusalTests(ReleaseBundleBase):
     def test_each_missing_pin_is_named_and_nothing_is_stored(self):

@@ -26,3 +26,16 @@
 #release-area > .a-btn { margin-top: .75rem; }
 #pin-section .a-field { margin: 0; }
 #pin-section .line-fields { align-items: end; }
+/* Guided setup (T06): a stepper that moves the existing sections through one step at a time. */
+.guide-top { display: flex; flex-wrap: wrap; align-items: start; justify-content: space-between; gap: .75rem 1rem; }
+.guide-top > div { max-width: 46rem; }
+.guide-steps { display: flex; flex-wrap: wrap; gap: .4rem; padding: 0; margin: 1rem 0 .25rem; list-style: none; }
+.guide-step { display: inline-flex; align-items: center; gap: .5rem; padding: .4rem .8rem; border: 1px solid var(--c-line-strong); border-radius: 2rem; background: var(--c-surface); font-size: 14px; color: var(--c-text-2); cursor: pointer; }
+.guide-step[aria-current="step"] { border-color: var(--c-accent); background: var(--c-accent-soft); color: var(--c-text); font-weight: 600; }
+.guide-step[data-done="1"] { border-color: var(--c-ok-line); }
+.guide-step[data-done="1"] .guide-dot { background: var(--c-ok); }
+.guide-dot { width: .55rem; height: .55rem; border-radius: 50%; background: var(--c-line-strong); flex: none; }
+.guide-stage { margin: .75rem 0 0; }
+.guide-hint { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; padding: .75rem .9rem; border: 1px solid var(--c-line); border-left: 3px solid var(--c-accent); border-radius: .6rem; background: var(--c-surface-2); }
+.guide-hint .a-btn { margin: 0; }
+body[data-guide="off"] #guide-card { display: none; }

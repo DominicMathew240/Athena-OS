@@ -238,6 +238,7 @@
       };
       const result = await api(`/api/operation-drafts/${draft.id}`, { method: "PUT", json: payload });
       setDraft(result.draft);
+      announceDraft(result.draft);
       areas.attach.note.textContent = "Draft attached to the operation. You can now freeze and pin its versions.";
     }, "Attaching…", areas.attach));
     wrap.append(formRow("Attach this draft to an operation", select), button);
@@ -304,6 +305,7 @@
     await guarded(async () => {
       const result = await api(`/api/operation-drafts/${draft.id}`, { method: "PUT", json: payload });
       setDraft(result.draft);
+      announceDraft(result.draft);
       areas.pins.note.textContent = chosen ? "Pin saved with the draft." : "Pin removed. Pin every part again before assembling a release candidate.";
     }, "Saving the pin…", areas.pins);
   }
@@ -526,6 +528,7 @@
         const result = await api(`/api/operation-drafts/${draft.id}/release-bundles`, { method: "POST" });
         areas.release.note.textContent = `Release candidate ${result.release_bundle.number} assembled from draft revision ${result.release_bundle.draft_revision}.`;
         await renderBundleArea();
+        document.dispatchEvent(new CustomEvent("athena:bundle-assembled", { detail: result.release_bundle }));
       }, "Assembling…", areas.release));
     }
     box.append(
@@ -550,8 +553,11 @@
   }
 
   /* The drafts editor (operation-drafts.js) owns the draft form and list; this script
-     listens for its selection changes so the setup area always shows the same draft. */
+     listens for its selection changes so the setup area always shows the same draft.
+     Pin and attach saves change the draft too, so their results are announced the
+     same way for anything watching (the guided setup re-reads state from them). */
   document.addEventListener("athena:draft-shown", event => setDraft(event.detail));
+  const announceDraft = draft => document.dispatchEvent(new CustomEvent("athena:draft-updated", { detail: draft }));
 
   wireScopeForms();
   loadScope().catch(problem => { areas.setup.err.textContent = problem.message; });

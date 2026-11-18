@@ -111,6 +111,7 @@
         button.type = "button";
         button.className = "a-btn";
         button.textContent = draft.name;
+        button.dataset.draftId = draft.id;
         button.addEventListener("click", async () => {
           if (busy) return;
           setBusy(true);
@@ -126,6 +127,7 @@
         list.append(item);
       }
       listStatus.textContent = result.drafts.length ? (result.drafts.length === 200 ? "Showing up to 200 recent drafts." : "Select a draft to continue.") : "No drafts yet.";
+      document.dispatchEvent(new CustomEvent("athena:draft-list"));
     } catch (problem) { listStatus.textContent = `Could not load drafts: ${problem.message}`; }
   }
 
@@ -148,6 +150,7 @@
         method: current ? "PUT" : "POST", json: payload
       });
       showDraft(result.draft, true);
+      document.dispatchEvent(new CustomEvent("athena:draft-saved", { detail: result.draft }));
       if (referenceEventsInvalidated) status.textContent = "Line changed; the old reference crossings were cleared. Mark them again against the saved line.";
       await loadList();
     } catch (problem) {
