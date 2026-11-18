@@ -23,6 +23,16 @@ BUILTIN_PLUGINS = (
     "projects.modalities.audio:AudioModalityPlugin",
 )
 
+#: Plugins looked up by *annotation kind* instead of modality. A recipe may ask an image
+#: project for a different annotation style than the image plugin's boxes (handwriting OCR
+#: wants transcripts); those plugins register here so dispatch stays a lookup, not an
+#: ``if recipe == ...`` branch. ``register_plugin`` fills this table automatically. The
+#: class is stored, not an instance, and instances are kept here too (a by-kind plugin is
+#: not necessarily the modality's registered one, so ``get_plugin(modality)`` must not be
+#: used to build them).
+_annotation_registry: dict[str, type[ModalityPlugin]] = {}
+_annotation_instances: dict[str, ModalityPlugin] = {}
+
 _registry: dict[str, type[ModalityPlugin]] = {}
 _instances: dict[str, ModalityPlugin] = {}
 _loaded = False
@@ -36,12 +46,25 @@ def register_plugin(cls: type[ModalityPlugin], *, replace: bool = False) -> type
         raise ValueError(f"A modality plugin for {modality!r} is already registered.")
     _registry[modality] = cls
     _instances.pop(modality, None)
+    # Same class, indexed by its annotation kind too: a recipe that names this kind finds it
+    # without knowing (or competing with) the modality its files are validated by. Only a
+    # class whose kind differs from the modality's registered plugin is kept, so the builtin
+    # image plugin (boxes) does not shadow the OCR plugin (transcripts) or the other way round.
+    kind = getattr(cls(), "annotation_kind", "")
+    if isinstance(kind, str) and kind:
+        _annotation_registry[kind] = cls
+        _annotation_instances.pop(kind, None)
     return cls
 
 
 def unregister_plugin(modality: str) -> None:
-    _registry.pop(modality, None)
+    cls = _registry.pop(modality, None)
     _instances.pop(modality, None)
+    if cls is not None:
+        kind = getattr(cls(), "annotation_kind", "")
+        if isinstance(kind, str) and kind and _annotation_registry.get(kind) is cls:
+            _annotation_registry.pop(kind, None)
+            _annotation_instances.pop(kind, None)
 
 
 def _load_path(path: str) -> type[ModalityPlugin]:
@@ -91,10 +114,30 @@ def plugin_or_refusal(modality: str) -> ModalityPlugin:
     return plugin
 
 
+def get_annotation_plugin(kind: str) -> ModalityPlugin | None:
+    """The plugin whose annotations are of ``kind`` (e.g. ``"transcripts"``), or ``None``.
+
+    Two lookups: the by-kind table ``register_plugin`` fills (a class that shares a modality
+    with another plugin but annotates differently lives only here), then the registered
+    modality plugins whose kind matches (a modality's own plugin is always found through it)."""
+    _load_all()
+    cls = _annotation_registry.get(kind)
+    if cls is not None:
+        if kind not in _annotation_instances:
+            _annotation_instances[kind] = cls()
+        return _annotation_instances[kind]
+    for modality in sorted(_registry):
+        plugin = get_plugin(modality)
+        if getattr(plugin, "annotation_kind", "") == kind:
+            return plugin
+    return None
+
+
 __all__ = [
     "ModalityPlugin",
     "UnsupportedModalityError",
     "available_modalities",
+    "get_annotation_plugin",
     "get_plugin",
     "plugin_or_refusal",
     "register_plugin",

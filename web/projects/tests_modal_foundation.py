@@ -112,9 +112,12 @@ class RecipeRegistryTests(SignedInMixin, TestCase):
         found = recipes()
         self.assertIn("vision-detection", found)
         self.assertTrue(found["vision-detection"].available)
-        # Wave 1 (OS-AUD-001): the audio recipe landed, so it is available too.
+        # Wave 1 landed both: the audio recipe (OS-AUD-001) and the handwriting-ocr recipe
+        # (OS-OCR-001) are available; only tabular-prediction stays a placeholder.
         self.assertTrue(found["audio-classification"].available)
-        for key in ("handwriting-ocr", "tabular-prediction"):
+        self.assertIn("handwriting-ocr", found)
+        self.assertTrue(found["handwriting-ocr"].available)
+        for key in ("tabular-prediction",):
             self.assertIn(key, found)
             self.assertFalse(found[key].available)
             self.assertTrue(found[key].unavailable_reason)

@@ -29,15 +29,20 @@ def _image_project(project_id) -> Project:
 
 
 def _generic_dataset_project(project_id) -> Project | None:
-    """The project when its data type has a registered plugin with a labeling kind; else None.
+    """The project when its data type has a labeling plugin with a labeling kind; else None.
 
     Non-image projects whose plugin has no annotation kind (or has no plugin at all) keep the
-    old refusal: the caller 404s exactly as before."""
+    old refusal: the caller 404s exactly as before. An image project counts as generic when
+    its recipe asks for a different annotation style than boxes (handwriting OCR): its labels
+    are generic AssetAnnotations, so its snapshots are generic ones."""
+    from .annotations import image_project_uses_boxes
     from .modalities import get_plugin
 
     project = Project.objects.filter(id=project_id).first()
-    if project is None or project.modality == "image":
+    if project is None:
         return None
+    if project.modality == "image":
+        return None if image_project_uses_boxes(project) else project
     plugin = get_plugin(project.modality)
     if plugin is None or not plugin.annotation_kind:
         return None

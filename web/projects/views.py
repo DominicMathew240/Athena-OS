@@ -17,6 +17,7 @@ from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
 
 from . import permissions
+from .annotations import annotation_plugin, image_project_uses_boxes
 from .forms import ProjectCreateForm, normalize_label_names
 from .modalities import get_plugin
 from .modalities.base import UnsupportedModalityError
@@ -651,9 +652,12 @@ def _asset_annotation_status_change(payload: dict[str, Any], current: AssetAnnot
 @require_http_methods(["GET", "POST"])
 def project_asset_annotations(request: HttpRequest, project_id, asset_id) -> JsonResponse:
     asset = get_object_or_404(Asset.objects.select_related("project"), id=asset_id, project_id=project_id)
-    if asset.project.modality == "image":
+    # The recipe decides the annotation style, not the file type alone: an image project whose
+    # recipe asks for transcripts (handwriting OCR) uses these generic endpoints, while every
+    # other image project - no recipe, or the vision one - keeps the box endpoints as before.
+    if image_project_uses_boxes(asset.project):
         return _box_annotations(request, asset)
-    plugin = get_plugin(asset.project.modality)
+    plugin = annotation_plugin(asset.project)
     if plugin is None:
         return JsonResponse({"error": UnsupportedModalityError(asset.project.modality).message}, status=400)
     if request.method == "GET":
@@ -699,6 +703,10 @@ def box_annotation_detail(request: HttpRequest, project_id, asset_id, annotation
         project_id=project_id,
         project__modality="image",
     )
+    if not image_project_uses_boxes(asset.project):
+        # A recipe like handwriting-OCR uses the generic transcript endpoints instead; the box
+        # detail URL is not theirs (mirrors the guard on the collection endpoint).
+        raise Http404("This project does not use box annotations.")
     annotation = get_object_or_404(BoxAnnotation, id=annotation_id, asset=asset)
     if request.method == "DELETE":
         annotation.delete()
@@ -741,10 +749,10 @@ def asset_annotation_detail(request: HttpRequest, project_id, annotation_id) -> 
         asset__project_id=project_id,
     )
     asset = annotation.asset
-    if asset.project.modality == "image":
-        # Image projects keep their own endpoint; this one is not theirs.
+    if image_project_uses_boxes(asset.project):
+        # Image projects with box annotations keep their own endpoint; this one is not theirs.
         raise Http404("Image projects use box annotations.")
-    plugin = get_plugin(asset.project.modality)
+    plugin = annotation_plugin(asset.project)
     if plugin is None:
         return JsonResponse({"error": UnsupportedModalityError(asset.project.modality).message}, status=400)
     if request.method == "DELETE":

@@ -11,6 +11,7 @@ from django.views.decorators.http import require_http_methods
 
 from . import training
 from .api_common import HttpError, image_project, json_errors, json_payload, no_store, reject_unknown
+from .annotations import image_project_uses_boxes
 from .datasets.manifest import opaque_user
 from .models import DatasetVersion, InferenceApp, ModelVersion, Project, TrainingRun
 from .training import lifecycle, report, runner
@@ -18,11 +19,18 @@ from .permissions import access
 
 LIST_LIMIT = 100
 
+#: The only backend a handwriting-OCR (transcript) project may run; imported lazily-free (the
+#: name is a plain string; the module itself imports nothing heavy at import time anyway).
+OCR_BACKEND = "ocr-trocr"
+
 
 def teachable_project(project_id) -> Project:
     """The project a training run or model belongs to: image projects (unchanged) plus every
-    other recipe that is available today (audio classification, Wave 1). Others 404 exactly
-    as before, so the page shows its "not available yet" refusal instead of an error."""
+    other recipe that is available today (audio classification, handwriting OCR, Wave 1).
+    Others 404 exactly as before, so the page shows its "not available yet" refusal instead
+    of an error. Image projects whose recipe is not box-shaped (handwriting-OCR transcripts)
+    train through the generic-snapshot path with their own backend; the API stays honest: a
+    run on an OCR project must use its recipe's backend (``ocr-trocr``), not a box backend."""
     project = get_object_or_404(Project, id=project_id)
     if project.modality == "image":
         return project
@@ -182,7 +190,7 @@ def _app_refs(apps) -> list[dict[str, str]]:
 @access()
 @require_http_methods(["GET"])
 def training_backends(request: HttpRequest, project_id) -> JsonResponse:
-    image_project(project_id)  # the backend list is the image one; other recipes 404 like before
+    image_project(project_id)  # the backend list is the image one; other modalities 404 like before
     worker = lifecycle.worker_status()
     for_options = {"online": worker["online"], "downloads_allowed": worker["downloads_allowed"]}
     backends = []
@@ -297,7 +305,20 @@ def training_runs(request: HttpRequest, project_id) -> JsonResponse:
         else:
             dataset = lifecycle.latest_dataset(project)
             if dataset is None:
-                raise HttpError("There is no dataset version yet. Create one from reviewed boxes, then start training.", 400)
+                raise HttpError(
+                    "There is no dataset version yet. Create one from reviewed labels, then start training.", 400
+                )
+        if not image_project_uses_boxes(project):
+            # A transcript snapshot is not a box one: default to this recipe's backend, and
+            # refuse a box backend in plain words rather than fail deep inside training.
+            if "backend" not in payload:
+                backend_name = OCR_BACKEND
+            elif backend_name != OCR_BACKEND:
+                raise HttpError(
+                    f"This project reads handwriting, so its runs use the {OCR_BACKEND} backend. "
+                    "Leave backend out of the request or send that name.",
+                    400,
+                )
         run = lifecycle.create_run(
             project, request.user, dataset=dataset, backend_name=backend_name, config=config,
             acknowledged_terms=payload.get("acknowledge_pretrained_terms", False),
