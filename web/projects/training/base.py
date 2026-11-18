@@ -89,10 +89,26 @@ class TrainingBackend:
     description: str = ""
     #: Plain-language licence of the backend code *and* of any weights it downloads or ships.
     license_note: str = ""
-    #: Which export the backend reads from ``dataset_dir``: "yolo" or "coco".
+    #: Which export the backend reads from ``dataset_dir``: "yolo" or "coco". Image backends
+    #: only: the runner writes the frozen dataset version out in this format before ``train``.
     dataset_format: str = "yolo"
     #: Documented, user-visible limits (hardware, runtime, expected quality).
     constraints: tuple[str, ...] = ()
+
+    def build_dataset(self, run, dest: Path) -> tuple[list[EvalItem], dict[str, Any]]:
+        """Write the run's frozen dataset to ``dest`` and return ``(eval_items, labels)``.
+
+        Non-vision backends implement this hook instead of relying on ``dataset_format``: the
+        default implementation is the image export path (the runner's ``export_dataset``,
+        YOLO/COCO files plus held-out ``EvalItem``s), which stays correct for every backend
+        that reads images. A tabular or audio backend writes its own files under ``dest`` and
+        returns its own ground-truth items in whatever shape its ``evaluate`` understands.
+        The default signals "not implemented for this format" by raising ``NotImplementedError``
+        only when it cannot run, which for the default never happens; override freely.
+        """
+        raise NotImplementedError(
+            "This backend does not build datasets itself; the runner's image export is used."
+        )
 
     def check_available(self) -> Availability:
         """Cheap check that never imports the heavy framework (use ``importlib.util.find_spec``)."""

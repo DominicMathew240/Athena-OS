@@ -369,8 +369,14 @@ class AccessTests(TrainingBase):
         other = Project.objects.create(name="Other", modality="image", task="Detect", labels=["damaged"])
         text = Project.objects.create(name="Docs", modality="text", task="Tag", labels=["a"])
         for project_id in (uuid.uuid4(), text.id):
-            for suffix in ("/training/runs", "/training/readiness", "/training/backends", "/models"):
+            for suffix in ("/training/runs", "/training/backends", "/models"):
                 self.assertEqual(self.client.get(f"/api/projects/{project_id}{suffix}").status_code, 404, suffix)
+        # Wave 0: readiness answers 200 with a "not available yet" state instead of 404 for a
+        # non-image project, so the Teach panel can render the refusal; unknown ids still 404.
+        response = self.client.get(f"/api/projects/{text.id}/training/readiness")
+        self.assertEqual(response.status_code, 200)
+        self.assertFalse(response.json()["ready"])
+        self.assertEqual(self.client.get(f"/api/projects/{uuid.uuid4()}/training/readiness").status_code, 404)
         self.assertEqual(self.client.get(self.api(f"/training/runs/{run.id}", other)).status_code, 404)
         self.assertEqual(self.post(self.api(f"/training/runs/{run.id}/cancel", other)).status_code, 404)
 

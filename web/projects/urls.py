@@ -113,6 +113,8 @@ urlpatterns = [
     ),
     path("api/me", views.api_me, name="me"),
     path("api/version", views.api_version, name="version"),
+    # What Athena can be asked to learn (the task-recipe registry; any signed-in role can read)
+    path("api/recipes", views.api_recipes, name="recipes"),
     # Who holds which role (administrators only): the screen, the people, and the record of changes
     path("access", access_views.access_page, name="access-page"),
     path("api/access", access_views.access_overview, name="access-overview"),
@@ -143,6 +145,12 @@ urlpatterns = [
         "api/projects/<uuid:project_id>/assets/<uuid:asset_id>/annotations/<uuid:annotation_id>",
         views.box_annotation_detail,
         name="box-annotation-detail",
+    ),
+    # The non-image twin: generic AssetAnnotation detail (image projects keep box-annotation-detail)
+    path(
+        "api/projects/<uuid:project_id>/asset-annotations/<uuid:annotation_id>",
+        views.asset_annotation_detail,
+        name="asset-annotation-detail",
     ),
     path("api/autolabel", autolabel_views.autolabel_status, name="autolabel-status"),
     path(

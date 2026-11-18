@@ -16,9 +16,20 @@ touching core: declare an entry point in your package,
 
 or list `"module:Class"` in `settings.TRAINING["BACKENDS"]`, or call `register_backend(MyBackend)`.
 `name` is stored on every run and model, so never rename it. Fill in `license_note` (code **and** weights).
-The core exports the frozen dataset version to a scratch directory in `dataset_format` (`yolo` or `coco`),
-calls `train()`, scores the held-out test split with `projects.training.evaluation` (so all backends are
-judged by the same code), moves the artifact under `<data home>/models/`, and creates a `candidate`.
+
+**Image backends** set `dataset_format` (`"yolo"` or `"coco"`); the core exports the frozen dataset
+version to a scratch directory in that format, calls `train()`, scores the held-out test split with
+`projects.training.evaluation` (so all backends are judged by the same code), moves the artifact under
+`<data home>/models/`, and creates a `candidate`.
+
+**Non-vision backends** (audio, tables, OCR, ...) implement the `build_dataset(run, dest)` hook instead
+of `dataset_format`: it writes the run's frozen dataset to `dest` in whatever layout `train()` reads and
+returns `(eval_items, labels)`, where `eval_items` is whatever shape the backend's `evaluate()` scores
+(vision's `EvalItem` is one convention, not a requirement). The runner calls `build_dataset` when the
+backend overrides it and falls back to the image export otherwise, so the two existing backends are
+unchanged. Non-vision backends also record their own evaluation JSON on `ModelVersion.evaluation`
+(modality-defined; readers treat it as opaque, and the results pages fall back to a plain "see the
+evaluation report" answer for shapes they do not understand).
 
 **Settings** (`settings.TRAINING`, all optional): `DEFAULT_BACKEND`, `BACKENDS`, `RUN_TIMEOUT_SECONDS`
 (6 h), `STALE_HEARTBEAT_SECONDS` (600), `INFERENCE_TIMEOUT_SECONDS` (120), `INFERENCE_QUEUE_LIMIT` (50),

@@ -26,6 +26,10 @@ class Project(models.Model):
     modality = models.CharField(max_length=32, choices=MODALITY_CHOICES)
     custom_modality = models.CharField(max_length=80, blank=True)
     task = models.CharField(max_length=120)
+    # The recipe key the project was created with (see projects.tasks). Null for projects made
+    # before recipes existed and for callers that did not pick one; ``task`` above stays the
+    # human-readable text. Read-only after creation.
+    recipe = models.CharField(max_length=64, null=True, blank=True)
     labels = models.JSONField(default=list)
     created_at = models.DateTimeField(auto_now_add=True)
 
@@ -46,6 +50,10 @@ class Asset(models.Model):
     size_bytes = models.PositiveBigIntegerField()
     width = models.PositiveIntegerField()
     height = models.PositiveIntegerField()
+    # Modality-specific facts the plugin's validate_upload found (duration and sample rate for
+    # audio, a column summary for tables, ...). Images keep width/height as columns and store
+    # nothing here. Served merged into the asset list response.
+    metadata = models.JSONField(default=dict)
     created_at = models.DateTimeField(auto_now_add=True)
 
     class Meta:
@@ -53,6 +61,53 @@ class Asset(models.Model):
 
     def __str__(self) -> str:
         return self.filename
+
+
+class AssetAnnotation(models.Model):
+    """A generic annotation on one asset, for modalities whose labels are not boxes.
+
+    Mirrors BoxAnnotation's semantics: ``origin`` manual/model, ``status`` accepted/suggested,
+    write-once data (edited data replaces the row through the same PATCH review flow the box
+    endpoints use), and suggested rows never count as ground truth. Image projects keep using
+    BoxAnnotation exactly as before; ``kind`` is the recipe's ``annotation_kind`` slug and
+    ``data`` is whatever the modality plugin's ``validate_annotation`` normalized.
+    """
+
+    ORIGIN_MANUAL, ORIGIN_MODEL = "manual", "model"
+    ORIGIN_CHOICES = [(ORIGIN_MANUAL, "Entered by a person"), (ORIGIN_MODEL, "Proposed by a model")]
+    STATUS_ACCEPTED, STATUS_SUGGESTED = "accepted", "suggested"
+    STATUS_CHOICES = [(STATUS_ACCEPTED, "Accepted"), (STATUS_SUGGESTED, "Needs review")]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    asset = models.ForeignKey(Asset, on_delete=models.CASCADE, related_name="asset_annotations")
+    kind = models.CharField(max_length=64)
+    data = models.JSONField()
+    origin = models.CharField(max_length=16, choices=ORIGIN_CHOICES, default=ORIGIN_MANUAL)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_ACCEPTED)
+    confidence = models.FloatField(null=True, blank=True)
+    model_name = models.CharField(max_length=200, blank=True)
+    reviewed_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    reviewed_at = models.DateTimeField(null=True, blank=True)
+    # Who entered a manual annotation. Never exposed in the annotation API.
+    created_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL, null=True, blank=True, on_delete=models.SET_NULL, related_name="+"
+    )
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("created_at", "id")
+        constraints = (
+            models.CheckConstraint(
+                condition=models.Q(origin="model") | models.Q(status="accepted"),
+                name="assetannotation_manual_is_accepted",
+            ),
+        )
+
+    def __str__(self) -> str:
+        return f"{self.kind}:{self.asset_id}"
 
 
 class AutoLabelJob(models.Model):
@@ -271,6 +326,31 @@ class DatasetImage(_FrozenModel):
         ordering = ("sha256", "asset_uuid")
 
 
+class DatasetEntry(_FrozenModel):
+    """One non-image asset frozen into a version, with its accepted annotation verbatim.
+
+    The generic-modality twin of :class:`DatasetImage` + :class:`DatasetBox` in one row: a modality
+    whose labels are not boxes (a sound clip's class, a form field's transcript, ...) freezes one
+    entry per asset, carrying the plugin-normalized annotation ``data`` and its primary ``label``
+    (the project label the annotation names, or "" when the data has no single label). Image
+    projects never write these rows.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    version = models.ForeignKey(DatasetVersion, on_delete=models.CASCADE, related_name="entries")
+    asset = models.ForeignKey(Asset, null=True, on_delete=models.SET_NULL, related_name="+")
+    asset_uuid = models.UUIDField()
+    filename = models.CharField(max_length=255)
+    storage_key = models.CharField(max_length=500)
+    sha256 = models.CharField(max_length=64)
+    split = models.CharField(max_length=8)
+    label = models.CharField(max_length=120, blank=True, default="")
+    annotation = models.JSONField()
+
+    class Meta:
+        ordering = ("sha256", "asset_uuid")
+
+
 class DatasetBox(_FrozenModel):
     id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
     image = models.ForeignKey(DatasetImage, on_delete=models.CASCADE, related_name="boxes")
@@ -377,6 +457,11 @@ class TrainingRun(_GuardedModel):
     dataset_version = models.ForeignKey(DatasetVersion, on_delete=models.RESTRICT, related_name="training_runs")
     dataset_manifest_sha256 = models.CharField(max_length=64)
     backend = models.CharField(max_length=80)
+    # What was being learned: the recipe key (see projects.tasks). Null means the vision recipe
+    # ("vision-detection"), which every run created before recipes existed belongs to.
+    task = models.CharField(max_length=64, null=True, blank=True)
+    # The annotation style the run's labels use ("boxes" for vision, ...). Same defaulting rule.
+    annotation_kind = models.CharField(max_length=64, null=True, blank=True)
     config = models.JSONField(default=dict)
     config_sha256 = models.CharField(max_length=64)
     status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=QUEUED)
@@ -437,11 +522,18 @@ class ModelVersion(_GuardedModel):
         TrainingRun, null=True, blank=True, on_delete=models.SET_NULL, related_name="model_versions"
     )
     backend = models.CharField(max_length=80)
+    # The recipe key this model was trained for (see projects.tasks). Null = the vision recipe.
+    task = models.CharField(max_length=64, null=True, blank=True)
     # Relative to the data home; never shown to API clients.
     artifact_path = models.CharField(max_length=500)
     artifact_sha256 = models.CharField(max_length=64)
     artifact_size_bytes = models.PositiveBigIntegerField(default=0)
     label_names = models.JSONField(default=list)
+    # Modality-defined JSON: the evaluation evidence the recipe's backend recorded (for vision,
+    # the box-detection report built by projects.training.report; another modality stores its
+    # own numbers, with "available" plus a plain-language "reason" when there are none). Readers
+    # must treat it as opaque and use defensive access; results pages fall back to plain
+    # "see the evaluation report" answers for shapes they do not understand.
     evaluation = models.JSONField(default=dict)
     stage = models.CharField(max_length=16, choices=STAGE_CHOICES, default=CANDIDATE)
     staged_by = models.ForeignKey(

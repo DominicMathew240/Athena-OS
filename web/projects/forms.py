@@ -1,13 +1,16 @@
 from __future__ import annotations
 
+import re
 from typing import Any
 
 from django import forms
 
 from .models import MODALITY_CHOICES
+from .tasks import DEFAULT_RECIPE_KEY, get_recipe
 
 MAX_LABELS = 50
 MAX_LABEL_LENGTH = 64
+RECIPE_KEY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
 
 def normalize_label_names(labels: Any) -> list[str]:
@@ -57,6 +60,22 @@ class ProjectCreateForm(forms.Form):
     custom_modality = forms.CharField(max_length=80, required=False, strip=True)
     task = forms.CharField(max_length=120, strip=True)
     labels = forms.JSONField(required=False)
+    # The recipe key picked in the guided form (see projects.tasks); optional and validated
+    # against the registry so a stale console cannot store a made-up key.
+    recipe = forms.CharField(max_length=64, required=False, strip=True)
+
+    def clean_recipe(self):
+        key = self.cleaned_data.get("recipe") or ""
+        if not key:
+            return ""
+        if not RECIPE_KEY_PATTERN.match(key):
+            raise forms.ValidationError("Choose a task from the list, or leave it empty.")
+        recipe = get_recipe(key)
+        if recipe is None:
+            raise forms.ValidationError("That task is not known here. Reload the page and pick again.")
+        if recipe.modality != self.cleaned_data.get("modality"):
+            raise forms.ValidationError("That task needs a different kind of files. Pick the task again.")
+        return key
 
     def clean(self):
         cleaned = super().clean()
@@ -70,3 +89,9 @@ class ProjectCreateForm(forms.Form):
         except forms.ValidationError as error:
             self.add_error("labels", error)
         return cleaned
+
+
+def default_recipe_for(modality: str) -> str:
+    """The recipe key stored when a caller did not pick one: the vision default for image
+    projects, nothing otherwise (unavailable recipes are never assigned silently)."""
+    return DEFAULT_RECIPE_KEY if modality == "image" else ""

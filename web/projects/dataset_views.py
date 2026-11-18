@@ -11,6 +11,7 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_http_methods
 
 from .datasets import FORMATS, export_max_bytes, manifest as manifest_lib, service, splits, writers
+from .datasets import generic as generic_service
 from .models import DatasetVersion, ExportEvent, Project
 from .permissions import access
 
@@ -25,6 +26,22 @@ def _no_store(response):
 
 def _image_project(project_id) -> Project:
     return get_object_or_404(Project, id=project_id, modality="image")
+
+
+def _generic_dataset_project(project_id) -> Project | None:
+    """The project when its data type has a registered plugin with a labeling kind; else None.
+
+    Non-image projects whose plugin has no annotation kind (or has no plugin at all) keep the
+    old refusal: the caller 404s exactly as before."""
+    from .modalities import get_plugin
+
+    project = Project.objects.filter(id=project_id).first()
+    if project is None or project.modality == "image":
+        return None
+    plugin = get_plugin(project.modality)
+    if plugin is None or not plugin.annotation_kind:
+        return None
+    return project
 
 
 def _json_payload(request: HttpRequest) -> dict[str, Any]:
@@ -73,6 +90,37 @@ def _problems(problems, limit=service.PROBLEM_LIMIT) -> dict[str, Any]:
     }
 
 
+def _generic_dataset_data(version: DatasetVersion, *, include_manifest: bool) -> dict[str, Any]:
+    """The dataset-list payload for a generic (non-image) version. Same shape as the image one,
+    with the counts the generic manifest carries instead of images/boxes."""
+    data = {
+        "id": str(version.id),
+        "version": version.version,
+        "project_id": str(version.project_id),
+        "status": version.status,
+        "created_at": version.created_at.isoformat(),
+        "created_by": manifest_lib.opaque_user(version.created_by_id),
+        "label_names": version.label_names,
+        "counts": dict(version.manifest.get("counts", {})),
+        "excluded": {
+            "suggested_annotations": version.excluded_suggested_count,
+            "assets_without_accepted": version.excluded_image_count,
+            "reason": generic_service.EXCLUDED_REASON,
+        },
+        "split_config": version.split_config,
+        "split_algorithm": splits.algorithm_of(version.split_config),
+        "manifest_sha256": version.manifest_sha256,
+        "export_formats": [generic_service.EXPORT_FORMAT],
+        "is_incomplete": version.is_incomplete,
+        "incomplete_reason": version.incomplete_reason,
+    }
+    if version.is_incomplete:
+        data["missing_files"] = version.entries.filter(asset__isnull=True).count()
+    if include_manifest:
+        data["manifest"] = version.manifest
+    return data
+
+
 def dataset_data(version: DatasetVersion, *, include_manifest: bool) -> dict[str, Any]:
     data = {
         "id": str(version.id),
@@ -105,6 +153,9 @@ def dataset_data(version: DatasetVersion, *, include_manifest: bool) -> dict[str
 @access(POST="label")
 @require_http_methods(["GET", "POST"])
 def project_datasets(request: HttpRequest, project_id) -> JsonResponse:
+    generic_project = _generic_dataset_project(project_id)
+    if generic_project is not None:
+        return _generic_project_datasets(request, generic_project)
     project = _image_project(project_id)
     if request.method == "GET":
         versions = project.dataset_versions.all()
@@ -141,10 +192,58 @@ def project_datasets(request: HttpRequest, project_id) -> JsonResponse:
     return _no_store(JsonResponse({"dataset": dataset_data(version, include_manifest=True)}, status=201))
 
 
+def _generic_project_datasets(request: HttpRequest, project: Project) -> JsonResponse:
+    """List / create dataset versions for a project whose data type has a labeling plugin."""
+    if request.method == "GET":
+        versions = project.dataset_versions.all()
+        return _no_store(
+            JsonResponse({"datasets": [_generic_dataset_data(v, include_manifest=False) for v in versions]})
+        )
+
+    try:
+        config = splits.SplitConfig.from_payload(_json_payload(request))
+    except _HttpError as error:
+        return JsonResponse({"error": str(error)}, status=error.status)
+    except ValueError as error:
+        return JsonResponse({"error": str(error)}, status=400)
+
+    analysis = generic_service.analyse(project, config)
+    if not analysis.accepted:
+        return JsonResponse(
+            {"error": generic_service.NO_ACCEPTED_MESSAGE, "excluded": analysis.excluded}, status=400
+        )
+    if not analysis.ready:
+        return JsonResponse(
+            {
+                "error": "Fix the problems below before creating a dataset version. Nothing was created.",
+                "blockers": analysis.blockers,
+                "excluded": analysis.excluded,
+                **_problems(analysis.problems),
+            },
+            status=422,
+        )
+    try:
+        version = generic_service.create_version(analysis, request.user)
+    except generic_service.VersionConflict as error:
+        return JsonResponse({"error": str(error)}, status=409)
+    return _no_store(
+        JsonResponse({"dataset": _generic_dataset_data(version, include_manifest=True)}, status=201)
+    )
+
+
 @access()
 @require_http_methods(["GET"])
 def project_dataset_readiness(request: HttpRequest, project_id) -> JsonResponse:
     """Explain what would be exported and what blocks it. Creates nothing."""
+    generic_project = _generic_dataset_project(project_id)
+    if generic_project is not None:
+        try:
+            config = _config_from_query(request.GET)
+        except ValueError as error:
+            return JsonResponse({"error": str(error)}, status=400)
+        # Readiness is polled; let it use the stat-keyed cache. Version creation never does.
+        analysis = generic_service.analyse(generic_project, config, use_cache=True)
+        return _no_store(JsonResponse(generic_service.readiness_payload(analysis)))
     project = _image_project(project_id)
     try:
         config = _config_from_query(request.GET)
@@ -176,6 +275,21 @@ def project_dataset_readiness(request: HttpRequest, project_id) -> JsonResponse:
 @access()
 @require_http_methods(["GET"])
 def project_dataset_detail(request: HttpRequest, project_id, dataset_id) -> JsonResponse:
+    if _generic_dataset_project(project_id) is not None:
+        version = get_object_or_404(
+            DatasetVersion, id=dataset_id, project_id=project_id
+        )
+        return _no_store(
+            JsonResponse(
+                {
+                    "dataset": (
+                        _generic_dataset_data(version, include_manifest=True)
+                        if version.entries.exists()
+                        else dataset_data(version, include_manifest=True)
+                    )
+                }
+            )
+        )
     version = get_object_or_404(DatasetVersion, id=dataset_id, project_id=project_id, project__modality="image")
     return _no_store(JsonResponse({"dataset": dataset_data(version, include_manifest=True)}))
 
@@ -215,6 +329,21 @@ def _audited(chunks, request, version, fmt):
 @access(GET="label")
 @require_http_methods(["GET"])
 def project_dataset_export(request: HttpRequest, project_id, dataset_id):
+    generic_project = _generic_dataset_project(project_id)
+    if generic_project is not None:
+        version = get_object_or_404(
+            DatasetVersion.objects.select_related("project"), id=dataset_id, project_id=project_id
+        )
+        fmt = request.GET.get("format", "") or generic_service.EXPORT_FORMAT
+        response = _generic_export(request, version, fmt)
+        if not response.streaming:
+            message = ""
+            try:
+                message = json.loads(response.content).get("error", "")
+            except (ValueError, AttributeError):
+                pass
+            _record_export(request, version, fmt, success=False, status=response.status_code, error=str(message))
+        return response
     version = get_object_or_404(
         DatasetVersion.objects.select_related("project"),
         id=dataset_id,
@@ -233,10 +362,88 @@ def project_dataset_export(request: HttpRequest, project_id, dataset_id):
     return response
 
 
+def _generic_export(request: HttpRequest, version: DatasetVersion, fmt: str):
+    """The generic export: manifest.json plus the raw entry files, streamed with the same guards."""
+    if fmt != generic_service.EXPORT_FORMAT:
+        return JsonResponse(
+            {"error": f"format must be {generic_service.EXPORT_FORMAT} for this data type."}, status=400
+        )
+    try:
+        entries = generic_service.verify_integrity(version)
+    except ValueError as error:
+        return JsonResponse({"error": str(error)}, status=409)
+
+    if version.is_incomplete:
+        missing = version.entries.filter(asset__isnull=True).count()
+        return JsonResponse(
+            {
+                "error": (
+                    f"This dataset version is incomplete and cannot be exported: {missing} of "
+                    f"{version.manifest.get('counts', {}).get('entry_count', 0)} file(s) were permanently "
+                    "deleted from the project after it was created. Its manifest and checksum are still "
+                    "intact; create a new version to export current data."
+                ),
+                "incomplete": True,
+                "missing_files": missing,
+                "reason": version.incomplete_reason,
+                "manifest_verified": True,
+            },
+            status=409,
+        )
+    total = version.manifest.get("counts", {}).get("total_bytes", 0)
+    if total > export_max_bytes():
+        return JsonResponse(
+            {"error": f"This export would hold {total} bytes of files; the limit is {export_max_bytes()}."},
+            status=413,
+        )
+    problems = generic_service.file_problems(version)  # full hash of every file, never cached
+    if problems:
+        return JsonResponse(
+            {
+                "error": "Some files in this version are missing or changed on disk, so it cannot be exported.",
+                **_problems(problems),
+            },
+            status=409,
+        )
+
+    files = generic_service.export_files(version)
+    response = StreamingHttpResponse(
+        _audited(writers.stream_zip(fmt, version.manifest, version.manifest_sha256, files), request, version, fmt),
+        content_type="application/zip",
+    )
+    filename = f"athena-{str(version.project_id)[:8]}-v{version.version}-{fmt}.zip"
+    response["Content-Disposition"] = f'attachment; filename="{filename}"'
+    response["X-Content-Type-Options"] = "nosniff"
+    return _no_store(response)
+
+
 @access()
 @require_http_methods(["GET"])
 def project_dataset_exports(request: HttpRequest, project_id, dataset_id) -> JsonResponse:
     """Audit trail of export attempts for one version, newest first (append-only)."""
+    if _generic_dataset_project(project_id) is not None:
+        version = get_object_or_404(DatasetVersion, id=dataset_id, project_id=project_id)
+        events = version.export_events.all()
+        return _no_store(
+            JsonResponse(
+                {
+                    "exports": [
+                        {
+                            "id": event.id,
+                            "format": event.format,
+                            "bytes": event.bytes_sent,
+                            "success": event.success,
+                            "status": event.status_code,
+                            "error": event.error,
+                            "user": manifest_lib.opaque_user(event.user_id_snapshot),
+                            "created_at": event.created_at.isoformat(),
+                        }
+                        for event in events[:EXPORT_LOG_LIMIT]
+                    ],
+                    "total": events.count(),
+                }
+            )
+        )
     version = get_object_or_404(DatasetVersion, id=dataset_id, project_id=project_id, project__modality="image")
     events = version.export_events.all()
     return _no_store(
@@ -316,9 +523,13 @@ def _export(request: HttpRequest, version: DatasetVersion, fmt: str):
 @access()
 @require_http_methods(["GET"])
 def project_dataset_health(request: HttpRequest, project_id) -> JsonResponse:
-    """Per-label example counts, held-back readiness and near-duplicate pictures. Reads only; creates nothing."""
+    """Per-label example counts, held-out readiness and near-duplicate pictures. Reads only; creates nothing."""
     from .datasets import health  # local import keeps this change to one appended function
 
+    if _generic_dataset_project(project_id) is not None:
+        return JsonResponse(
+            {"error": "The data health check is not available for this data type yet."}, status=400
+        )
     project = _image_project(project_id)
     try:
         config = _config_from_query(request.GET)

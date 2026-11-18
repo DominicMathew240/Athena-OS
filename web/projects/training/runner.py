@@ -94,6 +94,21 @@ def fail_orphaned_runs() -> int:
 
 
 # -- dataset export --------------------------------------------------------------------------
+def build_dataset(run: TrainingRun, backend: TrainingBackend, dest: Path):
+    """Prepare the run's dataset under ``dest``: the backend's own hook when it has one, else
+    the image export. Returns ``(items, labels)`` the same way for both paths.
+
+    A backend "has" the hook when it overrides ``TrainingBackend.build_dataset``; image
+    backends (which only set ``dataset_format``) keep the exact previous behavior. Non-vision
+    backends implement the hook instead of ``dataset_format`` (see training/README.md)."""
+    if type(backend).build_dataset is not TrainingBackend.build_dataset:
+        items, labels = backend.build_dataset(run, dest)
+        return items, list(labels)
+    dest.mkdir(parents=True, exist_ok=True)
+    items = export_dataset(run, backend, dest)
+    return items, list(run.dataset_version.label_names)
+
+
 def export_dataset(run: TrainingRun, backend: TrainingBackend, dest: Path) -> list[EvalItem]:
     """Write the frozen dataset version to ``dest`` (verifying checksums) and return the test items."""
     version = run.dataset_version
@@ -120,6 +135,75 @@ def export_dataset(run: TrainingRun, backend: TrainingBackend, dest: Path) -> li
             if sha256_file(target) != item.sha256:
                 raise ValueError("An image changed while the dataset was being prepared. Try again.")
     return test_items(version.manifest, dest)
+
+
+def export_entries(run: TrainingRun, dest: Path) -> list[Path]:
+    """Materialize a generic version's entry files into ``dest``, verifying every checksum.
+
+    For non-vision backends (audio, tables, OCR, ...): the run's frozen dataset version must
+    have generic entries, each row's file is copied to ``dest`` under the export's own naming
+    (``entries/<split>/<n>_<sha12>.<ext>``, the same paths the zip export uses), and each copy
+    is hashed against the frozen checksum. Returns the written paths in the same order as
+    ``entry_ground_truth``. Raises ``ValueError`` with a plain message when the version has no
+    entries (an image version, or an empty one) or a file is missing or changed.
+    """
+    from ..datasets import generic as generic_service
+
+    version = run.dataset_version
+    if not version.entries.exists():
+        raise ValueError(
+            f"Dataset version {version.version} of this project has no frozen entries to train on. "
+            "Create a new dataset version from the project's labeled files."
+        )
+    problems = generic_service.file_problems(version)
+    if problems:
+        raise ValueError(
+            f"{len(problems)} file(s) in dataset version {version.version} are missing or changed on disk, "
+            "so it cannot be used for training. Create a new dataset version."
+        )
+    dest.mkdir(parents=True, exist_ok=True)
+    written: list[Path] = []
+    for row, relative in generic_service.entry_layout(version):
+        target = dest / relative
+        if dest.resolve() not in target.resolve().parents:
+            raise ValueError("Unsafe path in dataset export.")
+        target.parent.mkdir(parents=True, exist_ok=True)
+        with default_storage.open(row.storage_key, "rb") as source, open(target, "wb") as sink:
+            shutil.copyfileobj(source, sink)
+        if sha256_file(target) != row.sha256:
+            raise ValueError("A file changed while the dataset was being prepared. Try again.")
+        written.append(target)
+    return written
+
+
+def entry_ground_truth(run: TrainingRun) -> list[dict[str, Any]]:
+    """Every frozen entry of the run's version: its split, primary label and annotation.
+
+    Reads the snapshot rows (not the live project), so what a backend trains on and scores
+    against is exactly what was frozen. Each item is a dict with ``split`` (train/val/test),
+    ``label`` (the annotation's primary project label, "" when it names no single label),
+    ``annotation`` (the plugin-normalized accepted annotation verbatim), ``asset_id``,
+    ``filename`` and ``sha256``. Pair with ``export_entries`` by position: both follow the
+    export's deterministic order, so ``ground_truth[i]["sha256"]`` matches file ``i``."""
+    from ..datasets import generic as generic_service
+
+    version = run.dataset_version
+    if not version.entries.exists():
+        raise ValueError(
+            f"Dataset version {version.version} of this project has no frozen entries. "
+            "Create a new dataset version from the project's labeled files."
+        )
+    return [
+        {
+            "split": row.split,
+            "label": row.label,
+            "annotation": row.annotation,
+            "asset_id": str(row.asset_uuid),
+            "filename": row.filename,
+            "sha256": row.sha256,
+        }
+        for row, _relative in generic_service.entry_layout(version)
+    ]
 
 
 def _split_items(manifest: dict[str, Any], dest: Path, split: str) -> list[EvalItem]:
@@ -280,8 +364,7 @@ def run_training(run: TrainingRun, backend: TrainingBackend | None = None) -> Tr
         log.flush(force=True)
         work.mkdir(parents=True, exist_ok=True)
         dataset_dir = work / "dataset"
-        items = export_dataset(run, backend, dataset_dir)
-        labels = list(run.dataset_version.label_names)
+        items, labels = build_dataset(run, backend, dataset_dir)
         log.add(f"Dataset ready: {run.dataset_version.image_count} images, {len(items)} held-out test images")
 
         def check_limits() -> None:
@@ -325,8 +408,8 @@ def run_training(run: TrainingRun, backend: TrainingBackend | None = None) -> Tr
             },
         }
         points = work_out_operating_points(
-            backend, Path(result.artifact_path), val_items(run.dataset_version.manifest, dataset_dir), items, labels, log,
-            check=check_limits,
+            backend, Path(result.artifact_path), val_items(run.dataset_version.manifest, dataset_dir), items,
+            labels, log, check=check_limits,
         )
         if points is not None:
             evaluation["operating_points"] = points
@@ -377,6 +460,7 @@ def register_candidate(
             version=next_version_number(run.project),
             training_run=run,
             backend=run.backend,
+            task=run.task,
             artifact_path=relative,
             artifact_sha256=sha256_file(target),
             artifact_size_bytes=target.stat().st_size,

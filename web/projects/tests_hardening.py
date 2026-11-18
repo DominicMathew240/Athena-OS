@@ -176,6 +176,11 @@ class UnknownProjectSweep(InferenceBase):
                 continue
             if route == "api/projects/<uuid:project_id>":  # generic project detail/delete is modality-agnostic
                 continue
+            if route == "api/projects/<uuid:project_id>/training/readiness":
+                # Wave 0: the Teach panel's readiness deliberately answers 200 with a plain
+                # "not available yet" state for a data kind with no teaching tools, so the page
+                # can show the refusal instead of an error; every other image API still refuses.
+                continue
             values = {name: str(uuid.uuid4()) for name in converters}
             values["project_id"] = str(audio.id)
             path = render(route, values)

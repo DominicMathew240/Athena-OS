@@ -1477,44 +1477,81 @@ function openProjectDialog() {
   document.getElementById("project-name").focus();
 }
 
+// What Athena can be asked to learn. The hardcoded entries below are the fallback (and the
+// exact wording the console shows today); at load the list is refreshed from GET /api/recipes,
+// which is the single source of truth once a recipe's plugin lands. Keys match the API's.
 const PROJECT_RECIPES = {
   vision: {
     modality: "image",
     task: "Spot items or surface defects in pictures",
     labelsPlaceholder: "e.g. dent, scratch, missing_part",
-    note: "Available today · Data needed: JPEG, PNG or WebP pictures + boxes · Quality check: found vs missed items and false alarms."
+    note: "Available today · Data needed: JPEG, PNG or WebP pictures + boxes · Quality check: found vs missed items and false alarms.",
+    recipeKey: "vision-detection",
+    available: true
   },
   audio: {
     modality: "audio",
     task: "Classify equipment sounds or unusual faults",
     labelsPlaceholder: "e.g. healthy_motor, bearing_fault, belt_slip",
-    note: "Coming soon (Wave 1) · Data needed: WAV recordings + event labels · Quality check: missed sound events and false alarms. Saving now keeps your project name and labels."
+    note: "Coming soon (Wave 1) · Data needed: WAV recordings + event labels · Quality check: missed sound events and false alarms. Saving now keeps your project name and labels.",
+    recipeKey: "audio-classification",
+    available: false
   },
   ocr: {
     modality: "image",
     task: "Read handwritten forms and check recognized text",
     labelsPlaceholder: "e.g. date_field, signature, total_amount",
-    note: "Coming soon (Wave 1) · Data needed: handwritten forms + corrected transcripts · Quality check: character and word errors. Picture projects can store images today; handwriting tools are next."
+    note: "Coming soon (Wave 1) · Data needed: handwritten forms + corrected transcripts · Quality check: character and word errors. Picture projects can store images today; handwriting tools are next.",
+    recipeKey: "handwriting-ocr",
+    available: false
   },
   documents: {
     modality: "text",
     task: "Sort documents and pull out key fields",
     labelsPlaceholder: "e.g. invoice, safety_report, supplier_name",
-    note: "Coming soon (Wave 2) · Data needed: text documents + category tags or spans · Quality check: wrongly grouped files and missed fields. Saving now keeps your project name and labels."
+    note: "Coming soon (Wave 2) · Data needed: text documents + category tags or spans · Quality check: wrongly grouped files and missed fields. Saving now keeps your project name and labels.",
+    recipeKey: "",
+    available: false
   },
   movements: {
     modality: "video",
     task: "Recognize postures and working movements",
     labelsPlaceholder: "e.g. safe_lift, bend_alert, hand_signal",
-    note: "Coming soon (Wave 3) · Data needed: pictures or clips + body points and movement labels · Quality check: point accuracy and missed movements. Saving now keeps your project name and labels."
+    note: "Coming soon (Wave 3) · Data needed: pictures or clips + body points and movement labels · Quality check: point accuracy and missed movements. Saving now keeps your project name and labels.",
+    recipeKey: "",
+    available: false
   },
   spreadsheets: {
     modality: "table",
     task: "Predict an outcome from spreadsheet rows",
     labelsPlaceholder: "e.g. pass, fail, needs_service",
-    note: "Coming soon (Wave 1) · Data needed: Excel or CSV rows + target column · Quality check: errors on unseen rows. Saving now keeps your project name and labels."
+    note: "Coming soon (Wave 1) · Data needed: Excel or CSV rows + target column · Quality check: errors on unseen rows. Saving now keeps your project name and labels.",
+    recipeKey: "tabular-prediction",
+    available: false
   }
 };
+
+// Fold the server's recipe list into the picker's entries: availability is the server's call
+// (a recipe that lands becomes available here without a console release), while the wording
+// stays the console's own. Unknown server keys are ignored until this file knows their buttons.
+async function loadProjectRecipes() {
+  try {
+    const body = await api("/api/recipes");
+    const byKey = new Map((body.recipes || []).map(recipe => [recipe.key, recipe]));
+    for (const [buttonKey, entry] of Object.entries(PROJECT_RECIPES)) {
+      if (!entry.recipeKey) continue;
+      const recipe = byKey.get(entry.recipeKey);
+      if (!recipe) continue;
+      entry.available = Boolean(recipe.available);
+      if (!recipe.available && recipe.unavailable_reason && !entry.note.startsWith("Coming soon")) {
+        entry.note = recipe.unavailable_reason;
+      }
+    }
+  } catch (error) {
+    // The fetch is a refresh, not a requirement: the hardcoded entries above still drive the form.
+  }
+}
+
 const recipePicker = document.getElementById("project-recipe-picker");
 const recipeNote = document.getElementById("project-recipe-note");
 const projectModalitySelect = document.getElementById("project-modality");
@@ -1812,6 +1849,9 @@ projectForm.addEventListener("submit", async event => {
     task: String(formData.get("task")),
     labels
   };
+  // The recipe the person picked, when the server knows it ("" for the not-yet-listed ones).
+  const pickedRecipe = PROJECT_RECIPES[activeRecipeKey];
+  if (pickedRecipe && pickedRecipe.recipeKey) payload.recipe = pickedRecipe.recipeKey;
   if (modality === "custom") payload.custom_modality = String(formData.get("custom_modality"));
   const submit = projectForm.querySelector('[type="submit"]');
   submit.disabled = true;
@@ -5969,6 +6009,7 @@ function renderWorkspace() {
 
 updateCustomModalityField();
 void loadAutolabelStatus();
+void loadProjectRecipes();
 loadProjects();
 
 (() => {

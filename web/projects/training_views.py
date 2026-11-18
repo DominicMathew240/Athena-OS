@@ -12,7 +12,7 @@ from django.views.decorators.http import require_http_methods
 from . import training
 from .api_common import HttpError, image_project, json_errors, json_payload, no_store, reject_unknown
 from .datasets.manifest import opaque_user
-from .models import DatasetVersion, InferenceApp, ModelVersion, TrainingRun
+from .models import DatasetVersion, InferenceApp, ModelVersion, Project, TrainingRun
 from .training import lifecycle, report, runner
 from .permissions import access
 
@@ -29,6 +29,8 @@ def run_data(run: TrainingRun, *, detail: bool = False) -> dict[str, Any]:
             "manifest_sha256": run.dataset_manifest_sha256,
         },
         "backend": run.backend,
+        "task": run.task,
+        "annotation_kind": run.annotation_kind,
         "config": run.config,
         "config_sha256": run.config_sha256,
         "status": run.status,
@@ -87,6 +89,7 @@ def model_data(model: ModelVersion, *, detail: bool = False) -> dict[str, Any]:
         "version": model.version,
         "stage": model.stage,
         "backend": model.backend,
+        "task": model.task,
         "label_names": model.label_names,
         "artifact_sha256": model.artifact_sha256,
         "artifact_size_bytes": model.artifact_size_bytes,
@@ -164,7 +167,7 @@ def _app_refs(apps) -> list[dict[str, str]]:
 @access()
 @require_http_methods(["GET"])
 def training_backends(request: HttpRequest, project_id) -> JsonResponse:
-    image_project(project_id)
+    image_project(project_id)  # the backend list is the image one; other recipes 404 like before
     worker = lifecycle.worker_status()
     for_options = {"online": worker["online"], "downloads_allowed": worker["downloads_allowed"]}
     backends = []
@@ -198,8 +201,45 @@ def training_backends(request: HttpRequest, project_id) -> JsonResponse:
 @access()
 @require_http_methods(["GET"])
 def training_readiness(request: HttpRequest, project_id) -> JsonResponse:
-    project = image_project(project_id)
+    """Readiness for the Teach panel, dispatching on the project's data kind: the vision answer
+    for image projects (unchanged), a plain "not available yet" state for every other recipe."""
+    project = get_object_or_404(Project, id=project_id)
+    if project.modality != "image":
+        return no_store(JsonResponse(_task_unavailable_readiness(project)))
     return no_store(JsonResponse(lifecycle.readiness(project, request.GET.get("backend") or None)))
+
+
+def _task_unavailable_readiness(project) -> dict[str, Any]:
+    """The "not available yet" answer for a project whose recipe has no teaching tools yet.
+
+    Shape-compatible with ``lifecycle.readiness`` so the console's Teach panel renders the same
+    refusal it shows for any other blocker, instead of crashing on a data kind it does not know.
+    """
+    from .tasks import recipe_for_project
+
+    recipe = recipe_for_project(project)
+    what = recipe.title if recipe else project.get_modality_display()
+    reason = (
+        recipe.unavailable_reason
+        if recipe and recipe.unavailable_reason
+        else f"Teaching {what.lower()} models is not available yet."
+    )
+    return {
+        "ready": False,
+        "blockers": [reason],
+        "warnings": [],
+        "backend": {"name": "", "available_in_web_process": False, "worker_online": False,
+                    "worker_reports_available": None, "message": reason, "how_to_enable": ""},
+        "worker": {"online": False, "loading": False},
+        "dataset": None,
+        "active_run_id": None,
+        "start_from": None,
+        "derived": None,
+        "one_click": {"supported": False, "ready": False, "blockers": [reason], "warnings": [],
+                      "notes": [], "files_rechecked": True, "snapshot": {
+                          "latest_version": None, "up_to_date": False, "would_create_new": False}},
+        "task_unavailable": True,
+    }
 
 
 @access(POST="train")

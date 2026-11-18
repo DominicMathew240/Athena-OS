@@ -1,9 +1,7 @@
 from __future__ import annotations
 
-import hashlib
 import json
 import uuid
-import warnings
 from decimal import Decimal, InvalidOperation
 from typing import Any
 
@@ -17,12 +15,14 @@ from django.utils import timezone
 from django.views.decorators.cache import never_cache
 from django.views.decorators.csrf import ensure_csrf_cookie
 from django.views.decorators.http import require_http_methods
-from PIL import Image, UnidentifiedImageError
 
 from . import permissions
 from .forms import ProjectCreateForm, normalize_label_names
-from .models import Asset, AutoLabelJob, BoxAnnotation, FeedbackImport, Project
+from .modalities import get_plugin
+from .modalities.base import UnsupportedModalityError
+from .models import Asset, AssetAnnotation, AutoLabelJob, BoxAnnotation, FeedbackImport, Project
 from .permissions import access
+from .tasks import recipes as recipe_registry
 
 MAX_REQUEST_BYTES = 1_048_576
 MAX_IMAGE_UPLOADS = 20
@@ -39,6 +39,35 @@ IMAGE_FORMATS = {
 }
 BOX_COORDINATE_FIELDS = ("x", "y", "width", "height")
 BOX_COORDINATE_QUANTUM = Decimal("0.00000001")
+
+
+def _safe_filename(upload_name: str) -> str:
+    # Kept as a thin delegate: other modules (feedback import) and tests patch/read this name.
+    from .modalities.image import safe_filename
+
+    return safe_filename(upload_name)
+
+
+def _validate_uploaded_image(upload) -> dict[str, Any]:
+    """Kept as a thin delegate so existing patches keep working; the logic lives in the plugin.
+
+    The old limits (``views.MAX_IMAGE_BYTES`` / ``views.MAX_IMAGE_PIXELS``) are re-imposed here
+    so a test (or operator) patching the views-level constants still changes the behavior, and
+    the plugin's own limits stay in one place for other callers.
+    """
+    from .modalities.image import ImageModalityPlugin
+
+    try:
+        metadata = ImageModalityPlugin().validate_upload(upload)
+    except ValidationError as error:
+        # The plugin raises Django's ValidationError; the historical contract of this helper
+        # (and the wording tests) is ValueError with the same message.
+        raise ValueError(error.messages[0]) from error
+    if metadata["size_bytes"] > MAX_IMAGE_BYTES or upload.size > MAX_IMAGE_BYTES:
+        raise ValueError("Each image must be 20 MB or smaller.")
+    if metadata["width"] * metadata["height"] > MAX_IMAGE_PIXELS:
+        raise ValueError("Image dimensions exceed the supported limit.")
+    return metadata
 
 
 @access()
@@ -70,6 +99,20 @@ def api_version(request: HttpRequest) -> JsonResponse:
     return response
 
 
+@access()
+@require_http_methods(["GET"])
+def api_recipes(request: HttpRequest) -> JsonResponse:
+    """What Athena can be asked to learn: the task-recipe registry (single source of truth).
+
+    Any signed-in person may read it (the new-project form needs it before any project exists).
+    Unavailable recipes are listed too, with the plain reason, so the console can show them as
+    "Coming soon" exactly as it does today.
+    """
+    response = JsonResponse({"recipes": [recipe.as_dict() for recipe in recipe_registry().values()]})
+    response["Cache-Control"] = "no-store"
+    return response
+
+
 def _project_data(project: Project) -> dict[str, Any]:
     return {
         "id": str(project.id),
@@ -77,6 +120,7 @@ def _project_data(project: Project) -> dict[str, Any]:
         "modality": project.modality,
         "custom_modality": project.custom_modality,
         "task": project.task,
+        "recipe": project.recipe,
         "labels": project.labels,
         # How many boxes use each label (labels with none are omitted); powers the label editor.
         "label_counts": getattr(project, "label_counts", {}),
@@ -94,6 +138,8 @@ def _project_data(project: Project) -> dict[str, Any]:
 
 
 def _asset_data(asset: Asset, from_observation=None) -> dict[str, Any]:
+    plugin = get_plugin(asset.project.modality)
+    extra = plugin.asset_view_metadata(asset) if plugin else {}
     return {
         # Where the picture came from. Only operator-feedback pictures are known by a link table; the rest were
         # uploaded. ``from_observation`` is the check-screen result a feedback picture was taken from.
@@ -106,6 +152,7 @@ def _asset_data(asset: Asset, from_observation=None) -> dict[str, Any]:
         "size_bytes": asset.size_bytes,
         "width": asset.width,
         "height": asset.height,
+        "metadata": extra,
         "created_at": asset.created_at.isoformat(),
         "content_url": f"/api/projects/{asset.project_id}/assets/{asset.id}/content",
         "accepted_boxes": getattr(asset, "accepted_boxes", 0),
@@ -234,55 +281,6 @@ def _validated_annotation_data(
     return result
 
 
-def _safe_filename(upload_name: str) -> str:
-    basename = (upload_name or "image").replace("\\", "/").rsplit("/", 1)[-1]
-    cleaned = "".join(character for character in basename if character.isprintable()).strip()
-    return cleaned[:255] or "image"
-
-
-def _validate_uploaded_image(upload) -> dict[str, Any]:
-    if upload.size <= 0:
-        raise ValueError("Image files cannot be empty.")
-    if upload.size > MAX_IMAGE_BYTES:
-        raise ValueError("Each image must be 20 MB or smaller.")
-
-    digest = hashlib.sha256()
-    size_bytes = 0
-    for chunk in upload.chunks():
-        size_bytes += len(chunk)
-        if size_bytes > MAX_IMAGE_BYTES:
-            raise ValueError("Each image must be 20 MB or smaller.")
-        digest.update(chunk)
-    upload.seek(0)
-
-    try:
-        with warnings.catch_warnings():
-            warnings.simplefilter("error", Image.DecompressionBombWarning)
-            with Image.open(upload) as image:
-                image_format = image.format
-                width, height = image.size
-                if image_format not in IMAGE_FORMATS:
-                    raise ValueError("Only JPEG, PNG, and WebP images are supported.")
-                if width <= 0 or height <= 0 or width * height > MAX_IMAGE_PIXELS:
-                    raise ValueError("Image dimensions exceed the supported limit.")
-                image.load()
-    except (UnidentifiedImageError, OSError, Image.DecompressionBombError, Image.DecompressionBombWarning) as error:
-        raise ValueError("The uploaded file is not a valid supported image.") from error
-    finally:
-        upload.seek(0)
-
-    extension, content_type = IMAGE_FORMATS[image_format]
-    return {
-        "filename": _safe_filename(upload.name),
-        "sha256": digest.hexdigest(),
-        "size_bytes": size_bytes,
-        "width": width,
-        "height": height,
-        "extension": extension,
-        "content_type": content_type,
-    }
-
-
 @access(POST="label")
 @require_http_methods(["GET", "POST"])
 def project_collection(request: HttpRequest) -> JsonResponse:
@@ -311,7 +309,14 @@ def project_collection(request: HttpRequest) -> JsonResponse:
         field, errors = next(iter(form.errors.items()))
         return JsonResponse({"error": f"{field}: {errors[0]}"}, status=400)
 
-    project = Project.objects.create(**form.cleaned_data)
+    data = form.cleaned_data
+    recipe_key = data.pop("recipe") or ""
+    if not recipe_key:
+        # No recipe picked: image projects keep the vision default, others get none.
+        from .forms import default_recipe_for
+
+        recipe_key = default_recipe_for(data["modality"])
+    project = Project.objects.create(recipe=recipe_key or None, **data)
     return JsonResponse({"project": _project_data(project)}, status=201)
 
 
@@ -503,8 +508,10 @@ def _update_project_labels(request: HttpRequest, project_id) -> JsonResponse:
 @require_http_methods(["GET", "POST"])
 def project_assets(request: HttpRequest, project_id) -> JsonResponse:
     project = get_object_or_404(Project, id=project_id)
-    if project.modality != "image":
-        return JsonResponse({"error": "Image files can only be added to image projects."}, status=400)
+    plugin = get_plugin(project.modality)
+    if plugin is None:
+        # A data kind with no registered plugin. The refusal is plain language on purpose.
+        return JsonResponse({"error": UnsupportedModalityError(project.modality).message}, status=400)
 
     if request.method == "GET":
         taken_from = dict(
@@ -518,20 +525,29 @@ def project_assets(request: HttpRequest, project_id) -> JsonResponse:
     uploads = request.FILES.getlist("images")
     if not uploads:
         return JsonResponse({"error": "Select one or more images to upload."}, status=400)
-    if len(uploads) > MAX_IMAGE_UPLOADS:
-        return JsonResponse({"error": f"Upload no more than {MAX_IMAGE_UPLOADS} images at a time."}, status=400)
-    if sum(upload.size for upload in uploads) > MAX_IMAGE_BATCH_BYTES:
+    max_uploads = plugin.max_uploads() if plugin.modality != "image" else MAX_IMAGE_UPLOADS
+    if len(uploads) > max_uploads:
+        return JsonResponse({"error": f"Upload no more than {max_uploads} images at a time."}, status=400)
+    max_batch = plugin.max_batch_bytes() if plugin.modality != "image" else MAX_IMAGE_BATCH_BYTES
+    if sum(upload.size for upload in uploads) > max_batch:
         return JsonResponse({"error": "The total image batch must be 100 MB or smaller."}, status=400)
 
     validated = []
     for upload in uploads:
         try:
-            validated.append((upload, _validate_uploaded_image(upload)))
-        except ValueError as error:
+            if plugin.modality == "image":
+                # Byte-compatible with the pre-plugin behavior (tests patch this name).
+                metadata = _validate_uploaded_image(upload)
+            else:
+                metadata = plugin.validate_upload(upload)
+            validated.append((upload, metadata))
+        except (ValueError, ValidationError) as error:
             # Name the file, so the person knows which one to leave out. Nothing from this batch is saved.
+            message = error.messages[0] if isinstance(error, ValidationError) else str(error)
             return JsonResponse(
                 {
-                    "error": f"“{_safe_filename(upload.name)}”: {error} Nothing was added; take that file out and try again."
+                    "error": f"“{_safe_filename(upload.name)}”: {message} "
+                    "Nothing was added; take that file out and try again."
                 },
                 status=400,
             )
@@ -542,7 +558,17 @@ def project_assets(request: HttpRequest, project_id) -> JsonResponse:
         with transaction.atomic():
             for upload, metadata in validated:
                 asset_id = uuid.uuid4()
-                requested_key = f"projects/{project.id}/assets/{asset_id}.{metadata['extension']}"
+                extension = metadata.pop("extension", None) or plugin.storage_suffix or "bin"
+                # Modality-specific facts (duration, columns, ...) go to Asset.metadata; the
+                # known Asset columns (width/height for images) are passed as fields.
+                reserved = {"filename", "sha256", "size_bytes", "width", "height", "content_type"}
+                extra = {key: value for key, value in metadata.items() if key not in reserved}
+                fields = {key: value for key, value in metadata.items() if key in reserved}
+                # Images always have width/height; other modalities have no picture size, and
+                # the columns are NOT NULL, so they store 0 rather than lying with a fake size.
+                if "width" not in fields:
+                    fields["width"] = fields["height"] = 0
+                requested_key = f"projects/{project.id}/assets/{asset_id}.{extension}"
                 upload.seek(0)
                 storage_key = default_storage.save(requested_key, upload)
                 saved_keys.append(storage_key)
@@ -551,7 +577,8 @@ def project_assets(request: HttpRequest, project_id) -> JsonResponse:
                         id=asset_id,
                         project=project,
                         storage_key=storage_key,
-                        **{key: value for key, value in metadata.items() if key != "extension"},
+                        metadata=extra,
+                        **fields,
                     )
                 )
     except Exception:
@@ -565,22 +592,92 @@ def project_assets(request: HttpRequest, project_id) -> JsonResponse:
 @access(DELETE="label")
 @require_http_methods(["DELETE"])
 def project_asset_detail(request: HttpRequest, project_id, asset_id) -> JsonResponse:
-    project = get_object_or_404(Project, id=project_id, modality="image")
+    project = get_object_or_404(Project, id=project_id)
+    if get_plugin(project.modality) is None:
+        return JsonResponse({"error": UnsupportedModalityError(project.modality).message}, status=400)
     asset = get_object_or_404(Asset, id=asset_id, project=project)
     from .datasets.deletion import delete_asset  # 409s when frozen dataset versions contain the picture
 
     return delete_asset(request, project, asset)
 
 
+def _asset_annotation_data(annotation: AssetAnnotation) -> dict[str, Any]:
+    return {
+        "id": str(annotation.id),
+        "kind": annotation.kind,
+        "data": annotation.data,
+        "origin": annotation.origin,
+        "status": annotation.status,
+        "confidence": annotation.confidence,
+        "model_name": annotation.model_name,
+        "reviewed_at": annotation.reviewed_at.isoformat() if annotation.reviewed_at else None,
+        "created_at": annotation.created_at.isoformat(),
+        "updated_at": annotation.updated_at.isoformat(),
+    }
+
+
+def _read_annotation_json(request: HttpRequest) -> dict[str, Any]:
+    """The request body of an annotation write, as a JSON object (plain-language errors)."""
+    if request.content_type != "application/json":
+        raise ValueError("Send annotation details as JSON.")
+    try:
+        body = request.body
+    except RequestDataTooBig as error:
+        raise ValueError("Annotation request is too large.") from error
+    if len(body) > MAX_REQUEST_BYTES:
+        raise ValueError("Annotation request is too large.")
+    try:
+        payload = json.loads(body)
+    except (json.JSONDecodeError, UnicodeDecodeError) as error:
+        raise ValueError("Annotation details must be valid JSON.") from error
+    if not isinstance(payload, dict):
+        raise TypeError("Annotation details must be a JSON object.")
+    return payload
+
+
+def _asset_annotation_status_change(payload: dict[str, Any], current: AssetAnnotation) -> dict[str, Any]:
+    """The optional ``status`` of an edit, with the same review rule boxes use."""
+    if "status" not in payload:
+        return {}
+    status = payload["status"]
+    if status not in (AssetAnnotation.STATUS_ACCEPTED, AssetAnnotation.STATUS_SUGGESTED):
+        raise ValueError("Status must be accepted or suggested.")
+    if status == AssetAnnotation.STATUS_SUGGESTED and current.origin != AssetAnnotation.ORIGIN_MODEL:
+        raise ValueError("Only model proposals can be marked as needing review.")
+    return {"status": status}
+
+
 @access(POST="label")
 @require_http_methods(["GET", "POST"])
 def project_asset_annotations(request: HttpRequest, project_id, asset_id) -> JsonResponse:
-    asset = get_object_or_404(
-        Asset.objects.select_related("project"),
-        id=asset_id,
-        project_id=project_id,
-        project__modality="image",
+    asset = get_object_or_404(Asset.objects.select_related("project"), id=asset_id, project_id=project_id)
+    if asset.project.modality == "image":
+        return _box_annotations(request, asset)
+    plugin = get_plugin(asset.project.modality)
+    if plugin is None:
+        return JsonResponse({"error": UnsupportedModalityError(asset.project.modality).message}, status=400)
+    if request.method == "GET":
+        response = JsonResponse(
+            {"annotations": [_asset_annotation_data(item) for item in asset.asset_annotations.all()]}
+        )
+        response["Cache-Control"] = "no-store"
+        return response
+    try:
+        payload = _read_annotation_json(request)
+        # The plugin sees only the annotation itself, never the review-flow field.
+        data = plugin.validate_annotation({k: v for k, v in payload.items() if k != "status"}, asset.project)
+    except (TypeError, ValueError) as error:
+        return JsonResponse({"error": str(error)}, status=400)
+    except ValidationError as error:
+        return JsonResponse({"error": error.messages[0]}, status=400)
+    annotation = AssetAnnotation.objects.create(
+        asset=asset, kind=plugin.annotation_kind, data=data, created_by=request.user
     )
+    return JsonResponse({"annotation": _asset_annotation_data(annotation)}, status=201)
+
+
+def _box_annotations(request: HttpRequest, asset: Asset) -> JsonResponse:
+    """The image path, unchanged: box annotations exactly as before recipes existed."""
     if request.method == "GET":
         response = JsonResponse({"annotations": [_annotation_data(item) for item in asset.annotations.all()]})
         response["Cache-Control"] = "no-store"
@@ -630,10 +727,67 @@ def box_annotation_detail(request: HttpRequest, project_id, asset_id, annotation
     return JsonResponse({"annotation": _annotation_data(annotation)})
 
 
+@access(PATCH="label", DELETE="label")
+@require_http_methods(["PATCH", "DELETE"])
+def asset_annotation_detail(request: HttpRequest, project_id, annotation_id) -> JsonResponse:
+    """The non-image twin of ``box_annotation_detail``: same shape, same review rules.
+
+    The URL carries only the annotation id (the asset is reached through the annotation), and
+    the project is checked through the asset, so one project's id never resolves another's row.
+    """
+    annotation = get_object_or_404(
+        AssetAnnotation.objects.select_related("asset", "asset__project"),
+        id=annotation_id,
+        asset__project_id=project_id,
+    )
+    asset = annotation.asset
+    if asset.project.modality == "image":
+        # Image projects keep their own endpoint; this one is not theirs.
+        raise Http404("Image projects use box annotations.")
+    plugin = get_plugin(asset.project.modality)
+    if plugin is None:
+        return JsonResponse({"error": UnsupportedModalityError(asset.project.modality).message}, status=400)
+    if request.method == "DELETE":
+        annotation.delete()
+        return JsonResponse({"deleted": True})
+    try:
+        payload = _read_annotation_json(request)
+        status_change = _asset_annotation_status_change(payload, annotation)
+        # The plugin sees only the annotation itself, never the review-flow field.
+        data = plugin.validate_annotation({**annotation.data, **{k: v for k, v in payload.items() if k != "status"}},
+                                          asset.project)
+        if not isinstance(data, dict):
+            raise TypeError("Annotation details must be a JSON object.")
+    except (TypeError, ValueError) as error:
+        return JsonResponse({"error": str(error)}, status=400)
+    except ValidationError as error:
+        return JsonResponse({"error": error.messages[0]}, status=400)
+    annotation.data = data
+    update_fields = ["data", "updated_at"]
+    was_suggested = annotation.status == AssetAnnotation.STATUS_SUGGESTED
+    new_status = status_change.get("status")
+    if new_status is None and was_suggested:
+        new_status = AssetAnnotation.STATUS_ACCEPTED  # A person edited it, so a person reviewed it.
+    if new_status is not None and new_status != annotation.status:
+        annotation.status = new_status
+        if new_status == AssetAnnotation.STATUS_ACCEPTED:
+            annotation.reviewed_by = request.user
+            annotation.reviewed_at = timezone.now()
+        else:
+            annotation.reviewed_by = None
+            annotation.reviewed_at = None
+        update_fields += ["status", "reviewed_by", "reviewed_at"]
+    annotation.save(update_fields=update_fields)
+    return JsonResponse({"annotation": _asset_annotation_data(annotation)})
+
+
 @access()
 @require_http_methods(["GET"])
 def project_asset_content(request: HttpRequest, project_id, asset_id) -> FileResponse:
-    asset = get_object_or_404(Asset, id=asset_id, project_id=project_id, project__modality="image")
+    project = get_object_or_404(Project, id=project_id)
+    if get_plugin(project.modality) is None:
+        raise Http404("No plugin supports this project's data type.")
+    asset = get_object_or_404(Asset, id=asset_id, project=project)
     try:
         response = FileResponse(
             default_storage.open(asset.storage_key, "rb"),

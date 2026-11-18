@@ -579,6 +579,7 @@ class EveryRouteDeclaresItsRole(RoleBase):
         "api/inspections/<uuid:inspection_id>/feedback": {"POST": LABEL},
         "api/inspections/<uuid:inspection_id>/images/<int:position>": {},
         "api/me": {},
+        "api/recipes": {},  # the task-recipe list; any signed-in role may read it (Wave 0)
         "access": {"GET": ADMIN},
         "api/access": {"GET": ADMIN},
         "api/access/changes": {"GET": ADMIN},
@@ -595,6 +596,10 @@ class EveryRouteDeclaresItsRole(RoleBase):
             "PATCH": LABEL,
             "DELETE": LABEL,
         },
+        "api/projects/<uuid:project_id>/asset-annotations/<uuid:annotation_id>": {
+            "PATCH": LABEL,
+            "DELETE": LABEL,
+        },  # the non-image twin of the box detail route (Wave 0)
         "api/autolabel": {},
         "api/projects/<uuid:project_id>/autolabel": {"POST": LABEL},
         "api/projects/<uuid:project_id>/autolabel/<uuid:job_id>/cancel": {"POST": LABEL},

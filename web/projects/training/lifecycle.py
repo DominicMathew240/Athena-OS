@@ -331,6 +331,24 @@ def prepare_start(
     return backend, normalized, check
 
 
+def run_task_fields(project: Project) -> dict[str, str]:
+    """The recipe-derived ``task`` / ``annotation_kind`` a new run gets.
+
+    A project whose recipe is known gets its key and annotation kind; an image project without
+    one (every project created before recipes existed, and any caller that picked none) gets
+    the vision defaults, so existing behavior is unchanged. Any other modality gets nothing
+    until its recipe lands: nothing downstream may guess a task it cannot honor."""
+    from ..tasks import DEFAULT_RECIPE_KEY, get_recipe
+
+    key = getattr(project, "recipe", None)
+    recipe = get_recipe(key) if key else None
+    if recipe is None:
+        if project.modality == "image":
+            return {"task": DEFAULT_RECIPE_KEY, "annotation_kind": "boxes"}
+        return {}
+    return {"task": recipe.key, "annotation_kind": recipe.annotation_kind}
+
+
 def create_run(
     project: Project, user, *, dataset: DatasetVersion, backend_name: str, config: dict[str, Any],
     acknowledged_terms: bool = False, note_extra: str = "",
@@ -361,6 +379,7 @@ def create_run(
                 dataset_version=dataset,
                 dataset_manifest_sha256=dataset.manifest_sha256,
                 backend=backend_name,
+                **run_task_fields(project),
                 config=normalized,
                 config_sha256=config_digest(normalized),
                 created_by=user if getattr(user, "is_authenticated", False) else None,
