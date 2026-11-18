@@ -308,9 +308,10 @@ def training_runs(request: HttpRequest, project_id) -> JsonResponse:
                 raise HttpError(
                     "There is no dataset version yet. Create one from reviewed labels, then start training.", 400
                 )
-        if not image_project_uses_boxes(project):
+        if project.modality == "image" and not image_project_uses_boxes(project):
             # A transcript snapshot is not a box one: default to this recipe's backend, and
             # refuse a box backend in plain words rather than fail deep inside training.
+            # (An image project only: other modalities pick their own backend, e.g. audio-wav-cnn.)
             if "backend" not in payload:
                 backend_name = OCR_BACKEND
             elif backend_name != OCR_BACKEND:

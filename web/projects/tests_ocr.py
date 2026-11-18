@@ -163,10 +163,11 @@ class RecipeTests(SignedInMixin, TestCase):
         self.assertTrue(ocr["available"])
         self.assertEqual(ocr["annotation_kind"], "transcripts")
 
-    def test_the_other_placeholders_stay_unavailable(self) -> None:
+    def test_the_remaining_placeholder_stays_unavailable(self) -> None:
         found = recipes()
-        for key in ("audio-classification", "tabular-prediction"):
-            self.assertFalse(found[key].available, key)
+        # audio-classification landed too (Wave 1, OS-AUD-001); only tabular-prediction is left.
+        self.assertTrue(found["audio-classification"].available)
+        self.assertFalse(found["tabular-prediction"].available)
         self.assertTrue(found["vision-detection"].available)
 
 
