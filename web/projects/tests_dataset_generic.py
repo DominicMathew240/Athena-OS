@@ -186,9 +186,9 @@ class ReadinessTests(GenericDatasetBase):
         )
 
     def test_a_project_without_a_plugin_keeps_the_old_refusal(self) -> None:
-        audio = Project.objects.create(name="Raw", modality="audio", task="x", labels=["a"])
-        self.assertEqual(self.client.get(self.generic_url(project=audio)).status_code, 404)
-        self.assertEqual(self.readiness(project=audio).status_code, 404)
+        speech = Project.objects.create(name="Raw", modality="speech", task="x", labels=["a"])
+        self.assertEqual(self.client.get(self.generic_url(project=speech)).status_code, 404)
+        self.assertEqual(self.readiness(project=speech).status_code, 404)
 
     def test_health_says_not_available_for_this_data_type(self) -> None:
         self.labelled_asset()

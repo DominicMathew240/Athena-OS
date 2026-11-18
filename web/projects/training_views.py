@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from django.http import HttpRequest, JsonResponse
+from django.http import Http404, HttpRequest, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_http_methods
 
@@ -17,6 +17,21 @@ from .training import lifecycle, report, runner
 from .permissions import access
 
 LIST_LIMIT = 100
+
+
+def teachable_project(project_id) -> Project:
+    """The project a training run or model belongs to: image projects (unchanged) plus every
+    other recipe that is available today (audio classification, Wave 1). Others 404 exactly
+    as before, so the page shows its "not available yet" refusal instead of an error."""
+    project = get_object_or_404(Project, id=project_id)
+    if project.modality == "image":
+        return project
+    from .tasks import recipe_for_project
+
+    recipe = recipe_for_project(project)
+    if recipe is not None and recipe.available:
+        return project
+    raise Http404("This project's task has no teaching tools yet.")
 
 
 def run_data(run: TrainingRun, *, detail: bool = False) -> dict[str, Any]:
@@ -246,7 +261,7 @@ def _task_unavailable_readiness(project) -> dict[str, Any]:
 @require_http_methods(["GET", "POST"])
 @json_errors
 def training_runs(request: HttpRequest, project_id) -> JsonResponse:
-    project = image_project(project_id)
+    project = teachable_project(project_id)
     if request.method == "GET":
         runs = project.training_runs.select_related("dataset_version")[:LIST_LIMIT]
         return no_store(JsonResponse({"runs": [run_data(run) for run in runs]}))
@@ -304,7 +319,7 @@ def training_runs(request: HttpRequest, project_id) -> JsonResponse:
 @access()
 @require_http_methods(["GET"])
 def training_run_detail(request: HttpRequest, project_id, run_id) -> JsonResponse:
-    project = image_project(project_id)
+    project = teachable_project(project_id)
     run = get_object_or_404(TrainingRun.objects.select_related("dataset_version"), id=run_id, project=project)
     runner.fail_stale_runs()
     run.refresh_from_db()
@@ -315,7 +330,7 @@ def training_run_detail(request: HttpRequest, project_id, run_id) -> JsonRespons
 @require_http_methods(["POST"])
 @json_errors
 def training_run_cancel(request: HttpRequest, project_id, run_id) -> JsonResponse:
-    project = image_project(project_id)
+    project = teachable_project(project_id)
     run = get_object_or_404(TrainingRun.objects.select_related("dataset_version"), id=run_id, project=project)
     if run.status not in TrainingRun.ACTIVE_STATUSES:
         raise lifecycle.LifecycleError(f"This run already {run.get_status_display().lower()}; there is nothing to cancel.", 409)
@@ -326,7 +341,7 @@ def training_run_cancel(request: HttpRequest, project_id, run_id) -> JsonRespons
 @access()
 @require_http_methods(["GET"])
 def model_collection(request: HttpRequest, project_id) -> JsonResponse:
-    project = image_project(project_id)
+    project = teachable_project(project_id)
     models = project.model_versions.select_related("training_run__dataset_version")[:LIST_LIMIT]
     approved = next((m for m in models if m.stage == ModelVersion.APPROVED), None)
     return no_store(
@@ -342,14 +357,14 @@ def model_collection(request: HttpRequest, project_id) -> JsonResponse:
 @access()
 @require_http_methods(["GET"])
 def model_detail(request: HttpRequest, project_id, model_id) -> JsonResponse:
-    project = image_project(project_id)
+    project = teachable_project(project_id)
     return no_store(JsonResponse({"model": model_data(_get_model(project, model_id), detail=True)}))
 
 
 @access()
 @require_http_methods(["GET"])
 def model_evaluation(request: HttpRequest, project_id, model_id) -> JsonResponse:
-    project = image_project(project_id)
+    project = teachable_project(project_id)
     model = _get_model(project, model_id)
     result = report.build_report(model.evaluation)
     return no_store(
@@ -373,7 +388,7 @@ def model_evaluation(request: HttpRequest, project_id, model_id) -> JsonResponse
 @require_http_methods(["POST"])
 @json_errors
 def model_stage(request: HttpRequest, project_id, model_id) -> JsonResponse:
-    project = image_project(project_id)
+    project = teachable_project(project_id)
     model = _get_model(project, model_id)
     payload = json_payload(request, allow_empty=True)
     reject_unknown(payload, {"note"})
@@ -385,7 +400,7 @@ def model_stage(request: HttpRequest, project_id, model_id) -> JsonResponse:
 @require_http_methods(["POST"])
 @json_errors
 def model_approve(request: HttpRequest, project_id, model_id) -> JsonResponse:
-    project = image_project(project_id)
+    project = teachable_project(project_id)
     model = _get_model(project, model_id)
     payload = json_payload(request)
     reject_unknown(payload, {"note", "acknowledge_weak_results", "repoint_apps", "repoint_app_ids"})
@@ -422,7 +437,7 @@ def model_approve(request: HttpRequest, project_id, model_id) -> JsonResponse:
 @require_http_methods(["POST"])
 @json_errors
 def model_rollback(request: HttpRequest, project_id, model_id) -> JsonResponse:
-    project = image_project(project_id)
+    project = teachable_project(project_id)
     model = _get_model(project, model_id)
     payload = json_payload(request)
     reject_unknown(payload, {"note", "repoint_apps", "repoint_app_ids"})

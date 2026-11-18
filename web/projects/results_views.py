@@ -9,20 +9,20 @@ from __future__ import annotations
 from django.http import HttpRequest, JsonResponse
 from django.views.decorators.http import require_http_methods
 
-from .api_common import image_project, no_store
+from .api_common import no_store
 from .models import Asset
 from .permissions import access
 from .training import report
 
 # The project-scoped model lookup (a model of another project is a plain 404) is written once, in training_views;
 # training_views does not import this module, so there is no cycle.
-from .training_views import _get_model
+from .training_views import _get_model, teachable_project
 
 
 @access()
 @require_http_methods(["GET"])
 def model_results_plain(request: HttpRequest, project_id, model_id) -> JsonResponse:
-    project = image_project(project_id)
+    project = teachable_project(project_id)
     model = _get_model(project, model_id)
     if _is_non_vision_evaluation(model):
         # A model whose evaluation is not the box-detection report: the found/missed wording

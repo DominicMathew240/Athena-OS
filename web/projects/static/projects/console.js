@@ -13,7 +13,7 @@ const modalityInfo = {
 let projects = [];
 let currentFilter = "all";
 let selectedId = null;
-const PANEL_ORDER = ["checklist-panel", "labels-panel", "image-assets-panel", "dataset-panel", "train-panel", "apps-panel"];
+const PANEL_ORDER = ["checklist-panel", "labels-panel", "image-assets-panel", "audio-assets-panel", "dataset-panel", "train-panel", "apps-panel"];
 let currentPanelId = "checklist-panel"; // which part of the open project is on screen
 let loadError = "";
 const tableBody = document.getElementById("dataset-rows");
@@ -41,6 +41,14 @@ const autoAfterUpload = document.getElementById("autolabel-after-upload");
 const autoAfterUploadField = document.getElementById("autolabel-after-upload-field");
 const assetList = document.getElementById("asset-list");
 const assetStatus = document.getElementById("asset-status");
+// --- Sound clips (audio projects) -----------------------------------------------------------------------
+const audioAssetsPanel = document.getElementById("audio-assets-panel");
+const audioUploadForm = document.getElementById("audio-upload-form");
+const audioUploadInput = document.getElementById("audio-upload");
+const audioUploadError = document.getElementById("audio-upload-error");
+const clipList = document.getElementById("clip-list");
+const clipStatus = document.getElementById("audio-asset-status");
+let currentClips = [];
 const imageAssetsHeading = document.getElementById("image-assets-heading");
 imageAssetsHeading.tabIndex = -1;
 const annotationDialog = document.getElementById("annotation-dialog");
@@ -372,14 +380,19 @@ assetFilterFeedback.addEventListener("click", () => {
 async function loadAssets(projectId) {
   const project = projects.find(candidate => candidate.id === projectId);
   imageAssetsPanel.hidden = !project || project.modality !== "image";
-  datasetPanel.hidden = imageAssetsPanel.hidden;
-  trPanel.hidden = imageAssetsPanel.hidden;
+  audioAssetsPanel.hidden = !project || project.modality !== "audio";
+  datasetPanel.hidden = imageAssetsPanel.hidden && audioAssetsPanel.hidden;
+  trPanel.hidden = datasetPanel.hidden;
   if (appsPanel) appsPanel.hidden = imageAssetsPanel.hidden;
   assetList.replaceChildren();
+  clipList.replaceChildren();
   assetFilter.hidden = true;
   autolabelFeedbackNote.hidden = true;
   if (assetFilterProject !== projectId) { assetFilterProject = projectId; assetFeedbackOnly = false; autolabelOutcome.textContent = ""; }
-  if (imageAssetsPanel.hidden) return;
+  if (imageAssetsPanel.hidden) {
+    if (!audioAssetsPanel.hidden) loadClips(projectId);
+    return;
+  }
   resetCorrections(projectId); // forget the last project's count now, before any request is waited for
   assetStatus.textContent = "Loading pictures…";
   try {
@@ -456,6 +469,142 @@ async function loadAssets(projectId) {
   } catch (error) {
     if (selectedId === projectId) assetStatus.textContent = `Could not load the pictures. ${error.message}`;
   }
+}
+
+// --- Sound clips: upload, list, one label per clip --------------------------------------------------------
+// The minimal audio panel: the generic asset API already works for any data kind, so this lists a
+// project's clips with their stored facts (duration, sample rate, channels) and offers a label
+// picker per clip. No timeline editor, no waveform; those come with later audio work.
+const clipMeta = clip => {
+  const meta = clip.metadata || {};
+  const duration = Number.isFinite(meta.duration_seconds) ? `${meta.duration_seconds.toFixed(2)} s` : "unknown length";
+  const rate = Number.isInteger(meta.sample_rate) ? `${meta.sample_rate.toLocaleString()} Hz` : "";
+  const channels = meta.channels === 1 ? "mono" : meta.channels === 2 ? "stereo" : "";
+  return [duration, rate, channels].filter(Boolean).join(" · ") || "WAV clip";
+};
+
+async function loadClips(projectId) {
+  clipStatus.textContent = "Loading sound clips…";
+  try {
+    const body = await api(`/api/projects/${encodeURIComponent(projectId)}/assets`);
+    if (selectedId !== projectId) return;
+    currentClips = body.assets;
+    renderClips(projectId);
+    refreshDatasets(projectId);
+  } catch (error) {
+    if (selectedId === projectId) clipStatus.textContent = `Could not load the sound clips. ${error.message}`;
+  }
+}
+
+function renderClips(projectId) {
+  const project = projects.find(candidate => candidate.id === projectId);
+  const labels = Array.isArray(project && project.labels) ? project.labels : [];
+  clipList.replaceChildren();
+  currentClips.forEach(clip => {
+    const accepted = clip.accepted_boxes > 0;
+    const row = document.createElement("li");
+    row.className = "clip-row";
+    row.dataset.clipId = clip.id;
+    const details = document.createElement("div");
+    const name = document.createElement("div");
+    name.className = "asset-name";
+    name.textContent = clip.filename;
+    const metadata = document.createElement("div");
+    metadata.className = "asset-meta";
+    metadata.textContent = `${clipMeta(clip)} · ${formatBytes(clip.size_bytes)}`;
+    details.append(name, metadata);
+    const actions = document.createElement("div");
+    actions.className = "clip-label-form";
+    const picker = document.createElement("select");
+    picker.setAttribute("aria-label", `Label for ${clip.filename}`);
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = accepted ? "Label saved (choose to change)" : "Choose a label…";
+    picker.append(placeholder);
+    labels.forEach(label => {
+      const option = document.createElement("option");
+      option.value = label;
+      option.textContent = label;
+      picker.append(option);
+    });
+    picker.disabled = !Athena.can("label") || !labels.length;
+    picker.addEventListener("change", () => {
+      if (picker.value) void saveClipLabel(projectId, clip, picker.value);
+      picker.value = "";
+    });
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "asset-remove";
+    remove.textContent = "Remove clip";
+    remove.setAttribute("aria-label", `Remove clip ${clip.filename}`);
+    remove.dataset.needs = "label";
+    remove.addEventListener("click", () => removeClip(projectId, clip));
+    actions.append(picker, remove);
+    row.append(details, actions);
+    clipList.append(row);
+  });
+  clipStatus.textContent = currentClips.length
+    ? `${plural(currentClips.length, "sound clip", "sound clips")} in this project.`
+    : "No sound clips yet. Choose files above to add your first ones.";
+}
+
+async function saveClipLabel(projectId, clip, label) {
+  try {
+    const body = await api(`/api/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(clip.id)}/annotations`, {
+      method: "POST",
+      body: JSON.stringify({ label })
+    });
+    const created = body.annotation || {};
+    const label2 = created.data && created.data.label;
+    showNotice(`The clip “${clip.filename}” was labelled “${label2 || label}”.`);
+    await loadClips(projectId);
+  } catch (error) {
+    showNotice(`The label was not saved. ${error.message}`, { problem: true });
+  }
+}
+
+async function removeClip(projectId, clip) {
+  if (!(await Athena.askConfirm({
+    title: "Remove this sound clip?",
+    message: `This removes “${clip.filename}” and its label from the server. This cannot be undone.`,
+    keepLabel: "Keep the clip",
+    confirmLabel: "Remove clip"
+  }))) return;
+  try {
+    await api(`/api/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(clip.id)}`, { method: "DELETE" });
+    currentClips = currentClips.filter(item => item.id !== clip.id);
+    renderClips(projectId);
+  } catch (error) {
+    showNotice(`The clip was not removed. ${error.message}`, { problem: true });
+  }
+}
+
+if (audioUploadForm) {
+  audioUploadForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    audioUploadError.textContent = "";
+    const files = [...(audioUploadInput.files || [])];
+    if (!files.length) {
+      audioUploadError.textContent = "Choose one or more WAV files first.";
+      return;
+    }
+    const button = audioUploadForm.querySelector('[type="submit"]');
+    button.disabled = true;
+    try {
+      const form = new FormData();
+      files.forEach(file => form.append("images", file));
+      const body = await api(`/api/projects/${encodeURIComponent(selectedId)}/assets`, { method: "POST", body: form });
+      const added = (body.assets || []).length;
+      showNotice(added === 1 ? "1 sound clip was added." : `${added.toLocaleString()} sound clips were added.`);
+      audioUploadInput.value = "";
+      await loadClips(selectedId);
+      void refreshProjectCounts();
+    } catch (error) {
+      audioUploadError.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
 }
 
 // --- Corrections from check screens ----------------------------------------------------------------
@@ -1493,9 +1642,9 @@ const PROJECT_RECIPES = {
     modality: "audio",
     task: "Classify equipment sounds or unusual faults",
     labelsPlaceholder: "e.g. healthy_motor, bearing_fault, belt_slip",
-    note: "Coming soon (Wave 1) · Data needed: WAV recordings + event labels · Quality check: missed sound events and false alarms. Saving now keeps your project name and labels.",
+    note: "Available today · Data needed: WAV recordings + one label per clip · Quality check: accuracy on held-out clips.",
     recipeKey: "audio-classification",
-    available: false
+    available: true
   },
   ocr: {
     modality: "image",
@@ -1745,6 +1894,7 @@ async function deleteCurrentProject() {
     Athena.useProject(null);
     history.replaceState(null, "", location.pathname);
     imageAssetsPanel.hidden = true;
+    audioAssetsPanel.hidden = true;
     autolabelPanel.hidden = true;
     assetList.replaceChildren();
     render();
@@ -5997,6 +6147,7 @@ function renderWorkspace() {
   labelsPanel.hidden = !project;
   if (!project) {
     imageAssetsPanel.hidden = true;
+    audioAssetsPanel.hidden = true;
     datasetPanel.hidden = true;
     trPanel.hidden = true;
     if (appsPanel) appsPanel.hidden = true;
