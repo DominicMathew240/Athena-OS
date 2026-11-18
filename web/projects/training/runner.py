@@ -229,7 +229,12 @@ def test_items(manifest: dict[str, Any], dest: Path) -> list[EvalItem]:
 def val_items(manifest: dict[str, Any], dest: Path) -> list[EvalItem]:
     """The validation ("Checking") images with ground truth, built exactly like ``test_items``. Used only to choose
     confidence thresholds (``operating_points``); the model was not trained on the test split but may have been
-    steered by these, which is why numbers about new pictures come from the test split."""
+    steered by these, which is why numbers about new pictures come from the test split.
+
+    Generic (non-image) versions have no image manifest; they answer nothing here, so a
+    non-vision backend simply gets no ``operating_points`` block."""
+    if "images" not in manifest:
+        return []
     return _split_items(manifest, dest, "val")
 
 
@@ -365,7 +370,7 @@ def run_training(run: TrainingRun, backend: TrainingBackend | None = None) -> Tr
         work.mkdir(parents=True, exist_ok=True)
         dataset_dir = work / "dataset"
         items, labels = build_dataset(run, backend, dataset_dir)
-        log.add(f"Dataset ready: {run.dataset_version.image_count} images, {len(items)} held-out test images")
+        log.add(f"Dataset ready: {run.dataset_version.image_count} images, {len(items)} held-out test items")
 
         def check_limits() -> None:
             if _cancelled(run):
@@ -388,7 +393,9 @@ def run_training(run: TrainingRun, backend: TrainingBackend | None = None) -> Tr
         log.flush(force=True)
         boxes_per_label = {label: 0 for label in labels}
         for item in items:
-            for label, *_ in item.boxes:
+            # Non-vision backends hand back their own ground-truth items; only the image ones
+            # carry ``.boxes`` (this counter feeds the box-shaped "not available" fallback).
+            for label, *_ in getattr(item, "boxes", [(getattr(item, "label", ""),)]):
                 boxes_per_label[label] = boxes_per_label.get(label, 0) + 1
         if items:
             evaluation = backend.evaluate(
@@ -444,15 +451,30 @@ def run_training(run: TrainingRun, backend: TrainingBackend | None = None) -> Tr
 def register_candidate(
     run: TrainingRun, artifact: Path, labels: list[str], evaluation: dict[str, Any], metrics: dict[str, Any]
 ) -> ModelVersion:
-    """Move the artifact under the data home, hash it, and create a ``candidate`` - never anything more."""
+    """Move the artifact under the data home, hash it, and create a ``candidate`` - never anything more.
+
+    ``artifact`` is one file for most backends; a backend whose artifact is a folder of files
+    (the audio backend's model plus its metadata sidecar) passes the folder, and every file in
+    it is copied next to the same ``model.bin`` path, verbatim and hashed file by file."""
     import uuid
 
     model_id = uuid.uuid4()
     relative = f"models/{run.project_id}/{model_id}/model.bin"
     target = models_root().parent / relative
     target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(artifact, target)
-    target.chmod(0o600)
+    source = Path(artifact)
+    if source.is_dir():
+        # A folder artifact: every file in it lands beside the same model.bin path, under its
+        # own name, so sidecar files (the audio backend's metadata.json) survive together.
+        for entry in sorted(source.iterdir()):
+            if entry.is_file():
+                shutil.copyfile(entry, target.parent / entry.name)
+                (target.parent / entry.name).chmod(0o600)
+        if not target.is_file():
+            raise ValueError("The training backend produced no model file. Nothing was saved.")
+    else:
+        shutil.copyfile(source, target)
+        target.chmod(0o600)
     with transaction.atomic():
         model = ModelVersion.objects.create(
             id=model_id,

@@ -61,6 +61,7 @@
           <a href="#checklist-panel" data-panel="checklist-panel">Overview</a>
           <a href="#labels-panel" data-panel="labels-panel">Labels</a>
           <a href="#image-assets-panel" data-panel="image-assets-panel"><span class="jump-label">Pictures</span><span class="jump-count" id="jump-corrections" hidden></span></a>
+          <a href="#audio-assets-panel" data-panel="audio-assets-panel"><span class="jump-label">Sound clips</span></a>
           <a href="#dataset-panel" data-panel="dataset-panel">Make a training set</a>
           <a href="#train-panel" data-panel="train-panel">Teach the computer</a>
           {% if check_setup_url %}<a href="#apps-panel" data-panel="apps-panel">Check screens</a>{% endif %}
@@ -139,6 +140,19 @@
           <div class="asset-filter" id="asset-filter" role="group" aria-label="Choose which pictures to show" hidden><button class="asset-filter-toggle" id="asset-filter-feedback" type="button" aria-pressed="false">Show only pictures from check screens</button></div>
           <div class="asset-list" id="asset-list"></div>
           <p class="asset-help">These pictures have not been checked for usage rights. Do not treat them as cleared for sharing or for training a model.</p>
+        </section>
+
+        <section class="panel asset-panel" id="audio-assets-panel" aria-labelledby="audio-assets-heading" hidden>
+          <h3 id="audio-assets-heading">Sound clips</h3>
+          <p class="panel-intro">Add WAV recordings to this project. Each clip is checked (length, sample rate, channels) and then stored on this Athena server.</p>
+          <p class="gate-note" data-gate-note="label" hidden></p>
+          <form class="asset-upload" id="audio-upload-form" data-needs="label" aria-label="Add sound clips to this project">
+            <label for="audio-upload">Choose sound clips <span class="asset-help">Up to 20 clips at a time (100 MB in total). Each clip can be up to 20 MB, between 0.25 and 60 seconds, mono or stereo, 8,000–48,000 Hz.</span><input id="audio-upload" name="images" type="file" accept="audio/wav,.wav,.wave" multiple></label>
+            <button class="primary" id="upload-audio" type="submit">Add sound clips</button>
+          </form>
+          <p class="form-error" id="audio-upload-error" role="alert"></p>
+          <p class="asset-status" id="audio-asset-status" role="status" aria-live="polite"></p>
+          <ul class="clip-list" id="clip-list" aria-label="Sound clips in this project"></ul>
         </section>
 
         <section class="panel dataset-panel" id="dataset-panel" aria-labelledby="dataset-heading" hidden>

@@ -112,7 +112,9 @@ class RecipeRegistryTests(SignedInMixin, TestCase):
         found = recipes()
         self.assertIn("vision-detection", found)
         self.assertTrue(found["vision-detection"].available)
-        for key in ("audio-classification", "handwriting-ocr", "tabular-prediction"):
+        # Wave 1 (OS-AUD-001): the audio recipe landed, so it is available too.
+        self.assertTrue(found["audio-classification"].available)
+        for key in ("handwriting-ocr", "tabular-prediction"):
             self.assertIn(key, found)
             self.assertFalse(found[key].available)
             self.assertTrue(found[key].unavailable_reason)
@@ -166,8 +168,7 @@ class RecipesApiTests(SignedInMixin, TestCase):
         vision = next(r for r in body["recipes"] if r["key"] == "vision-detection")
         self.assertTrue(vision["available"])
         audio = next(r for r in body["recipes"] if r["key"] == "audio-classification")
-        self.assertFalse(audio["available"])
-        self.assertTrue(audio["unavailable_reason"])
+        self.assertTrue(audio["available"])  # Wave 1 (OS-AUD-001) landed the audio recipe
 
     def test_anonymous_callers_are_refused(self) -> None:
         from django.test import Client
@@ -189,7 +190,7 @@ class PluginRegistryTests(SignedInMixin, TestCase):
     def test_get_plugin_returns_none_for_unregistered_modalities(self) -> None:
         from .modalities import get_plugin
 
-        self.assertIsNone(get_plugin("audio"))
+        self.assertIsNone(get_plugin("speech"))
 
     def test_register_and_unregister_a_plugin(self) -> None:
         from .modalities import get_plugin, register_plugin, unregister_plugin
@@ -267,31 +268,33 @@ class ImagePluginParityTests(DatasetBase):
 
 
 class UnsupportedModalityRefusalsTests(DatasetBase):
-    """A data kind with no plugin is refused everywhere, in plain words (the old behavior)."""
+    """A data kind with no plugin is refused everywhere, in plain words (the old behavior).
+
+    Audio landed a plugin in Wave 1, so the subject here is an unsupported kind (speech)."""
 
     def setUp(self) -> None:
         super().setUp()
-        self.audio = Project.objects.create(name="Sound", modality="audio", task="Classify", labels=["a"])
+        self.speech = Project.objects.create(name="Speech", modality="speech", task="Transcribe", labels=["a"])
 
-    def test_audio_project_uploads_are_refused_plainly(self) -> None:
+    def test_unsupported_project_uploads_are_refused_plainly(self) -> None:
         from django.core.files.uploadedfile import SimpleUploadedFile
 
         upload = SimpleUploadedFile("noise.wav", b"RIFF....", content_type="audio/wav")
-        response = self.client.post(f"/api/projects/{self.audio.id}/assets", {"images": upload})
+        response = self.client.post(f"/api/projects/{self.speech.id}/assets", {"images": upload})
         self.assertEqual(response.status_code, 400)
         self.assertIn("isn't supported yet", response.json()["error"])
 
-    def test_audio_project_assets_cannot_be_listed_or_annotated(self) -> None:
-        self.assertGreaterEqual(self.client.get(f"/api/projects/{self.audio.id}/assets").status_code, 400)
+    def test_unsupported_project_assets_cannot_be_listed_or_annotated(self) -> None:
+        self.assertGreaterEqual(self.client.get(f"/api/projects/{self.speech.id}/assets").status_code, 400)
         self.assertGreaterEqual(
             self.client.get(
-                f"/api/projects/{self.audio.id}/assets/00000000-0000-0000-0000-000000000000/annotations"
+                f"/api/projects/{self.speech.id}/assets/00000000-0000-0000-0000-000000000000/annotations"
             ).status_code,
             400,
         )
 
     def test_readiness_for_an_unsupported_recipe_is_a_clear_not_available_state(self) -> None:
-        response = self.client.get(f"/api/projects/{self.audio.id}/training/readiness")
+        response = self.client.get(f"/api/projects/{self.speech.id}/training/readiness")
         self.assertEqual(response.status_code, 200)
         body = response.json()
         self.assertFalse(body["ready"])
@@ -300,7 +303,7 @@ class UnsupportedModalityRefusalsTests(DatasetBase):
 
     def test_backend_list_stays_image_only(self) -> None:
         # The backend listing is the image one (unchanged); other modalities get a plain 404.
-        self.assertEqual(self.client.get(f"/api/projects/{self.audio.id}/training/backends").status_code, 404)
+        self.assertEqual(self.client.get(f"/api/projects/{self.speech.id}/training/backends").status_code, 404)
 
 
 class AssetAnnotationCrudTests(ModalFoundationBase):

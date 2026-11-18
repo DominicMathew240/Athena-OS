@@ -12,12 +12,16 @@ import logging
 
 from django.conf import settings
 
+from .audio import AudioModalityPlugin
 from .base import ModalityPlugin, UnsupportedModalityError
 from .image import ImageModalityPlugin
 
 logger = logging.getLogger(__name__)
 
-BUILTIN_PLUGINS = ("projects.modalities.image:ImageModalityPlugin",)
+BUILTIN_PLUGINS = (
+    "projects.modalities.image:ImageModalityPlugin",
+    "projects.modalities.audio:AudioModalityPlugin",
+)
 
 _registry: dict[str, type[ModalityPlugin]] = {}
 _instances: dict[str, ModalityPlugin] = {}

@@ -285,11 +285,17 @@ def _one_click_preview(
 
 
 def _train_images(dataset: DatasetVersion) -> int:
-    return split_counts(dataset).get("train", {}).get("images", 0)
+    return _split_entries(dataset, "train")
 
 
 def _test_images(dataset: DatasetVersion) -> int:
-    return split_counts(dataset).get("test", {}).get("images", 0)
+    return _split_entries(dataset, "test")
+
+
+def _split_entries(dataset: DatasetVersion, split: str) -> int:
+    """Files in one split of a version: entries for a generic (non-image) version, else images."""
+    counts = split_counts(dataset).get(split, {})
+    return counts.get("entries", counts.get("images", 0))
 
 
 def prepare_start(
