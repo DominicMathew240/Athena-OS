@@ -34,12 +34,13 @@
         <li><a href="#run-inspection" data-toc="run-inspection">03 · Run a visual inspection</a></li>
         <li><a href="#regions-reports" data-toc="regions-reports">04 · Mark regions &amp; read reports</a></li>
         <li><a href="#custom-detectors" data-toc="custom-detectors">05 · Build a custom detector</a></li>
-        <li><a href="#check-screens" data-toc="check-screens">06 · Check screens &amp; improve loop</a></li>
-        <li><a href="#access-roles" data-toc="access-roles">07 · Team access &amp; roles</a></li>
-        <li><a href="#cli-sdk" data-toc="cli-sdk">08 · CLI, SDK &amp; connectors</a></li>
-        <li><a href="#faq" data-toc="faq">09 · Frequently asked questions</a></li>
-        <li><a href="#multimodal-roadmap" data-toc="multimodal-roadmap">10 · Multimodal capability roadmap</a></li>
-        <li><a href="#delivery-waves" data-toc="delivery-waves">11 · Delivery waves &amp; quality gates</a></li>
+        <li><a href="#operations" data-toc="operations">06 · People counting operations</a></li>
+        <li><a href="#check-screens" data-toc="check-screens">07 · Check screens &amp; improve loop</a></li>
+        <li><a href="#access-roles" data-toc="access-roles">08 · Team access &amp; roles</a></li>
+        <li><a href="#cli-sdk" data-toc="cli-sdk">09 · CLI, SDK &amp; connectors</a></li>
+        <li><a href="#faq" data-toc="faq">10 · Frequently asked questions</a></li>
+        <li><a href="#multimodal-roadmap" data-toc="multimodal-roadmap">11 · Multimodal capability roadmap</a></li>
+        <li><a href="#delivery-waves" data-toc="delivery-waves">12 · Delivery waves &amp; quality gates</a></li>
       </ol>
     </nav>
   </aside>
@@ -66,6 +67,11 @@
           <h3>{% icon "detector" 18 %}2. No-code custom model training</h3>
           <p>Follow six consistent steps across supported modalities: choose a goal, add examples, teach with labels, train the model, test against reality, and use and improve safely.</p>
           <a class="a-btn a-btn--sm" href="{% url 'dashboard' %}">Open custom projects{% icon "arrow" 16 %}</a>
+        </div>
+        <div class="wiki-mini">
+          <h3>{% icon "activity" 18 %}3. People counting operations</h3>
+          <p>For questions a photo cannot answer — how many people crossed a line — save a private counting setup from recorded video. Being built now; counting is not available yet.</p>
+          <a class="a-btn a-btn--sm" href="{% url 'operations-page' %}">Open people counting{% icon "arrow" 16 %}</a>
         </div>
       </div>
       <p><strong>Shared lifecycle across every modality:</strong> Project, Task, Observation, Annotation, Dataset Version, Training Run, Model Version, Evaluation, Deployment, and Feedback.</p>
@@ -163,10 +169,27 @@
       </ol>
     </article>
 
+    <article class="a-card a-card--pad wiki-section" id="operations" data-audience="all operator trainer" data-keywords="operations people counting recorded video line draft site source release candidate preflight crossings footfall entrance">
+      <header class="wiki-sec-head">
+        <div>
+          <p class="a-eyebrow"><b>06</b> Operations</p>
+          <h2 class="a-h2">People counting operations</h2>
+        </div>
+        <a class="a-btn a-btn--sm" href="{% url 'operations-page' %}">People counting{% icon "arrow" 16 %}</a>
+      </header>
+      <p>Photo inspections answer “who is visible in these pictures?” from still frames — they cannot tell you how many people entered, because movement between frames is missed. An <strong>operation</strong> is the workflow for that: a private site and camera source, a counting line drawn on the picture, and an immutable, versioned chain of parts that will eventually replay recorded video and count crossings. It is being built in the open, and the console says exactly what works today.</p>
+      <ol class="wiki-steps">
+        <li><strong>Where it lives:</strong> Open <strong>People counting</strong> in the sidebar (<span class="a-mono">/operations</span>). Every draft is private to its creator.</li>
+        <li><strong>Guided setup:</strong> Name the operation, add one private recording, draw a finite line, mark a few human reference crossings, then pin the parts — the source view, line geometry, counting recipe, policy, screen, and an approved detector model. The guide saves as you go and resumes after a reload.</li>
+        <li><strong>Is this server ready?</strong> The readiness list on the same page checks video decoding, private storage, the teaching and check-screen helpers, and the picture-reading model — each missing part names the person who can fix it and how.</li>
+        <li><strong>Relationship to the rest of Athena:</strong> An approved <a href="{% url 'dashboard' %}">custom detector</a> is one of the parts an operation pins; <a href="{% url 'inspections-page' %}">photo inspections</a> remain the quick, no-training way to ask what is visible. Today an operation draft assembles a release candidate but cannot yet count people — recorded replay, publication and the runtime are not built yet.</li>
+      </ol>
+    </article>
+
     <article class="a-card a-card--pad wiki-section" id="check-screens" data-audience="operator trainer" data-keywords="check screen setup slug operator feedback improve loop corrections import">
       <header class="wiki-sec-head">
         <div>
-          <p class="a-eyebrow"><b>06</b> Deployment &amp; feedback</p>
+          <p class="a-eyebrow"><b>07</b> Deployment &amp; feedback</p>
           <h2 class="a-h2">Check screens &amp; improve loop</h2>
         </div>
       </header>
@@ -180,7 +203,7 @@
     <article class="a-card a-card--pad wiki-section" id="access-roles" data-audience="admin" data-keywords="access roles viewer labeler trainer approver administrator superuser audit log downloads">
       <header class="wiki-sec-head">
         <div>
-          <p class="a-eyebrow"><b>07</b> Governance</p>
+          <p class="a-eyebrow"><b>08</b> Governance</p>
           <h2 class="a-h2">Team access &amp; roles</h2>
         </div>
         {% if athena_access.can_administer %}<a class="a-btn a-btn--sm" href="{% url 'access-page' %}">Open Access{% icon "arrow" 16 %}</a>{% endif %}
@@ -205,7 +228,7 @@
     <article class="a-card a-card--pad wiki-section" id="cli-sdk" data-audience="admin" data-keywords="cli sdk python contracts worker autolabel train inference knowledge connectors">
       <header class="wiki-sec-head">
         <div>
-          <p class="a-eyebrow"><b>08</b> Automation &amp; workers</p>
+          <p class="a-eyebrow"><b>09</b> Automation &amp; workers</p>
           <h2 class="a-h2">CLI, SDK &amp; workers</h2>
         </div>
       </header>
@@ -238,7 +261,7 @@
     <article class="a-card a-card--pad wiki-section" id="faq" data-audience="all operator trainer admin" data-keywords="faq questions answers privacy offline ollama custom model licence" itemscope itemtype="https://schema.org/FAQPage">
       <header class="wiki-sec-head">
         <div>
-          <p class="a-eyebrow"><b>09</b> FAQ</p>
+          <p class="a-eyebrow"><b>10</b> FAQ</p>
           <h2 class="a-h2">Frequently asked questions</h2>
         </div>
         <span class="a-tag">Quick answers</span>
@@ -274,7 +297,7 @@
     <article class="a-card a-card--pad wiki-section" id="multimodal-roadmap" data-audience="all operator trainer admin" data-keywords="multimodal roadmap architecture vision acoustic audio ocr handwriting trocr tabular spreadsheets speech asr text nlp sensor time-series pose hand tracking video face fusion athena forge lab nodes domain packs">
       <header class="wiki-sec-head">
         <div>
-          <p class="a-eyebrow"><b>10</b> Product direction · 17 November 2026 review</p>
+          <p class="a-eyebrow"><b>11</b> Product direction · 17 November 2026 review</p>
           <h2 class="a-h2">Multimodal capability roadmap</h2>
         </div>
         <span class="a-tag">Proposed priorities</span>
@@ -343,7 +366,7 @@
     <article class="a-card a-card--pad wiki-section" id="delivery-waves" data-audience="all trainer admin" data-keywords="wave 0 wave 1 wave 2 wave 3 wave 4 os-core os-vis os-aud os-ocr os-tab os-asr os-nlp os-doc os-sig task list t01 t05 t65 quality gates metrics mAP WER event f1 OKS PCK priorities">
       <header class="wiki-sec-head">
         <div>
-          <p class="a-eyebrow"><b>11</b> Engineering execution &amp; governance</p>
+          <p class="a-eyebrow"><b>12</b> Engineering execution &amp; governance</p>
           <h2 class="a-h2">Delivery waves, task hierarchy &amp; quality gates</h2>
         </div>
         <span class="a-tag">Waves 0 to 4</span>

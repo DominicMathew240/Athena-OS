@@ -11,6 +11,7 @@
       <a href="{% url 'inspections-page' %}" data-testid="nav-inspections-link"{% if nav == "inspections" %} aria-current="page"{% endif %}>{% icon "list" 18 %}Inspections</a>
       <p class="sb-group">Build</p>
       <a href="{% url 'dashboard' %}" data-testid="nav-detectors-link"{% if nav == "detectors" %} aria-current="page"{% endif %}>{% icon "detector" 18 %}Custom detectors</a>
+      <a href="{% url 'operations-page' %}" data-testid="nav-operations-link"{% if nav == "operations" %} aria-current="page"{% endif %}>{% icon "activity" 18 %}People counting</a>
       <p class="sb-group">Settings</p>
       <a href="{% url 'ai-settings' %}" data-testid="nav-ai-settings-link"{% if nav == "ai" %} aria-current="page"{% endif %}{% if nav == "new" %} target="_blank" rel="noopener" aria-label="AI model (opens in a new tab)"{% endif %}>{% icon "cpu" 18 %}AI model<span class="sb-dot" data-ai-dot title="Checking the AI model…"></span></a>
       {% if athena_access.can_administer %}<a href="{% url 'access-page' %}" data-testid="nav-access-link"{% if nav == "access" %} aria-current="page"{% endif %}>{% icon "shield" 18 %}Access</a>{% endif %}
