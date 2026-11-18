@@ -1,6 +1,6 @@
 # Athena OS
 
-**Current release: 1.2.0** — the version is declared once in [`web/athena_web/settings.py`](web/athena_web/settings.py) (`RELEASE_VERSION`) and shown in the console sidebar footer, the public [`GET /api/version`](web/projects/views.py) endpoint, and the `/healthz` probe. A deployment may set `ATHENA_VERSION` only to *add* a packaging suffix (for example `1.2.0+acme`); it can never mask the released version.
+**Current release: 1.3.0** — the version is declared once in [`web/athena_web/settings.py`](web/athena_web/settings.py) (`RELEASE_VERSION`) and shown in the console sidebar footer, the public [`GET /api/version`](web/projects/views.py) endpoint, and the `/healthz` probe. A deployment may set `ATHENA_VERSION` only to *add* a packaging suffix (for example `1.3.0+acme`); it can never mask the released version.
 
 Athena OS is an open-source (Apache-2.0) toolkit for building reviewed datasets and models for industrial
 data, starting with image object detection. It is early: see [`ROADMAP.md`](ROADMAP.md) for what is done and
@@ -44,9 +44,12 @@ live model is never changed by feedback alone.
 recorded-video operations: private sites and sources, an operation draft with a counting line and
 human reference marks, and an immutable, versioned component chain — source view, geometry, recipe,
 policy, screen, and an approved-model binding — that can be assembled into an append-only **release
-bundle** (a release candidate; publication and runtime are not built yet). The API is complete and
-tested; the console UI for it and the runtime that would run a bundle are not. Today a draft cannot
-count people, and the console says so.
+bundle** (a release candidate; publication and runtime are not built yet). The console walks an
+operator through this as a guided, resumable stepper, and an environment preflight (`GET
+/api/operation-preflight`) says up front whether the server can actually run an operation — video
+checking, private storage, the teaching and check-screen helpers, and the picture-reading model —
+with the person responsible and one recovery step for each missing part. Today a draft cannot count
+people, and the console says so.
 
 ### Try it locally
 
@@ -75,10 +78,10 @@ The console follows **semantic versioning** starting at `1.0.0`. The version liv
 place (`RELEASE_VERSION` in [`web/athena_web/settings.py`](web/athena_web/settings.py)) and is read
 through [`athena_web/version.py`](web/athena_web/version.py):
 
-- `GET /api/version` → `{"name": "athena-console", "version": "1.2.0"}` (public; a bug report
+- `GET /api/version` → `{"name": "athena-console", "version": "1.3.0"}` (public; a bug report
   should not need an account)
 - `GET /healthz` → the version alongside the database/media readiness checks
-- the console sidebar footer → `Athena OS 1.2.0` on every page
+- the console sidebar footer → `Athena OS 1.3.0` on every page
 
 The SDK and CLI packages (`athena-sdk`, `athena-cli`) are versioned independently at `0.1.0` in
 their own `pyproject.toml` files; they will track the console's major version when their public
