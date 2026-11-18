@@ -7,6 +7,7 @@ from . import (
     feedback_views,
     inference_pages,
     inference_views,
+    operation_preflight,
     operation_views,
     recording_views,
     results_views,
@@ -34,6 +35,7 @@ urlpatterns = [
     path("api/vision/status", vision_views.vision_status, name="vision-status"),
     path("api/operation-drafts", operation_views.operation_drafts, name="operation-drafts"),
     path("api/operation-drafts/<uuid:draft_id>", operation_views.operation_draft, name="operation-draft"),
+    path("api/operation-preflight", operation_preflight.operation_preflight, name="operation-preflight"),
     path(
         "api/operation-drafts/<uuid:draft_id>/versions",
         operation_views.operation_draft_versions,

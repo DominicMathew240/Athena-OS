@@ -19,7 +19,7 @@
     line: ["line-section"],
     operation: ["operation-setup"],
     versions: ["pin-section", "creator-section"],
-    release: ["release-section"]
+    release: ["release-section", "preflight-section"]
   };
 
   // A step is "done" only from what the draft itself has saved — never from what is
@@ -59,7 +59,9 @@
     {
       id: "release", label: "Release",
       done: d => (d?.release_bundles ?? 0) > 0,
-      next: d => d?.release_bundles ? "A release candidate exists. Publishing and running it are not built yet." : "Assemble a release candidate once every part is pinned.",
+      next: d => d?.release_bundles
+        ? "A release candidate exists. Publishing and running it are not built yet."
+        : "Assemble a release candidate once every part is pinned. The readiness list below says whether this server can run one.",
       focus: () => "#release-area"
     }
   ];

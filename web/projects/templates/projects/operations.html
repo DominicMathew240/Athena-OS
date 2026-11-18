@@ -152,5 +152,12 @@
   <p id="release-error" class="a-error" role="alert"></p>
   <div id="release-area"></div>
 </section>
+<section class="a-card step" id="preflight-section" aria-labelledby="preflight-heading" hidden>
+  <h2 class="a-h2" id="preflight-heading">Is this server ready?</h2>
+  <p class="a-help">Before anything runs, Athena checks the parts of the environment an operation depends on. Each line says who can fix it and how; a missing part never looks like a queued test.</p>
+  <p id="preflight-status" role="status" aria-live="polite">Checking this server…</p>
+  <ul id="preflight-list" class="op-rows" data-testid="preflight-list"></ul>
+  <p><button class="a-btn" type="button" id="preflight-refresh" data-testid="preflight-refresh">Check again</button></p>
+</section>
 {% endblock %}
-{% block scripts %}<script src="{% static 'projects/operation-line.js' %}"></script><script src="{% static 'projects/operation-drafts.js' %}"></script><script src="{% static 'projects/operation-versions.js' %}"></script><script src="{% static 'projects/operation-setup-guide.js' %}"></script>{% endblock %}
+{% block scripts %}<script src="{% static 'projects/operation-line.js' %}"></script><script src="{% static 'projects/operation-drafts.js' %}"></script><script src="{% static 'projects/operation-versions.js' %}"></script><script src="{% static 'projects/operation-setup-guide.js' %}"></script><script src="{% static 'projects/operation-preflight.js' %}"></script>{% endblock %}
