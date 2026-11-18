@@ -6,6 +6,7 @@ only inside the worker (``manage.py train_worker``).
 
 from __future__ import annotations
 
+import json
 import logging
 import platform
 import shutil
@@ -176,6 +177,49 @@ def export_entries(run: TrainingRun, dest: Path) -> list[Path]:
     return written
 
 
+def build_generic_dataset(run: TrainingRun, dest: Path) -> tuple[list[EvalItem], dict[str, Any]]:
+    """A ready-made generic export for backends that train on files + annotations (e.g. OCR).
+
+    Combines ``export_entries`` (the frozen files, checksum-verified) with
+    ``entry_ground_truth`` (the frozen annotations) into one documented layout under ``dest``:
+
+    * ``images/<split>/<n>_<sha12>.<ext>`` - each entry's file, renamed to ``images/`` so every
+      backend reads one obvious directory tree (the bytes are the entry files verbatim);
+    * ``transcripts.json`` - ``[{"split", "asset_id", "filename", "sha256", "text"}]`` in the
+      same order as the files, one entry per file, ``text`` read from the annotation's
+      ``"text"`` key (``""`` when the annotation has none - an OCR backend refuses those).
+
+    Returns ``(eval_items, labels)`` where ``eval_items`` is a list of ``EvalItem`` whose
+    ``path`` points at the test-split files and whose ``boxes`` are unused (empty); the backend
+    reads the transcripts from ``transcripts.json``. ``labels`` is the project's label list.
+    """
+    files = export_entries(run, dest)
+    ground_truth = entry_ground_truth(run)
+    entries = []
+    for source, truth in zip(files, ground_truth):
+        target = dest / "images" / truth["split"] / source.name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), target)
+        annotation = truth["annotation"] if isinstance(truth["annotation"], dict) else {}
+        entries.append(
+            {
+                "split": truth["split"],
+                "asset_id": truth["asset_id"],
+                "filename": truth["filename"],
+                "sha256": truth["sha256"],
+                "text": str(annotation.get("text") or ""),
+                "path": str(target.relative_to(dest)),
+            }
+        )
+    (dest / "transcripts.json").write_text(json.dumps(entries, indent=2), encoding="utf-8")
+    test_items = [
+        EvalItem(dest / item["path"], [], 0, 0, item["asset_id"])
+        for item in entries
+        if item["split"] == "test"
+    ]
+    return test_items, list(run.dataset_version.label_names)
+
+
 def entry_ground_truth(run: TrainingRun) -> list[dict[str, Any]]:
     """Every frozen entry of the run's version: its split, primary label and annotation.
 
@@ -207,7 +251,9 @@ def entry_ground_truth(run: TrainingRun) -> list[dict[str, Any]]:
 
 
 def _split_items(manifest: dict[str, Any], dest: Path, split: str) -> list[EvalItem]:
-    grouped = writers._by_split(manifest["images"])  # noqa: SLF001 - same package, same naming rule
+    # A generic (recipe) manifest has no "images": it freezes files + annotations in "entries",
+    # and a non-box backend builds its own eval items, so the box-shaped answer is simply none.
+    grouped = writers._by_split(manifest.get("images") or [])  # noqa: SLF001 - same package, same naming rule
     items = []
     for index, image in grouped.get(split, []):
         name = writers.image_name(index, image)
@@ -388,11 +434,19 @@ def run_training(run: TrainingRun, backend: TrainingBackend | None = None) -> Tr
         log.flush(force=True)
         boxes_per_label = {label: 0 for label in labels}
         for item in items:
-            for label, *_ in item.boxes:
+            for label, *_ in getattr(item, "boxes", ()) or ():
                 boxes_per_label[label] = boxes_per_label.get(label, 0) + 1
         if items:
             evaluation = backend.evaluate(
                 Path(result.artifact_path), items, labels, {"confidence": EVAL_CONFIDENCE, "max_boxes": 100}
+            )
+        elif run.annotation_kind and run.annotation_kind != "boxes":
+            # A non-box recipe with an empty test split: its backend speaks its own evaluation
+            # shape, so the generic not_available answer names its kind, not boxes.
+            evaluation = evaluation_lib.not_available(
+                "The dataset version's test split has no files, so there is nothing held out to measure against.",
+                0,
+                boxes_per_label,
             )
         else:
             evaluation = evaluation_lib.not_available(

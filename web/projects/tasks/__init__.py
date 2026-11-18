@@ -51,15 +51,24 @@ AUDIO_CLASSIFICATION = TaskRecipe(
     available=False,
     unavailable_reason="Sound projects are coming soon. You can save the project name and labels today.",
 )
+#: Handwriting OCR (Wave 1). The labels_help explains the one-label convention: the project's
+#: single label is named "transcript" (it satisfies the snapshot convention's data["label"]),
+#: and the actual corrected text lives in the annotation's "text" key. See
+#: ``projects/modalities/ocr.py`` for the full contract.
 HANDWRITING_OCR = TaskRecipe(
     key="handwriting-ocr",
     title="Read handwriting",
     modality="image",
-    summary="Teach Athena to read handwritten forms and check the text it recognizes.",
+    summary=(
+        "Teach Athena to read handwritten text in pictures. You type the correct text for each "
+        "picture; Athena learns to read it herself and is checked by character and word errors."
+    ),
     annotation_kind="transcripts",
-    labels_help="One label per kind of entry, e.g. date_field, signature, total_amount.",
-    available=False,
-    unavailable_reason="Handwriting tools are coming soon. Picture projects can store images today.",
+    labels_help=(
+        "Keep exactly one label, named transcript. The picture's corrected text goes with it: "
+        "open a picture and type what the handwriting says."
+    ),
+    available=True,
 )
 TABULAR_PREDICTION = TaskRecipe(
     key="tabular-prediction",

@@ -112,7 +112,10 @@ class RecipeRegistryTests(SignedInMixin, TestCase):
         found = recipes()
         self.assertIn("vision-detection", found)
         self.assertTrue(found["vision-detection"].available)
-        for key in ("audio-classification", "handwriting-ocr", "tabular-prediction"):
+        # handwriting-ocr landed in Wave 1: it is available; the other two stay placeholders.
+        self.assertIn("handwriting-ocr", found)
+        self.assertTrue(found["handwriting-ocr"].available)
+        for key in ("audio-classification", "tabular-prediction"):
             self.assertIn(key, found)
             self.assertFalse(found[key].available)
             self.assertTrue(found[key].unavailable_reason)
