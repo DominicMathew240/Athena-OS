@@ -1,6 +1,6 @@
 # Athena OS
 
-**Current release: 1.1.0** — the version is declared once in [`web/athena_web/settings.py`](web/athena_web/settings.py) (`RELEASE_VERSION`) and shown in the console sidebar footer, the public [`GET /api/version`](web/projects/views.py) endpoint, and the `/healthz` probe. A deployment may set `ATHENA_VERSION` only to *add* a packaging suffix (for example `1.1.0+acme`); it can never mask the released version.
+**Current release: 1.2.0** — the version is declared once in [`web/athena_web/settings.py`](web/athena_web/settings.py) (`RELEASE_VERSION`) and shown in the console sidebar footer, the public [`GET /api/version`](web/projects/views.py) endpoint, and the `/healthz` probe. A deployment may set `ATHENA_VERSION` only to *add* a packaging suffix (for example `1.2.0+acme`); it can never mask the released version.
 
 Athena OS is an open-source (Apache-2.0) toolkit for building reviewed datasets and models for industrial
 data, starting with image object detection. It is early: see [`ROADMAP.md`](ROADMAP.md) for what is done and
@@ -75,10 +75,10 @@ The console follows **semantic versioning** starting at `1.0.0`. The version liv
 place (`RELEASE_VERSION` in [`web/athena_web/settings.py`](web/athena_web/settings.py)) and is read
 through [`athena_web/version.py`](web/athena_web/version.py):
 
-- `GET /api/version` → `{"name": "athena-console", "version": "1.1.0"}` (public; a bug report
+- `GET /api/version` → `{"name": "athena-console", "version": "1.2.0"}` (public; a bug report
   should not need an account)
 - `GET /healthz` → the version alongside the database/media readiness checks
-- the console sidebar footer → `Athena OS 1.1.0` on every page
+- the console sidebar footer → `Athena OS 1.2.0` on every page
 
 The SDK and CLI packages (`athena-sdk`, `athena-cli`) are versioned independently at `0.1.0` in
 their own `pyproject.toml` files; they will track the console's major version when their public
