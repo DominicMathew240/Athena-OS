@@ -42,12 +42,17 @@ try {
   const errors = [];
   page.on('pageerror', error => errors.push(error.message));
 
-  // A draft with one recording and one saved line, exactly like the drafts flow.
+  // A draft with one recording and one saved line, exactly like the drafts flow. The guided
+  // stepper (T06) focuses one step at a time, so the walk moves through it with its own
+  // Continue buttons; a throw-away server may hold a same-named draft, which is fine.
   await page.goto(base + '/operations');
-  await page.getByText('No drafts yet.').waitFor();
+  await page.getByText(/No drafts yet|Select a draft|Showing up to/).waitFor();
   await page.locator('#draft-name').fill('Replay surface walk');
   await page.locator('#draft-save').click();
   await page.getByText('Saved draft. Changes are saved when you select Save draft.').waitFor();
+  // The stepper's own "Continue to Recording" reveals the upload step.
+  await page.getByTestId('guide-continue').click();
+  await page.locator('#recording-section').waitFor({ state: 'visible' });
   await page.locator('#recording-file').setInputFiles(videoFile);
   await page.locator('#recording-upload').click();
   await page.getByText('Recording saved. Counting is not available yet.').waitFor();
@@ -56,6 +61,9 @@ try {
   assert.equal(await video.evaluate(v => v.videoWidth), 64);
   // The replay surface owns playback; the video must not carry native controls.
   assert.equal(await video.evaluate(v => v.controls), false);
+  // Continue to the line step before filling its fields.
+  await page.getByTestId('guide-continue').click();
+  await page.locator('#line-section').waitFor({ state: 'visible' });
   for (const [id, value] of [['line-start-x', '20'], ['line-start-y', '50'], ['line-end-x', '80'], ['line-end-y', '50'], ['line-positive', 'Entering'], ['line-negative', 'Leaving']]) {
     await page.locator(`#${id}`).fill(value);
   }
@@ -74,6 +82,10 @@ try {
   const savedResponse = await saved;
   assert.equal(savedResponse.status(), 200);
   const draftId = (await savedResponse.json()).draft.id;
+
+  // Back to the recording step: the replay surface lives there, under the line section.
+  await page.getByTestId('guide-step-recording').click();
+  await page.locator('#recording-section').waitFor({ state: 'visible' });
 
   // Play and pause through the surface's own controls.
   await page.getByTestId('replay-play').click();
@@ -152,8 +164,9 @@ try {
   assert.deepEqual(savedDuringResize, [], 'resizing must never re-save the draft');
 
   // Reload and resume: the configuration is exactly what was saved, in original coordinates.
+  // The draft is picked by id: earlier runs on a throw-away server may leave same-named drafts.
   await page.reload();
-  await page.locator('#draft-list').getByRole('button', { name: 'Replay surface walk' }).click();
+  await page.locator(`#draft-list [data-draft-id="${draftId}"]`).click();
   await page.waitForFunction(() => document.querySelector('#recording-preview').readyState >= 2);
   await page.waitForFunction(() => {
     const data = document.querySelector('.replay-overlay').getContext('2d').getImageData(32, 24, 1, 1).data;
@@ -172,10 +185,12 @@ try {
   assert.deepEqual(serverDraft.line.end, [0.8, 0.5], 'saved coordinates must stay normalized, never viewport pixels');
   assert.equal(serverDraft.reference_events.length, 2);
 
-  // Leave the disposable server clean.
+  // Leave the disposable server clean. (Exit the stepper first: it hides the draft section.)
+  await page.getByTestId('guide-exit').click();
   await page.locator('#draft-delete').click();
   await page.getByRole('alertdialog').getByRole('button', { name: 'Delete draft' }).click();
-  await page.getByText('No drafts yet.').waitFor();
+  await page.getByText('Draft deleted.').waitFor();
+  await page.locator(`#draft-list [data-draft-id="${draftId}"]`).waitFor({ state: 'detached' });
   assert.deepEqual(errors, []);
   console.log('PASS: replay surface plays, scrubs and toggles with a scale-correct overlay; resizing and reloading keep normalized coordinates and configuration.');
 } finally {
