@@ -741,3 +741,100 @@ Synthetic shapes from `plain_comparison` (counts hand-built with `make_block`, *
 ### `pending_pictures` on `GET /api/projects` (2026-10-30)
 
 Each project object also carries `pending_pictures`: the number of pictures with at least one box still marked Needs review (`pending_boxes` counts the boxes). The Overview shows it as "Pictures to review". It is one more conditional distinct count in the existing project query (`web/projects/views.py`, `_projects_with_counts`); query cost was not measured. Test: `tests_autolabel.py`, `test_project_listing_counts_pictures_with_boxes_waiting_for_review`.
+
+## Console HTTP API: the multimodal foundation and the sound/handwriting recipes (2026-11-19)
+
+Wave 0 (commit `1b9a2a9`) made the task, not the file format, the centre of a project; the audio (OS-AUD-001) and
+handwriting-OCR (OS-OCR-001) slices then landed on top of it. What follows documents only the new and changed routes.
+Everything is verified by tests on generated data (sine-tone WAVs, generated "handwriting" PNGs) in
+`tests_modal_foundation.py`, `tests_dataset_generic.py`, `tests_audio.py` and `tests_ocr.py`; no real recording or scan
+and no real operator has gone through any of it, and the model quality of both new backends is unmeasured. All routes
+need a signed-in session and the role named in `@access(...)`; errors are `{"error": "plain text", …}` as elsewhere.
+
+### `GET /api/recipes` (any signed-in role; read-only)
+
+View: `api_recipes` (`web/projects/views.py`); registry: `web/projects/tasks/__init__.py`. Returns the task-recipe
+registry that drives the guided new-project form: `{"recipes": [recipe.as_dict(), …]}` with `Cache-Control: no-store`.
+Each recipe carries `key`, `title`, `modality`, `summary`, `annotation_kind`, `labels_help`, `available` and
+`unavailable_reason`. Unavailable recipes are listed too (the console shows them as "Coming soon"). On this tree there
+are four: `vision-detection` (image, boxes), `audio-classification` (audio, `clip_labels`), `handwriting-ocr`
+(image, `transcripts`) — all three `available: true` — and `tabular-prediction` (table, `available: false`, "coming
+soon"; its slice is in flight). The registry is extensible without touching core: `settings.RECIPES`
+(`"module:attribute"` strings) or `register_recipe()`.
+
+### `POST /api/projects`: the `recipe` field
+
+`ProjectCreateForm` (`web/projects/forms.py`) accepts an optional `"recipe"` key: a registered recipe key whose
+`modality` must match the request's `modality` (400 otherwise). When it is absent, an image project keeps the vision
+default and every other modality gets no recipe (an unavailable recipe is never assigned silently). The stored key is
+returned as `recipe` on every project object (`GET /api/projects` and friends). This is how an audio or OCR project is
+born: `{"name": "Motor sounds", "modality": "audio", "recipe": "audio-classification", "labels": ["healthy_motor",
+"bearing_fault"]}`. An OCR project is an **image** project whose recipe asks for transcripts; a project created with an
+unavailable recipe keeps its name and labels but its upload and teach tools refuse plainly (the readiness answer below).
+
+### Generic annotation endpoints (Labeler and above)
+
+Views: `project_asset_annotations` and `asset_annotation_detail` (`web/projects/views.py`); dispatch:
+`web/projects/annotations.py`. Which style a project's annotations use is decided by the **recipe**, not the file type
+alone: an image project whose recipe is `handwriting-ocr` uses these generic endpoints, while every other image project
+(no recipe, or the vision one) keeps the box endpoints exactly as before — the box detail URL 404s for an OCR project
+and vice versa, so the two never mix.
+
+- `GET /api/projects/<id>/assets/<asset_id>/annotations` — list the asset's generic annotations (an image/box project
+  gets the box response unchanged from this same URL).
+- `POST` the same URL (Labeler) — body validated by the project's modality plugin (`validate_annotation`); an optional
+  `"status"` key follows the box review rule (only model proposals can be marked suggested). 201 returns the annotation.
+- `PATCH` / `DELETE /api/projects/<id>/asset-annotations/<annotation_id>` (Labeler) — the non-image twin of
+  `box-annotation-detail`: same shape, same review rules (editing a suggested annotation accepts it and records the
+  reviewer; `status` may be set explicitly). The URL carries only the annotation id; the project is checked through the
+  asset, so one project's id never resolves another's row.
+
+The annotation body is plugin-defined. The two live today: audio clip labels (`{"label": "bearing_fault"}`, the label
+must be in the project's list) and OCR transcripts (`{"label": "transcript", "text": "what the picture says"}` — the
+label must be exactly `transcript`, the project must carry that one label, the text is stripped, non-empty, at most
+1000 characters, control characters refused; see `web/projects/modalities/ocr.py`).
+
+### Generic dataset endpoints: behavior for non-image projects
+
+`web/projects/dataset_views.py` routes every dataset route through one question first: does this project use the
+generic snapshot path (an audio project, or an image project whose recipe is not boxes)? If yes, the same URLs serve
+generic versions; if no, the image/box behavior is byte-for-byte unchanged.
+
+- `POST /api/projects/<id>/datasets` freezes one `DatasetEntry` per asset carrying the **accepted** annotation
+  (`AssetAnnotation.data`) verbatim — suggested (Needs review) annotations are never included and are counted in
+  `excluded`, with the same plain reason as boxes. Splits are the image path's rules reused on the asset's SHA-256
+  (byte-identical files share a split; 80/10/10 default, same parameters and min-1 rule). Blockers mirror the image
+  ones (no accepted labels, files missing or changed, labels with control characters, annotation of the wrong kind).
+- `GET …/datasets/readiness`, `GET …/datasets/<dataset_id>`, `GET …/datasets/<dataset_id>/export` and
+  `…/exports` all serve the generic version. The export format is `manifest` (the only accepted `?format` value for
+  these projects; the zip holds the checksummed `manifest.json` plus the raw entry files), streamed with the same size
+  cap, integrity check, incomplete-version refusal (409) and `ExportEvent` audit rows as the image exports.
+- The list payload keeps the image document's shape with generic counts (`entry_count`, `annotation_count`,
+  `total_bytes`) instead of images/boxes.
+
+### Training runs for audio and OCR projects
+
+`teachable_project` (`web/projects/training_views.py`) admits image projects plus every project whose recipe is
+available; others 404 as before. `GET …/training/readiness` answers with a plain `task_unavailable` block for a recipe
+that cannot teach yet. On `POST …/training/runs`:
+
+- **Audio** (`recipe: "audio-classification"`): the caller names the backend (`"audio-wav-cnn"`, `projects/training/
+  audio_wav.py`; torch + numpy in the worker, ONNX export when onnxruntime is installed, torch-artifact fallback
+  otherwise) — the API test suite always sends the name explicitly; a run posted without a `backend` key picks the
+  vision default, which cannot read a generic audio snapshot (it is refused with a plain error, not silently run).
+  The run stores `task` and `annotation_kind`; evaluation is the backend's own shape (accuracy, per-label
+  precision/recall/F1, confusion matrix, `eval_kind: "clip_classification"`), and `GET …/models/<id>/results/plain`
+  honestly answers `"Results for this model type are shown in its evaluation report."` (`non_vision: true`) instead of
+  reusing the box-shaped found/missed wording.
+- **OCR** (`recipe: "handwriting-ocr"`): leaving `backend` out selects `ocr-trocr`; naming any other backend is a plain
+  400 ("This project reads handwriting, so its runs use the ocr-trocr backend. …"). The backend fine-tunes
+  `microsoft/trocr-small-handwritten` (about 258 MB; MIT on its model card) — the weights are fetched only when the
+  administrator download switch is on (the D-FINE pattern, `torchvision_frcnn.downloads_allowed`), from
+  `huggingface.co`/`*.hf.co` only, with the licence note and acknowledgement tick (`acknowledge_pretrained_terms`)
+  enforced exactly like every ready-made start. Tests never download anything (the network is refused; the model is
+  stubbed). Evaluation is character error rate and word accuracy on the held-out test pictures. `predict()` is a
+  deliberate refusal — the box-shaped check screens cannot show a text answer; `predict_text()` exists at the backend
+  level for API consumers.
+
+The run → candidate → staged → approved lifecycle, the stage/approve/rollback endpoints and the audit events are the
+existing image ones, unchanged; the generic snapshot and the recipe's backend slot into them.
