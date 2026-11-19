@@ -22,6 +22,7 @@ from django.core.files.storage import default_storage
 from django.db import transaction
 from django.utils import timezone
 
+from .. import source_time
 from ..models import OperationExecution
 from .comparison import Crossing, compare_crossings
 
@@ -169,12 +170,15 @@ def run_execution(
 ) -> OperationExecution:
     """Run a claimed execution to completion. Never raises; outcomes land on the row.
 
-    The current execution step is deliberately minimal and honest: it proves the
-    pinned recording is still the byte-identical file the bundle was assembled
-    from, replays the recorded human reference events through the operation
-    domain's comparison logic, and stores the plain-language outcome. Real video
-    decode and detector inference are T20/T21; they plug in where the reference
-    replay stands, on top of the lease/claim/recovery layer this module is.
+    The current execution step is deliberately honest: it proves the pinned
+    recording is still the byte-identical file the bundle was assembled from,
+    reads that recording's frame timestamps into the ordered, reproducible
+    timeline (T20's ``source_time``), replays the recorded human reference
+    events through the operation domain's comparison logic, and stores the
+    plain-language outcome. Reading timestamps is not watching video: no pixel
+    content is analysed and no detector runs. Real inference is T21; it plugs in
+    where the reference replay stands, on top of the lease/claim/recovery layer
+    this module is.
     """
     owner_key = owner_key or execution.lease_owner or worker_key()
     snapshot = execution.bundle.snapshot or {}
@@ -191,6 +195,13 @@ def run_execution(
             )
         if _cancelled(execution):
             raise ExecutionCancelled("Cancelled by request.")
+        # T20: read the pinned recording's frame timestamps and derive the
+        # ordered processing timeline (frame count, gaps, sessions). This reads
+        # timestamps only — it is still not watching pixel content.
+        timeline = source_time.build_timeline(execution.recording)
+        _beat(execution, owner_key, lease_seconds)
+        if _cancelled(execution):
+            raise ExecutionCancelled("Cancelled by request.")
         reference = _reference_events(snapshot)
         tolerance = _comparison_tolerance(snapshot)
         # The stand-in "predicted" stream is the reference itself shifted by zero: an honest
@@ -201,6 +212,8 @@ def run_execution(
             "kind": "reference_replay",
             "recording_sha256": digest,
             "pins": _pins(execution),
+            "frame_timeline": timeline.summary(),
+            "timeline_sha256": timeline.timeline_sha256(),
             "comparison": {
                 "tolerance_seconds": tolerance,
                 "matched": len(comparison.matches),
@@ -208,8 +221,9 @@ def run_execution(
                 "extra": len(comparison.extra),
             },
             "note": (
-                "This run replayed the recorded human reference events through the pinned "
-                "comparison rules. It did not watch video or run a model; that is later work."
+                "This run read the pinned recording's frame timestamps into an ordered timeline "
+                "and replayed the recorded human reference events through the pinned comparison "
+                "rules. It did not watch the video's pictures or run a model; that is later work."
             ),
         }
         _finish(execution, status=OperationExecution.SUCCEEDED, result=result)

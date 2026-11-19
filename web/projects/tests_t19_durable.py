@@ -14,8 +14,12 @@ from __future__ import annotations
 
 import hashlib
 import json
+import shutil
+import subprocess
 import tempfile
 from datetime import timedelta
+from pathlib import Path
+from unittest import skipUnless
 from unittest.mock import patch
 
 from django.contrib.auth import get_user_model
@@ -38,9 +42,29 @@ from .models import (
 from .operations import executions
 from .tests import grant
 
+REQUIRE_FFMPEG = shutil.which("ffmpeg") and shutil.which("ffprobe")
+
 
 def _clip_bytes() -> bytes:
-    """A deterministic stand-in recording body (no ffmpeg needed for these tests)."""
+    """A recording body for the pinned recording.
+
+    Since T20 the execution step reads the recording's frame timestamps and
+    requires a decodable MP4, so the fixture is a real one-second clip whenever
+    ffmpeg is present (as in the T09/T20 suites). Without ffmpeg a plain byte
+    body is kept: the lease/claim/API tests below never decode it, and the
+    tests that run executions to success are skipped in that environment.
+    """
+    if REQUIRE_FFMPEG:
+        with tempfile.TemporaryDirectory(prefix="t19-clip-") as directory:
+            path = Path(directory) / "rec.mp4"
+            subprocess.run(
+                ["ffmpeg", "-hide_banner", "-loglevel", "error",
+                 "-f", "lavfi", "-i", "color=c=blue:s=64x48:r=5",
+                 "-t", "1", "-c:v", "libx264", "-pix_fmt", "yuv420p",
+                 "-movflags", "+faststart", "-y", str(path)],
+                check=True, capture_output=True, timeout=30,
+            )
+            return path.read_bytes()
     return b"t19-recording-" + b"".join(bytes([i % 251]) for i in range(4096))
 
 
@@ -260,6 +284,7 @@ class RecoveryTests(DurableExecutionBase):
         )
         self.assertEqual(executions.fail_abandoned_executions(), 0)
 
+    @skipUnless(REQUIRE_FFMPEG, "running an execution needs a decodable recording (ffmpeg)")
     def test_crash_after_finish_guard_prevents_duplicate_outcome(self) -> None:
         execution = self.enqueue_and_claim("worker-a")
         finished = executions.run_execution(execution, "worker-a")
@@ -273,6 +298,7 @@ class RecoveryTests(DurableExecutionBase):
 
 
 class RunTests(DurableExecutionBase):
+    @skipUnless(REQUIRE_FFMPEG, "running an execution needs a decodable recording (ffmpeg)")
     def test_successful_run_proves_recording_and_pins_and_stores_result(self) -> None:
         execution = self.enqueue_and_claim("worker-a")
         finished = executions.run_execution(execution, "worker-a")
@@ -284,7 +310,7 @@ class RunTests(DurableExecutionBase):
         self.assertEqual(result["comparison"]["matched"], 2)
         self.assertEqual(result["comparison"]["missed"], 0)
         self.assertEqual(result["pins"]["bundle_sha256"], self.bundle.snapshot_sha256)
-        self.assertIn("did not watch video", result["note"])
+        self.assertIn("did not watch", result["note"])
 
     def test_changed_recording_fails_with_plain_message(self) -> None:
         execution = self.enqueue_and_claim("worker-a")
@@ -398,6 +424,7 @@ class ExecutionApiTests(DurableExecutionBase):
 
 # -- the worker command ----------------------------------------------------------------
 class WorkerCommandTests(DurableExecutionBase):
+    @skipUnless(REQUIRE_FFMPEG, "running an execution needs a decodable recording (ffmpeg)")
     def test_operation_worker_once_processes_the_queue(self) -> None:
         from io import StringIO
 
