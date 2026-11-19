@@ -25,6 +25,15 @@ BUILTIN_PLUGINS = (
     "projects.modalities.table:TableModalityPlugin",
 )
 
+#: Recipe-dispatched plugins that no modality loads on its own: importing the module registers
+#: them (by annotation kind, and the recipe it replaces). Kept here rather than in
+#: ``BUILTIN_PLUGINS`` because their classes share a modality with a builtin plugin and are
+#: registered for their *kind*, not their modality — a plain builtin entry would try to
+#: register the same modality twice (and register_plugin would need replace=True to win).
+BUILTIN_ANNOTATION_PLUGINS = (
+    "projects.modalities.ocr",  # importing it registers OcrImagePlugin and the OCR recipe
+)
+
 #: Plugins looked up by *annotation kind* instead of modality. A recipe may ask an image
 #: project for a different annotation style than the image plugin's boxes (handwriting OCR
 #: wants transcripts); those plugins register here so dispatch stays a lookup, not an
@@ -52,6 +61,24 @@ def register_plugin(cls: type[ModalityPlugin], *, replace: bool = False) -> type
     # without knowing (or competing with) the modality its files are validated by. Only a
     # class whose kind differs from the modality's registered plugin is kept, so the builtin
     # image plugin (boxes) does not shadow the OCR plugin (transcripts) or the other way round.
+    _register_annotation_plugin(cls)
+    return cls
+
+
+def register_annotation_plugin(cls: type[ModalityPlugin]) -> type[ModalityPlugin]:
+    """Register a plugin for its *annotation kind* only, leaving the modality slot alone.
+
+    A recipe-dispatched plugin (handwriting OCR on image files) shares a modality with a
+    builtin plugin that must keep the modality's slot: uploads stay validated by the builtin,
+    annotations dispatch by kind. This is the by-kind half of ``register_plugin`` without the
+    modality half.
+    """
+    if not isinstance(getattr(cls, "modality", ""), str) or not cls.modality:
+        raise ValueError("A modality plugin needs a non-empty `modality`.")
+    return _register_annotation_plugin(cls)
+
+
+def _register_annotation_plugin(cls: type[ModalityPlugin]) -> type[ModalityPlugin]:
     kind = getattr(cls(), "annotation_kind", "")
     if isinstance(kind, str) and kind:
         _annotation_registry[kind] = cls
@@ -85,6 +112,15 @@ def _load_all() -> None:
             register_plugin(cls, replace=True)
         except Exception:  # noqa: BLE001 - one bad plugin must not hide the others
             logger.exception("Skipping modality plugin %s", path)
+    # The by-kind plugins (a recipe asking an image project for transcripts, say) register
+    # themselves as an import side effect, so importing the module is the whole load. Without
+    # this, a live server never imports them and every recipe-dispatched annotation is refused
+    # with "data type isn't supported yet" — the tests masked it by importing the module in setUp.
+    for module_name in BUILTIN_ANNOTATION_PLUGINS:
+        try:
+            importlib.import_module(module_name)
+        except Exception:  # noqa: BLE001 - one bad plugin must not hide the others
+            logger.exception("Skipping annotation plugin module %s", module_name)
 
 
 def reload_plugins() -> None:

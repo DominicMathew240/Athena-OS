@@ -227,7 +227,18 @@ def _entries_for(analysis: GenericAnalysis) -> list[dict[str, Any]]:
 
 
 def _split_notes(analysis: GenericAnalysis) -> list[str]:
-    return splits.shortfall_notes(len({asset.sha256 for asset in analysis.assets}), analysis.config)
+    return splits.shortfall_notes(
+        len({asset.sha256 for asset in analysis.assets}), analysis.config, _recipe_nouns(analysis.project)
+    )
+
+
+def _recipe_nouns(project) -> dict[str, str] | None:
+    """The project's own words for its files (audio: sound clip; tables: table), or None.
+
+    Deferred so importing the lifecycle (which imports this package) never cycles."""
+    from ..training.lifecycle import recipe_nouns
+
+    return recipe_nouns(project)
 
 
 def _summarise(analysis: GenericAnalysis, entries: list[dict[str, Any]]) -> dict[str, Any]:

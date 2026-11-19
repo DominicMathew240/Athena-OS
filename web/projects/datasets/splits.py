@@ -69,15 +69,23 @@ def algorithm_of(split_config: dict[str, Any] | None) -> str:
     return name if isinstance(name, str) and name else LEGACY_ALGORITHM
 
 
-def shortfall_notes(distinct_pictures: int, config: SplitConfig) -> list[str]:
-    """Plain-language notice when too few different pictures exist to fill every requested group."""
+def shortfall_notes(distinct_pictures: int, config: SplitConfig, nouns: dict[str, str] | None = None) -> list[str]:
+    """Plain-language notice when too few different files exist to fill every requested group.
+
+    ``nouns`` (``{"noun": ..., "plural": ...}``, the recipe's own words - see
+    ``training.lifecycle.recipe_nouns``) re-words the notice for a non-picture data kind
+    (sound clips, tables). The default keeps the exact vision wording, so existing strings
+    and the tests that pin them are unchanged."""
     wanted = sum(1 for name in SPLIT_NAMES if getattr(config, name) > 0)
     if distinct_pictures >= wanted:
         return []
+    noun = (nouns or {}).get("noun") or "picture"
+    plural = (nouns or {}).get("plural") or "pictures"
+    has_have = "has" if distinct_pictures == 1 else "have"
     return [
-        f"Only {distinct_pictures} different {'picture has' if distinct_pictures == 1 else 'pictures have'} "
-        f"accepted boxes, and the {wanted} groups you asked for (Training, Checking, Final test) need at least "
-        f"{wanted}, so at least one group is empty. Add more pictures with boxes."
+        f"Only {distinct_pictures} different {noun if distinct_pictures == 1 else plural} {has_have} "
+        f"accepted labels, and the {wanted} groups you asked for (Training, Checking, Final test) need at least "
+        f"{wanted}, so at least one group is empty. Add more {plural} with accepted labels."
     ]
 
 
