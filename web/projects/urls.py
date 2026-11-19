@@ -4,6 +4,7 @@ from . import (
     access_views,
     autolabel_views,
     dataset_views,
+    execution_views,
     feedback_views,
     inference_pages,
     inference_views,
@@ -90,6 +91,21 @@ urlpatterns = [
         "api/operation-drafts/<uuid:draft_id>/release-bundles",
         operation_views.operation_release_bundles,
         name="operation-release-bundles",
+    ),
+    path(
+        "api/operation-release-bundles/<uuid:bundle_id>/executions",
+        execution_views.bundle_executions,
+        name="operation-bundle-executions",
+    ),
+    path(
+        "api/operation-executions/<uuid:execution_id>",
+        execution_views.execution_detail,
+        name="operation-execution-detail",
+    ),
+    path(
+        "api/operation-executions/<uuid:execution_id>/cancel",
+        execution_views.execution_cancel,
+        name="operation-execution-cancel",
     ),
     path(
         "api/operation-drafts/<uuid:draft_id>/recording",

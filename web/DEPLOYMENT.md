@@ -11,6 +11,7 @@ It covers what is implemented today. Read **Known limits** before putting real d
 | `worker` | `manage.py autolabel_worker`. Loads SAM + CLIP and fills the job queue. The web process never imports torch. |
 | `train_worker` | `manage.py train_worker`. Claims queued training runs, trains on the frozen dataset version, evaluates on its held-out test split and files a `candidate` model. **Run exactly one.** |
 | `inference_worker` | `manage.py inference_worker`. Runs images submitted to inference apps through the approved model version. **Run exactly one.** |
+| `operation_worker` | `manage.py operation_worker`. Claims queued operation executions (T19) through a database lease and runs them outside the web process. Safe to run more than one; `manage.py operation_supervisor --workers N` keeps N alive. |
 | Dataset API | `/api/projects/<id>/datasets…`: immutable dataset versions of reviewed boxes and COCO/YOLO zip export. The console has a "Make a training set" panel for it (save a snapshot, download a zip); the rest is JSON API. |
 | `/data` volume | SQLite database (`projects.sqlite3`), uploaded images (`media/`), login-throttle cache, model weights (`models/`). |
 
@@ -64,6 +65,7 @@ python -m gunicorn athena_web.wsgi:application -c gunicorn.conf.py     # web
 python manage.py autolabel_worker                                      # worker (run exactly one)
 python manage.py train_worker                                          # training worker (run exactly one)
 python manage.py inference_worker                                      # inference worker (run exactly one)
+python manage.py operation_worker                                      # operation worker (one or more; see below)
 python manage.py check --deploy                                        # must report no issues
 ```
 
@@ -79,10 +81,11 @@ NVIDIA's licence terms first: the audit did not review them.
 `docker-compose.yml` defines `train_worker` and `inference_worker` next to `worker`. All three use the
 `athena-console-worker` image (built with `WITH_AUTOLABEL=1`), which installs `torch==2.9.1` and
 `torchvision==0.24.1` from the CPU index, so the torchvision Faster R-CNN reference backend is available
-in any of them. The web process never imports torch: it only queues work and reads results.
+in any of them. The web process never imports torch: it only queues work and reads results. The
+`operation_worker` service is covered [below](#operation-workers-durable-executions-added-2026-11-19).
 
 ```bash
-docker compose up -d --build                       # starts web, worker, train_worker, inference_worker
+docker compose up -d --build                       # starts web, worker, train_worker, inference_worker, operation_worker
 docker compose logs -f train_worker                # "Training worker ready. Backends usable here: ..."
 ```
 
@@ -97,6 +100,29 @@ docker compose logs -f train_worker                # "Training worker ready. Bac
   wait in the queue until a worker starts. Each worker publishes a heartbeat that the readiness endpoints use,
   and reports which backends it can actually load.
 - GPUs are not configured. Read NVIDIA's licence terms first (see the licence audit).
+
+### Operation workers (durable executions, added 2026-11-19)
+
+`docker-compose.yml` also defines an `operation_worker` service. It runs the operation executions
+queued through `POST /api/operation-release-bundles/<id>/executions` (T19): the web process only
+queues the row; the worker claims it through a **database lease** (`lease_owner` +
+`lease_expires_at`), refreshes the lease while it works, and writes exactly one terminal outcome
+through a guarded update. Unlike the workers above:
+
+- **More than one instance is safe.** The lease claim is one atomic status flip, so two workers
+  never hold the same execution, and a worker's start-up never fails another worker's in-flight
+  run (recovery requires the lease to have expired by a full extra lease interval, meaning the
+  owning worker missed several refreshes). A crashed worker's execution is failed with a plain
+  message once its lease expires, and a new one can be queued.
+- **Runs survive web exits.** An execution row is a committed database record; gunicorn restarts
+  and worker crashes lose in-progress work only, never queued work or committed results.
+- **Supervision.** The compose service uses `restart: unless-stopped`. Without Docker, run
+  `python manage.py operation_worker` directly (one instance), or
+  `python manage.py operation_supervisor --workers N` to keep N workers alive as child processes;
+  a systemd unit or Supervisor program per worker is equivalent. The execution step today
+  verifies the pinned recording and replays reference events through the pinned comparison
+  rules — it does not yet watch video (that is T20/T21).
+- **Light deployments** can leave it off: executions queue until a worker starts.
 
 ### Which recipes run with which worker extras (sound and handwriting, added 2026-11-19)
 

@@ -62,5 +62,21 @@ services:
     healthcheck:
       disable: true
     restart: unless-stopped
+  # Runs queued operation executions (T19 durable workers). Unlike the workers above it is safe
+  # to run more than one: each worker claims jobs through a database lease. For several workers
+  # without Docker, `manage.py operation_supervisor --workers N` keeps N of them alive.
+  operation_worker:
+    build: *worker-build
+    image: athena-console-worker
+    command: ["python", "manage.py", "operation_worker"]
+    env_file: .env
+    depends_on:
+      web:
+        condition: service_healthy
+    volumes:
+      - athena-data:/data
+    healthcheck:
+      disable: true
+    restart: unless-stopped
 volumes:
   athena-data:
