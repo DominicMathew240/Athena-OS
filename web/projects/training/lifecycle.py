@@ -24,6 +24,7 @@ from django.utils import timezone
 
 from .. import permissions
 from ..datasets import service as dataset_service, splits
+from ..datasets import generic as generic_service
 from ..models import DatasetBox, DatasetVersion, InferenceApp, ModelEvent, ModelVersion, Project, TrainingRun
 from . import data_home, get_backend, models_root, report, training_settings
 from .base import StartBlocked
@@ -40,6 +41,25 @@ FILES_NOT_RECHECKED_NOTE = (
     "The picture files were not re-checked for this preview, to keep the page quick. Missing or changed files are "
     "checked when you start."
 )
+
+
+# -- recipes: the words each task's sentences use --------------------------------------------------------
+def recipe_nouns(project: Project) -> dict[str, str]:
+    """The nouns a project's own sentences use for its files and labels, from its recipe.
+
+    The default (and every image project without a recipe) is the vision-detection wording, so
+    existing strings are unchanged. A recipe whose modality plugin defines ``asset_noun``
+    (audio: "sound clip") gets that word instead, pluralised by the caller when it needs to.
+    """
+    from ..modalities import get_plugin
+    from ..tasks import recipe_for_project
+
+    recipe = recipe_for_project(project)
+    noun = "picture"
+    if recipe is not None and recipe.modality != "image":
+        plugin = get_plugin(recipe.modality)
+        noun = getattr(plugin, "asset_noun", "") or "file"
+    return {"noun": noun, "plural": noun + "s" if not noun.endswith("s") else noun}
 
 
 class LifecycleError(Exception):
@@ -165,22 +185,26 @@ def split_counts(version: DatasetVersion) -> dict[str, dict[str, int]]:
 
 def readiness(project: Project, backend_name: str | None = None) -> dict[str, Any]:
     backend_name = backend_name or training_settings()["DEFAULT_BACKEND"]
+    nouns = recipe_nouns(project)
     blockers: list[str] = []
     warnings: list[str] = []
     dataset = latest_dataset(project)
     counts: dict[str, Any] = {}
     if dataset is None:
-        blockers.append("There is no dataset version yet. Create one from reviewed (accepted) boxes first.")
+        blockers.append(
+            f"There is no dataset version yet. Create one from reviewed (accepted) {nouns['plural']} first."
+        )
     else:
         counts = split_counts(dataset)
-        if counts.get("train", {}).get("images", 0) == 0:
+        if _split_files(dataset, "train") == 0:
             blockers.append(
-                f"Dataset version {dataset.version} has no images in its train split, so nothing can be trained on it."
+                f"Dataset version {dataset.version} has no {nouns['plural']} in its train split, so nothing can be "
+                "trained on it."
             )
-        if counts.get("test", {}).get("images", 0) == 0:
+        if _split_files(dataset, "test") == 0:
             warnings.append(
-                f"Dataset version {dataset.version} has no held-out test images. Training will run, but the model "
-                "will have no evaluation and cannot be staged or approved."
+                f"Dataset version {dataset.version} has no held-out test {nouns['plural']}. Training will run, but the "
+                "model will have no evaluation and cannot be staged or approved."
             )
     try:
         ok, availability = backend_runnable(backend_name)
@@ -226,24 +250,41 @@ def _one_click_preview(
     project: Project, backend_name: str, backend_ok: bool, availability: dict[str, Any], worker: dict[str, Any],
     latest: DatasetVersion | None, active: TrainingRun | None,
 ) -> tuple[dict[str, Any] | None, dict[str, Any] | None, dict[str, Any]]:
-    """Read-only: ``(start_from, derived, one_click)`` for ``GET .../training/readiness``."""
+    """Read-only: ``(start_from, derived, one_click)`` for ``GET .../training/readiness``.
+
+    The same preview for both snapshot kinds: boxes, or the generic entries a non-box recipe
+    freezes. The generic analysis always re-checks its files (the generic service has no time
+    budget), so it never adds the not-rechecked note."""
     try:
         backend = get_backend(backend_name)
     except ValueError:
         backend = None
     start_from = backend.resolve_start(worker) if backend else None
-    analysis = dataset_service.analyse(
-        project, splits.SplitConfig.default(), use_cache=True, file_check=READINESS_FILE_CHECK_SECONDS
-    )
-    refusal = snapshot_refusal(analysis)
-    current = refusal is None and snapshot_is_current(project, latest, analysis)
+    nouns = recipe_nouns(project)
+    generic = uses_generic_snapshots(project)
+    if generic:
+        analysis = generic_service.analyse(project, splits.SplitConfig.default(), use_cache=True)
+        refusal = _generic_refusal(analysis)
+        current = refusal is None and _generic_snapshot_is_current(project, latest, analysis)
+        planned_train = lambda a: _planned_generic_entries(a, "train")  # noqa: E731 - the two services' shapes differ
+        planned_test = lambda a: _planned_generic_entries(a, "test")  # noqa: E731
+        files_rechecked = True
+    else:
+        analysis = dataset_service.analyse(
+            project, splits.SplitConfig.default(), use_cache=True, file_check=READINESS_FILE_CHECK_SECONDS
+        )
+        refusal = snapshot_refusal(analysis)
+        current = refusal is None and snapshot_is_current(project, latest, analysis)
+        planned_train, planned_test = planned_train_pictures, planned_test_pictures
+        files_rechecked = analysis.files_rechecked
     would_create = refusal is None and not current
+    accepted = bool(analysis.accepted)
     train: int | None = None
-    if analysis.accepted:
-        train = _train_images(latest) if current else planned_train_pictures(analysis)
+    if accepted:
+        train = _train_images(latest) if current else planned_train(analysis)
     test: int | None = None
-    if analysis.accepted:
-        test = _test_images(latest) if current else planned_test_pictures(analysis)
+    if accepted:
+        test = _test_images(latest) if current else planned_test(analysis)
     derived = backend.teach_preview(train, start_from["resolved"] if start_from else None) if backend else None
     if derived is not None:
         derived["based_on"] = None if train is None else ("latest_snapshot" if current else "new_snapshot")
@@ -258,14 +299,14 @@ def _one_click_preview(
     elif start_from["resolved"] is None:
         blockers.extend([start_from["reason_if_none"], start_from["how_to_enable"]])
     if refusal is not None:
-        blockers.extend(analysis.blockers if analysis.accepted else [refusal.message])
+        blockers.extend(analysis.blockers if accepted else [refusal.message])
     elif train == 0:
-        blockers.append(NO_PLANNED_TRAIN_MESSAGE)  # the new snapshot's default split would leave nothing in train
+        blockers.append(no_planned_train_message(nouns))  # the new snapshot's default split would leave nothing in train
     if active:
         blockers.append("A training run is already queued or running for this project. Wait for it or cancel it.")
-    # Not a blocker (the run can be taught), but a model with no held-out pictures has no results and so can never be
+    # Not a blocker (the run can be taught), but a model with no held-out files has no results and so can never be
     # staged or approved: say it where the start button is, not only on the data health page.
-    warnings = [NO_HELD_OUT_MESSAGE] if test == 0 else []
+    warnings = [no_held_out_message(nouns)] if test == 0 else []
     one_click = {
         "supported": start_from is not None,
         "ready": not blockers,
@@ -273,8 +314,8 @@ def _one_click_preview(
         "warnings": warnings,
         # Additive: things the preview could not do. ``ready`` is "nothing that was checked is wrong"; a note here
         # says what was left unchecked, so a True above is never read as more than it is.
-        "notes": [] if analysis.files_rechecked else [FILES_NOT_RECHECKED_NOTE],
-        "files_rechecked": analysis.files_rechecked,
+        "notes": [] if files_rechecked else [FILES_NOT_RECHECKED_NOTE],
+        "files_rechecked": files_rechecked,
         "snapshot": {
             "latest_version": latest.version if latest else None,
             "up_to_date": current,
@@ -364,9 +405,11 @@ def create_run(
 ) -> TrainingRun:
     if dataset.project_id != project.id:
         raise LifecycleError("That dataset version does not belong to this project.", 404)
+    nouns = recipe_nouns(project)
     if _train_images(dataset) == 0:
         raise LifecycleError(
-            f"Dataset version {dataset.version} has no train images. Create a version with a larger train share.", 422
+            f"Dataset version {dataset.version} has no train {nouns['plural']}. Create a version with a larger train "
+            "share.", 422
         )
     _, normalized, check = prepare_start(
         backend_name, config, train_pictures=_train_images(dataset), acknowledged_terms=acknowledged_terms
@@ -404,7 +447,7 @@ def create_run(
 
 
 # -- one-click start: freeze the current work if needed, then train on it ---------------------------
-def _problem_extras(analysis: dataset_service.Analysis) -> dict[str, Any]:
+def _problem_extras(analysis) -> dict[str, Any]:
     limit = dataset_service.PROBLEM_LIMIT
     return {
         "blockers": analysis.blockers,
@@ -450,12 +493,82 @@ def snapshot_is_current(project: Project, version: DatasetVersion | None, analys
     return frozen == current
 
 
+def _entry_identity(asset_uuid: str, sha256: str, split: str, label: str, annotation: Any) -> tuple:
+    """One frozen entry as a hashable identity: its file, split, primary label and annotation.
+
+    The annotation is JSON (a dict), so it is represented by its canonical item pairs; an
+    unhashable or non-dict annotation still compares by value via ``sorted(..., key=repr)``."""
+    if isinstance(annotation, dict):
+        annotation = tuple(sorted((str(key), repr(value)) for key, value in annotation.items()))
+    else:
+        annotation = repr(annotation)
+    return (str(asset_uuid), str(sha256), str(split), str(label), annotation)
+
+
+def _generic_snapshot_is_current(
+    project: Project, version: DatasetVersion | None, analysis: generic_service.GenericAnalysis
+) -> bool:
+    """``snapshot_is_current`` for a recipe whose snapshots are generic entries, not boxes: the frozen
+    entries must be exactly the accepted work (asset, checksum, split, primary label, annotation)
+    and the label list must still match. A version with no train entries is never current (a run
+    on it would be refused), exactly like the image rule."""
+    if version is None or version.incomplete_reason or list(version.label_names) != list(project.labels):
+        return False
+    frozen = {
+        _entry_identity(row.asset_uuid, row.sha256, row.split, row.label, row.annotation)
+        for row in version.entries.all()
+    }
+    # The split and primary label a new freeze of the same analysis would assign now, so the
+    # comparison is on the same rule the snapshot service uses (``generic._entries_for``).
+    project_labels = list(project.labels)
+    split_of = splits.assign_splits((asset.sha256 for asset in analysis.assets), analysis.config)
+    expected = {
+        _entry_identity(
+            asset.id, asset.sha256, split_of[asset.sha256],
+            generic_service.primary_label(analysis.accepted[asset.id], project_labels),
+            analysis.accepted[asset.id].data,
+        )
+        for asset in analysis.assets
+    }
+    return frozen == expected and _train_images(version) > 0
+
+
+def _generic_refusal(analysis: generic_service.GenericAnalysis) -> LifecycleError | None:
+    """``snapshot_refusal`` for generic analyses: the same two rules in the generic service's words."""
+    if not analysis.accepted:
+        return LifecycleError(generic_service.NO_ACCEPTED_MESSAGE, 400, excluded=analysis.excluded)
+    if not analysis.ready:
+        return LifecycleError(
+            "Fix the problems below before creating a dataset version. Nothing was created.", 422, **_problem_extras(analysis)
+        )
+    return None
+
+
 NO_HELD_OUT_MESSAGE = (
     "No pictures would be kept back to check the result, so you could not approve this model."
 )
 NO_PLANNED_TRAIN_MESSAGE = (
     "The default split would leave no pictures to train on. Review and accept boxes on a few more pictures, then start again."
 )
+
+
+def no_held_out_message(nouns: dict[str, str] | None = None) -> str:
+    """``NO_HELD_OUT_MESSAGE`` with the recipe's own noun (audio: sound clips; tables: rows)."""
+    if not nouns or nouns["plural"] == "pictures":
+        return NO_HELD_OUT_MESSAGE
+    return (
+        f"No {nouns['plural']} would be kept back to check the result, so you could not approve this model."
+    )
+
+
+def no_planned_train_message(nouns: dict[str, str] | None = None) -> str:
+    """``NO_PLANNED_TRAIN_MESSAGE`` with the recipe's own noun."""
+    if not nouns or nouns["plural"] == "pictures":
+        return NO_PLANNED_TRAIN_MESSAGE
+    return (
+        f"The default split would leave no {nouns['plural']} to train on. Label a few more {nouns['plural']}, then "
+        "start again."
+    )
 
 
 def snapshot_default_config(backend_name: str, config: dict[str, Any]) -> dict[str, Any]:
@@ -466,14 +579,21 @@ def snapshot_default_config(backend_name: str, config: dict[str, Any]) -> dict[s
     (``resolve_start`` is not ``None``, the same test the readiness preview uses). Any other backend, and an unknown
     one (which ``prepare_start`` refuses in plain words), is started on exactly what the caller sent, so a request that
     never mentioned these settings is never refused for them. This is deliberately the one-click path only: a legacy
-    ``dataset_id`` request gets no ``quality`` unless it asks for one."""
+    ``dataset_id`` request gets no ``quality`` unless it asks for one.
+
+    A backend like the OCR one (``resolve_start`` without derived settings) still gets ``pretrained: "auto"`` resolved
+    by its own ``prepare_config``, but never a ``quality`` it does not understand: only the keys the backend itself
+    lists in its normalized config vocabulary (``teach_preview`` deriving settings for both qualities) are added."""
     try:
         backend = get_backend(backend_name)
     except ValueError:
         return dict(config)
     if backend.resolve_start(worker_status()) is None:
         return dict(config)
-    return {"pretrained": "auto", "quality": "quick", **config}
+    defaults: dict[str, Any] = {"pretrained": "auto"}
+    if backend.teach_preview(0, None) is not None:
+        defaults["quality"] = "quick"
+    return {**defaults, **config}
 
 
 def _planned_pictures(analysis: dataset_service.Analysis, split_name: str) -> int:
@@ -507,43 +627,74 @@ def _is_running(project: Project) -> bool:
 ALREADY_ACTIVE_MESSAGE = "A training run is already queued or running for this project. Wait for it to finish or cancel it."
 
 
+def uses_generic_snapshots(project: Project) -> bool:
+    """Whether this project freezes generic entries (a non-box recipe: audio clips, transcripts)
+    instead of images+boxes. The same dispatch the dataset endpoints use, in one place, so the
+    one-click start and the readiness preview cannot drift from it."""
+    from ..annotations import image_project_uses_boxes
+
+    if project.modality == "image":
+        return not image_project_uses_boxes(project)
+    return True
+
+
+def _planned_generic_entries(analysis: generic_service.GenericAnalysis, split_name: str) -> int:
+    """How many of the analysis's assets the default split would put in one split (no write).
+
+    The same assignment the generic snapshot service freezes (``splits.assign_splits`` keyed on
+    the file's checksum), counted per split - the generic twin of ``planned_train_pictures``."""
+    split_of = splits.assign_splits((asset.sha256 for asset in analysis.assets), analysis.config)
+    return sum(1 for asset in analysis.assets if split_of[asset.sha256] == split_name)
+
+
 def start_run_on_latest_snapshot(
     project: Project, user, *, backend_name: str, config: dict[str, Any], acknowledged_terms: bool = False
 ) -> tuple[TrainingRun, DatasetVersion, bool]:
     """Start a run on the current accepted work: reuse the latest dataset version when it already holds exactly that
     work, otherwise freeze a new one (default split) first. Returns ``(run, version, newly_created)``.
 
-    Two phases. First everything slow is done with **no transaction open**: the project is re-read (a caller's
-    ``project`` may be stale), the work is analysed and, when a new snapshot is needed, every picture is hashed. Then
-    one short transaction takes the project lock and only re-checks and writes: no run already active, the project
-    and its boxes still exactly as they were analysed (otherwise 409, nothing written), then the snapshot and the run.
-    Hashing never happens under the lock, so other writers (box saves, uploads) are not held up by it.
-
-    All or nothing: any refusal after the snapshot is written (licence tick, a run already active, anything) rolls the
-    snapshot back too. On PostgreSQL ``select_for_update`` serialises racing starts; SQLite ignores it (it serialises
-    whole writes instead) - the lock is therefore unverified against a real multi-user database."""
+    The same two-phase flow for both snapshot kinds (boxes, or the generic entries a non-box
+    recipe freezes): everything slow with no transaction open, then one short locked transaction
+    that re-checks and writes. All or nothing: any refusal after the snapshot is written (licence
+    tick, a run already active, anything) rolls the snapshot back too. On PostgreSQL
+    ``select_for_update`` serialises racing starts; SQLite ignores it (it serialises whole writes
+    instead) - the lock is therefore unverified against a real multi-user database."""
     if _is_running(project):  # cheap and early, so a refused start never hashes anything
         raise LifecycleError(ALREADY_ACTIVE_MESSAGE, 409)
     project.refresh_from_db()  # labels may have changed since the caller loaded the project
     labels_seen = list(project.labels)
     latest = latest_dataset(project)
-    analysis = dataset_service.analyse(project, splits.SplitConfig.default(), use_cache=True)
-    refusal = snapshot_refusal(analysis)
-    if refusal:
-        raise refusal
-    create = not snapshot_is_current(project, latest, analysis)
-    # Reusing the current snapshot trusts the check made when it was frozen (that one hashed every file); the look
-    # above answers from the stat cache, so a picture changed without its size or modified time changing is not
-    # re-hashed on this path. Creating a new snapshot always re-hashes every file (the second ``analyse`` below).
-    planned = planned_train_pictures(analysis) if create else _train_images(latest)
+    generic = uses_generic_snapshots(project)
+    nouns = recipe_nouns(project)
+    if generic:
+        analysis = generic_service.analyse(project, splits.SplitConfig.default(), use_cache=True)
+        refusal = _generic_refusal(analysis)
+        if refusal:
+            raise refusal
+        create = not _generic_snapshot_is_current(project, latest, analysis)
+        planned = _planned_generic_entries(analysis, "train") if create else _train_images(latest)
+    else:
+        analysis = dataset_service.analyse(project, splits.SplitConfig.default(), use_cache=True)
+        refusal = snapshot_refusal(analysis)
+        if refusal:
+            raise refusal
+        create = not snapshot_is_current(project, latest, analysis)
+        # Reusing the current snapshot trusts the check made when it was frozen (that one hashed every file); the look
+        # above answers from the stat cache, so a picture changed without its size or modified time changing is not
+        # re-hashed on this path. Creating a new snapshot always re-hashes every file (the second ``analyse`` below).
+        planned = planned_train_pictures(analysis) if create else _train_images(latest)
     if planned == 0:
-        raise LifecycleError(NO_PLANNED_TRAIN_MESSAGE, 422)  # before anything is written
+        raise LifecycleError(no_planned_train_message(nouns), 422)  # before anything is written
     # Cheap rules first (backend, licence tick, a ready-made start that can run), so a request that cannot start
-    # never hashes every picture.
+    # never hashes every file.
     prepare_start(backend_name, config, train_pictures=planned, acknowledged_terms=acknowledged_terms)
     if create:
-        analysis = dataset_service.analyse(project, splits.SplitConfig.default())  # creating always hashes the files
-        refusal = snapshot_refusal(analysis)
+        if generic:  # creating always hashes the files (both services re-verify without the cache)
+            analysis = generic_service.analyse(project, splits.SplitConfig.default())
+            refusal = _generic_refusal(analysis)
+        else:
+            analysis = dataset_service.analyse(project, splits.SplitConfig.default())
+            refusal = snapshot_refusal(analysis)
         if refusal:
             raise refusal
     with transaction.atomic():
@@ -551,16 +702,24 @@ def start_run_on_latest_snapshot(
         if _is_running(project):
             raise LifecycleError(ALREADY_ACTIVE_MESSAGE, 409)
         project.refresh_from_db()
-        if list(project.labels) != labels_seen or dataset_service.content_fingerprint(project) != analysis.fingerprint:
+        if list(project.labels) != labels_seen or (
+            generic_service.content_fingerprint(project) if generic else dataset_service.content_fingerprint(project)
+        ) != analysis.fingerprint:
             raise LifecycleError(BOXES_CHANGED_MESSAGE, 409)
         version = latest
         note = ""
         if create:
             try:
-                version = dataset_service.create_version(analysis, user)
-            except dataset_service.VersionConflict as error:
+                version = (
+                    generic_service.create_version(analysis, user)
+                    if generic else dataset_service.create_version(analysis, user)
+                )
+            except (dataset_service.VersionConflict, generic_service.VersionConflict) as error:
                 raise LifecycleError(str(error), 409) from None
-            note = f"Dataset version {version.version} was frozen automatically from the accepted boxes when this run started."
+            note = (
+                f"Dataset version {version.version} was frozen automatically from the accepted "
+                f"{nouns['plural']} when this run started."
+            )
         run = create_run(
             project, user, dataset=version, backend_name=backend_name, config=config,
             acknowledged_terms=acknowledged_terms, note_extra=note,

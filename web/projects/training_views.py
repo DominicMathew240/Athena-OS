@@ -22,6 +22,34 @@ LIST_LIMIT = 100
 #: The only backend a handwriting-OCR (transcript) project may run; imported lazily-free (the
 #: name is a plain string; the module itself imports nothing heavy at import time anyway).
 OCR_BACKEND = "ocr-trocr"
+#: The backend each recipe runs on when the caller did not pick one (the Teach panel's one-click
+#: start never names a backend). Only recipes whose backend is not the box default need an entry.
+RECIPE_DEFAULT_BACKENDS = {"handwriting-ocr": OCR_BACKEND, "audio-classification": "audio-wav-cnn"}
+
+
+def _default_backend_for(project: Project, payload: dict) -> str:
+    """The backend a run starts on: the request's own choice, else the recipe's, else the console
+    default. A recipe whose backend differs from the box default (handwriting OCR) also refuses a
+    request that names a different one, in plain words, rather than failing deep inside training."""
+    from .tasks import recipe_for_project
+
+    backend_name = payload.get("backend") or training.training_settings()["DEFAULT_BACKEND"]
+    if not isinstance(backend_name, str):
+        raise HttpError("backend must be the name of an installed backend.")
+    recipe = recipe_for_project(project)
+    expected = RECIPE_DEFAULT_BACKENDS.get(recipe.key) if recipe else None
+    if expected is None:
+        return backend_name
+    if "backend" not in payload:
+        return expected
+    if backend_name != expected:
+        what = "reads handwriting" if recipe.key == "handwriting-ocr" else f"teaches {recipe.title.lower()}"
+        raise HttpError(
+            f"This project {what}, so its runs use the {expected} backend. "
+            "Leave backend out of the request or send that name.",
+            400,
+        )
+    return backend_name
 
 
 def teachable_project(project_id) -> Project:
@@ -78,7 +106,20 @@ def run_data(run: TrainingRun, *, detail: bool = False) -> dict[str, Any]:
 
 
 def snapshot_data(version: DatasetVersion, *, newly_created: bool) -> dict[str, Any]:
-    """Which frozen copy of the accepted boxes a run was started on, and whether this very request froze it."""
+    """Which frozen copy of the accepted work a run was started on, and whether this very request froze it.
+
+    A generic (non-box recipe) version has no images or boxes; its counts come from the manifest
+    (``entry_count``), so the answer names what it actually holds for both kinds."""
+    if version.entries.exists():
+        counts = dict(version.manifest.get("counts", {}))
+        return {
+            "id": str(version.id),
+            "version": version.version,
+            "newly_created": newly_created,
+            "entry_count": counts.get("entry_count", version.entries.count()),
+            "split_counts": lifecycle.split_counts(version),
+            "created_at": version.created_at.isoformat(),
+        }
     return {
         "id": str(version.id),
         "version": version.version,
@@ -224,10 +265,17 @@ def training_backends(request: HttpRequest, project_id) -> JsonResponse:
 @access()
 @require_http_methods(["GET"])
 def training_readiness(request: HttpRequest, project_id) -> JsonResponse:
-    """Readiness for the Teach panel, dispatching on the project's data kind: the vision answer
-    for image projects (unchanged), a plain "not available yet" state for every other recipe."""
+    """Readiness for the Teach panel, dispatching on the project's data kind: the full answer for
+    image projects (box recipes unchanged; a transcript recipe like handwriting OCR gets it too,
+    with its own nouns and generic snapshots), and a plain "not available yet" state for every
+    recipe that has no teaching tools yet."""
     project = get_object_or_404(Project, id=project_id)
-    if project.modality != "image":
+    if project.modality != "image" or not image_project_uses_boxes(project):
+        from .tasks import recipe_for_project
+
+        recipe = recipe_for_project(project)
+        if project.modality == "image" or (recipe is not None and recipe.available):
+            return no_store(JsonResponse(lifecycle.readiness(project, request.GET.get("backend") or None)))
         return no_store(JsonResponse(_task_unavailable_readiness(project)))
     return no_store(JsonResponse(lifecycle.readiness(project, request.GET.get("backend") or None)))
 
@@ -279,9 +327,7 @@ def training_runs(request: HttpRequest, project_id) -> JsonResponse:
     config = payload.get("config", {})
     if not isinstance(config, dict):
         raise HttpError("config must be an object of training settings.")
-    backend_name = payload.get("backend") or training.training_settings()["DEFAULT_BACKEND"]
-    if not isinstance(backend_name, str):
-        raise HttpError("backend must be the name of an installed backend.")
+    backend_name = _default_backend_for(project, payload)
     snapshot = payload.get("snapshot")
     if snapshot is not None and snapshot != "latest":
         raise HttpError('snapshot can only be "latest". To train on a particular version, send dataset_id instead.')
@@ -308,18 +354,8 @@ def training_runs(request: HttpRequest, project_id) -> JsonResponse:
                 raise HttpError(
                     "There is no dataset version yet. Create one from reviewed labels, then start training.", 400
                 )
-        if project.modality == "image" and not image_project_uses_boxes(project):
-            # A transcript snapshot is not a box one: default to this recipe's backend, and
-            # refuse a box backend in plain words rather than fail deep inside training.
-            # (An image project only: other modalities pick their own backend, e.g. audio-wav-cnn.)
-            if "backend" not in payload:
-                backend_name = OCR_BACKEND
-            elif backend_name != OCR_BACKEND:
-                raise HttpError(
-                    f"This project reads handwriting, so its runs use the {OCR_BACKEND} backend. "
-                    "Leave backend out of the request or send that name.",
-                    400,
-                )
+        # A non-box recipe's backend rule (handwriting OCR -> ocr-trocr) was applied where the
+        # backend was chosen (``_default_backend_for``), for both this and the snapshot path.
         run = lifecycle.create_run(
             project, request.user, dataset=dataset, backend_name=backend_name, config=config,
             acknowledged_terms=payload.get("acknowledge_pretrained_terms", False),

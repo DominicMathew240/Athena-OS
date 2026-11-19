@@ -437,6 +437,11 @@ class OcrTrOCRBackend(TrainingBackend):
 
     def prepare_config(self, config: dict[str, Any], *, train_pictures: int, worker: dict[str, Any]) -> dict[str, Any]:
         prepared = dict(config)
+        # The one-click start's shared default is ``pretrained: "auto"`` (best ready-made start that can
+        # run); this backend spells it ``base_model``, so translate it and never store the foreign key.
+        if prepared.get("pretrained") == "auto":
+            prepared.pop("pretrained")
+            prepared.setdefault("base_model", "auto")
         if prepared.get("base_model") in (None, "", "auto"):
             # The Teach panel sends "auto" (its radio names the one start this tool has); resolve
             # it to the pinned reader, or block in plain words when downloads are off.

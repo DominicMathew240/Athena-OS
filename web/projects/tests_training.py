@@ -430,7 +430,7 @@ class ReadinessAndBackendsTests(TrainingBase):
         dataset = self.make_dataset(with_test=False)
         body = self.client.get(self.api("/training/readiness?backend=fake-backend")).json()
         self.assertTrue(body["ready"], body)
-        self.assertTrue(any("no held-out test images" in w for w in body["warnings"]))
+        self.assertTrue(any("no held-out test pictures" in w for w in body["warnings"]))
         self.assertTrue(any("No training worker is running" in w for w in body["warnings"]))
         self.assertEqual(body["dataset"]["version"], dataset.version)
 
@@ -546,7 +546,7 @@ class RunCreationTests(TrainingBase):
         dataset = dataset_service.create_version(analysis, self.user)
         response = self.start_run(dataset)
         self.assertEqual(response.status_code, 422)
-        self.assertIn("no train images", response.json()["error"])
+        self.assertIn("no train pictures", response.json()["error"])
 
     def test_unavailable_backend_returns_503_with_how_to_enable(self) -> None:
         dataset = self.make_dataset()
