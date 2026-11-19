@@ -81,8 +81,8 @@ training (timeout/cancel). `cancel_cb()` — poll it inside your epoch/step loop
 
 ### The honest-availability pattern
 
-`check_available()` is what the console *says*, not what the worker *has*. The pattern,
-straight from the audio backend:
+`check_available()` is what the console *says*, not what the worker *has*. The pattern
+(abridged from the audio backend, `web/projects/training/audio_wav.py`):
 
 ```python
 import importlib.util
@@ -252,7 +252,9 @@ class MyBackend(TrainingBackend):
         return dict(config or DEFAULTS)
 
     def build_dataset(self, run, dest: Path) -> tuple[list, list[str]]:
-        from .runner import entry_ground_truth, export_entries   # the frozen snapshot helpers
+        # the frozen-snapshot helpers (projects.training.runner; import them absolutely in
+        # a third-party package, not relatively):
+        from projects.training.runner import entry_ground_truth, export_entries
 
         written = export_entries(run, dest)          # checksum-verified files under dest/entries/<split>/
         truth = entry_ground_truth(run)              # paired by position
