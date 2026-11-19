@@ -83,8 +83,9 @@ def validate_name(name: Any) -> str:
 def create_app(project: Project, user, *, name: Any, slug: Any, model: ModelVersion, config: dict[str, Any]) -> InferenceApp:
     name = validate_name(name)
     _check_model(project, model)
+    base = {**schema.default_config(name, model.label_names), "output": schema.output_mode_for(model)}
     try:
-        full = schema.validate_config(schema.merged(schema.default_config(name, model.label_names), config), model.label_names)
+        full = schema.validate_config(schema.merged(base, config), model.label_names, task=model.task)
     except schema.ConfigError as error:
         raise LifecycleError(str(error), 400) from None
     if slug is None or slug == "":
@@ -116,9 +117,21 @@ def update_app(
             raise LifecycleError("Point this app at an approved model before reactivating it.", 409)
         app.status = status
     if config is not None or model is not None:
+        if model is not None:
+            # Re-pointing to a different model keeps the screen's output mode only when the new
+            # model can serve it (a text model and a box model cannot swap places). validate_config
+            # would refuse the mismatched config below; this says what to do about it.
+            wanted = schema.output_mode_for(model)
+            if app.config.get("output", "boxes") != wanted:
+                raise LifecycleError(
+                    f"This screen answers in {app.config.get('output', 'boxes')}, but that model answers in "
+                    f"{wanted}. Create a new screen for that model instead of switching this one.",
+                    400,
+                )
         try:
             app.config = schema.validate_config(
-                schema.merged(app.config, config or {}), app.model_version.label_names
+                schema.merged(app.config, config or {}), app.model_version.label_names,
+                task=app.model_version.task,
             )
         except schema.ConfigError as error:
             raise LifecycleError(str(error), 400) from None
@@ -157,6 +170,7 @@ def _static(app: InferenceApp, config: dict[str, Any], model: ModelVersion) -> d
         "accepted_inputs": config["accepted_inputs"],
         "displayed_labels": config["displayed_labels"],
         "confidence_threshold": config["confidence_threshold"],
+        "output": config.get("output", "boxes"),
         "status_texts": config["status_texts"],
         "decision_controls": config["decision_controls"],
         "human_review_required": config["human_review_required"],
@@ -216,11 +230,39 @@ def feedback_data(record: FeedbackRecord) -> dict[str, Any]:
 
 def displayed_predictions(observation: ObservationRecord) -> list[dict[str, Any]]:
     config = observation.config_snapshot
+    if config.get("output") == "text":
+        return []
     return [
         p
         for p in observation.predictions
         if p["label"] in config["displayed_labels"] and p["score"] >= config["confidence_threshold"]
     ]
+
+
+def _count_predictions(observation: ObservationRecord, config: dict[str, Any], which: str) -> int:
+    """How many box predictions the screen is not showing, and why (weak score / off-screen label)."""
+    if which == "below_threshold":
+        return len([p for p in observation.predictions if p["score"] < config["confidence_threshold"]])
+    return len([p for p in observation.predictions if p["label"] not in config["displayed_labels"]])
+
+
+def _text_answer(observation: ObservationRecord) -> dict[str, Any] | None:
+    """The one text answer a text-output observation produced, or ``None`` for box observations.
+
+    The answer is stored as the observation's single ``predictions`` entry, ``[{"index": 0,
+    "text": "...", "confidence": None}]``. It is not filtered by labels or thresholds: a
+    transcript is the whole answer, and there is nothing to hide part of."""
+    if observation.config_snapshot.get("output") != "text":
+        return None
+    if observation.status != ObservationRecord.SUCCEEDED:
+        return None
+    for prediction in observation.predictions:
+        if isinstance(prediction, dict) and "text" in prediction:
+            return {
+                "text": str(prediction.get("text") or ""),
+                "confidence": prediction.get("confidence"),
+            }
+    return None
 
 
 def observation_state(observation: ObservationRecord, decision: ReviewDecision | None) -> str:
@@ -230,7 +272,10 @@ def observation_state(observation: ObservationRecord, decision: ReviewDecision |
     if observation.status == ObservationRecord.FAILED:
         return "failed"
     config = observation.config_snapshot
-    machine = "flagged" if displayed_predictions(observation) else "clear"
+    if config.get("output") == "text":
+        machine = "flagged"  # the model read something: the reading is the thing to check
+    else:
+        machine = "flagged" if displayed_predictions(observation) else "clear"
     if decision is None:
         return "needs_review" if config["human_review_required"] else machine
     if decision.decision == ReviewDecision.CONFIRM:
@@ -248,6 +293,7 @@ def render_observation(observation: ObservationRecord) -> dict[str, Any]:
     base["model_in_use"] = observation.app.model_version_id == observation.model_version_id and (
         observation.model_version.stage == ModelVersion.APPROVED
     )
+    boxes = base["output"] == "boxes"  # a text screen renders one reading, not a list of findings
     return {
         **base,
         "result": {
@@ -256,10 +302,11 @@ def render_observation(observation: ObservationRecord) -> dict[str, Any]:
             "state": state,
             "status_text": status_text(state, config),
             "awaiting_human_decision": ok and config["human_review_required"] and decision is None,
-            "machine_state": ("flagged" if shown else "clear") if ok else None,
-            "detections": shown if ok else [],
-            "hidden_below_threshold": len([p for p in observation.predictions if p["score"] < config["confidence_threshold"]]) if ok else 0,
-            "hidden_other_labels": len([p for p in observation.predictions if p["label"] not in config["displayed_labels"]]) if ok else 0,
+            "machine_state": ("flagged" if shown else "clear") if ok and boxes else None,
+            "detections": shown if ok and boxes else [],
+            "text_answer": _text_answer(observation),
+            "hidden_below_threshold": _count_predictions(observation, config, "below_threshold") if ok and boxes else 0,
+            "hidden_other_labels": _count_predictions(observation, config, "other_labels") if ok and boxes else 0,
             "decision": _decision_block(decision),
             "result_rejected": bool(decision and decision.decision == ReviewDecision.REJECT),
             "feedback": [feedback_data(f) for f in observation.feedback.all()],
@@ -384,6 +431,15 @@ def add_feedback(observation: ObservationRecord, user, payload: dict[str, Any]) 
         raise LifecycleError(f"Unsupported field: {', '.join(sorted(unknown))}.", 400)
     _require_finished(observation)
     config = observation.config_snapshot
+    if config.get("output") == "text":
+        # A text answer is one whole reading; the per-finding right/wrong and missed-object
+        # buttons are box-shaped and simply do not exist for it. The whole-result decision
+        # (confirm / reject / second look, with its note) is the honest path for text.
+        raise LifecycleError(
+            "This screen reads text, so its answer is one whole reading: use the decision buttons "
+            "(with a note) instead of the per-finding right/wrong buttons.",
+            400,
+        )
     index = payload.get("prediction_index")
     verdict = payload.get("verdict")
     label = ""

@@ -62,6 +62,13 @@
 
     <div id="cs-stage-holder" class="cs-stage-holder"></div>
 
+    <div id="cs-text-answer" hidden>
+      <h3 id="cs-text-h">What the computer read</h3>
+      <blockquote class="cs-text-block" id="cs-text-block"><p id="cs-text-content"></p></blockquote>
+      <p class="cs-help" id="cs-text-empty" hidden>The computer read no writing in this picture.</p>
+      <p class="cs-help" id="cs-text-note"></p>
+    </div>
+
     <h3 id="cs-det-h">Things the computer found</h3>
     <p class="cs-help" id="cs-det-empty" hidden></p>
     <ol class="cs-detections" id="cs-detections" aria-labelledby="cs-det-h"></ol>
@@ -101,6 +108,7 @@
     </details>
 
     <p class="cs-feedback-note" id="cs-feedback-note"><strong>About your right/wrong answers:</strong> they are saved so your team can review them later. They do <strong>not</strong> change the computer model, and the model does not learn from them by itself.</p>
+    <p class="cs-feedback-note" id="cs-text-feedback-note" hidden><strong>About your decisions:</strong> they are saved with the picture so your team can review them later. They do <strong>not</strong> change the computer model, and the model does not learn from them by itself.</p>
   </section>
 
   <section class="cs-card" id="cs-decision" aria-labelledby="cs-decision-h" data-needs="label" hidden>

@@ -329,6 +329,11 @@
   /* One sentence that says what the computer found, separate from the operator's own wording. */
   CS.machineSentence = function (result, render) {
     if (result.status !== "succeeded") return "";
+    if (render.output === "text") {
+      const answer = result.text_answer;
+      if (!answer || typeof answer.text !== "string" || !answer.text.trim()) return "The computer read no writing in this picture.";
+      return "The computer read the writing its own way. Check the reading against the picture yourself.";
+    }
     const n = result.detections.length;
     const threshold = CS.percent(render.confidence_threshold);
     // At a sureness of 0 "at least 0% sure" is meaningless: say what happened without a number.

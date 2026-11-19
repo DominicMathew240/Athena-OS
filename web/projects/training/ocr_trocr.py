@@ -611,7 +611,7 @@ class OcrTrOCRBackend(TrainingBackend):
         return processor, model
 
     def predict_text(self, artifact: Path, image: Image.Image) -> str:
-        """Read one picture: the transcript this model produces. The API-level inference path."""
+        """Read one picture: the transcript this model produces, as plain text (used by ``evaluate``)."""
         import torch
 
         (processor, model), _meta = self._load(artifact)
@@ -621,10 +621,18 @@ class OcrTrOCRBackend(TrainingBackend):
         text = processor.batch_decode(generated, skip_special_tokens=True)[0]
         return (text or "").strip()
 
+    def predict_transcript(self, artifact: Path, image: Image.Image) -> dict[str, Any]:
+        """Read one picture: the serving contract for a text-output model.
+
+        Returns ``{"text": str, "confidence": None}``. The reader generates its answer token by
+        token, so it has no confidence number to give; the field is an honest ``None`` rather
+        than a made-up score. The inference worker calls this for screens whose output is text."""
+        return {"text": self.predict_text(artifact, image), "confidence": None}
+
     def predict(self, artifact: Path, image: Image.Image, thresholds: dict[str, Any]) -> list:
-        # A transcript model has no boxes; the console's check screens are box-shaped and cannot
-        # show a text answer yet, so this stays an honest refusal at the backend level too.
-        raise NotImplementedError("This model reads text; it does not find boxes. Use predict_text.")
+        # A transcript model has no boxes; the inference pipeline calls ``predict_transcript`` for
+        # text-output screens. This stays an honest refusal at the box-prediction level.
+        raise NotImplementedError("This model reads text; it does not find boxes. Use predict_transcript.")
 
     def evaluate(self, artifact: Path, items: list[EvalItem], labels: list[str], thresholds: dict[str, Any]) -> dict[str, Any]:
         """Held-out evaluation: CER and word accuracy per test picture plus the aggregate.

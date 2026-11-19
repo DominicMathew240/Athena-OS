@@ -12,7 +12,8 @@
     progress: byId("cs-progress"), progressText: byId("cs-progress-text"), elapsed: byId("cs-progress-elapsed"), keepWaiting: byId("cs-keep-waiting"),
     live: byId("cs-live"),
     result: byId("cs-result"), status: byId("cs-status"), statusIcon: byId("cs-status-icon"), statusText: byId("cs-status-text"), statusDetail: byId("cs-status-detail"),
-    stageHolder: byId("cs-stage-holder"), detList: byId("cs-detections"), detEmpty: byId("cs-det-empty"), hiddenNote: byId("cs-hidden-note"),
+    stageHolder: byId("cs-stage-holder"), textAnswer: byId("cs-text-answer"), textContent: byId("cs-text-content"), textEmpty: byId("cs-text-empty"), textNote: byId("cs-text-note"),
+    detList: byId("cs-detections"), detEmpty: byId("cs-det-empty"), hiddenNote: byId("cs-hidden-note"), boxFeedbackNote: byId("cs-feedback-note"), textFeedbackNote: byId("cs-text-feedback-note"),
     missed: byId("cs-missed"), missedForm: byId("cs-missed-form"), missedLabel: byId("cs-missed-label"), draw: byId("cs-draw"), drawHelp: byId("cs-draw-help"),
     unknown: byId("cs-box-unknown"), bx: byId("cs-box-x"), by: byId("cs-box-y"), bw: byId("cs-box-w"), bh: byId("cs-box-h"),
     missedNote: byId("cs-missed-note"), missedReq: byId("cs-missed-req"), missedMsg: byId("cs-missed-msg"), missedList: byId("cs-missed-list"),
@@ -83,6 +84,10 @@
     setMsg(ui.missedMsg, "");
     CS.clear(ui.stageHolder); CS.clear(ui.detList); CS.clear(ui.missedList); CS.clear(ui.decisionButtons);
     ui.missed.open = false;
+    ui.missed.hidden = false;
+    ui.textAnswer.hidden = true;
+    ui.boxFeedbackNote.hidden = false;
+    ui.textFeedbackNote.hidden = true;
     ui.note.value = ""; ui.missedNote.value = "";
     [ui.bx, ui.by, ui.bw, ui.bh].forEach((input) => { input.value = ""; input.disabled = false; });
     ui.unknown.checked = false; ui.draw.disabled = false;
@@ -176,16 +181,32 @@
     ui.stageHolder.appendChild(stage.stage);
     wireDrawing(); // a fresh overlay per picture, so nothing carries over
 
+    // A text-reading screen: the answer is one transcript, not a list of boxes.
+    const isText = render.output === "text";
+    ui.textAnswer.hidden = !isText;
+    ui.boxFeedbackNote.hidden = isText;
+    ui.textFeedbackNote.hidden = !isText;
+    if (isText) {
+      const answer = result.text_answer;
+      const text = answer && typeof answer.text === "string" ? answer.text : "";
+      ui.textContent.textContent = text;
+      ui.textEmpty.hidden = Boolean(text.trim());
+      ui.textNote.textContent = "The computer read the writing by itself. Compare it with the picture: handwriting reading can be wrong, and a person decides.";
+      ui.missed.hidden = true; // no boxes to miss on a text screen
+    }
+
     CS.clear(ui.detList);
     result.detections.forEach((det, i) => ui.detList.appendChild(detectionItem(det, i + 1)));
-    ui.detEmpty.hidden = result.detections.length > 0;
-    if (!result.detections.length) {
+    ui.detEmpty.hidden = result.detections.length > 0 || isText;
+    if (!isText && !result.detections.length) {
       ui.detEmpty.textContent = "Nothing to list. The computer did not find anything it is sure enough about. If you can see something it missed, use “The computer missed something” below.";
     }
     const hidden = [];
-    if (result.hidden_below_threshold) hidden.push(`${result.hidden_below_threshold} weaker ${result.hidden_below_threshold === 1 ? "guess" : "guesses"} (less than ${CS.percent(render.confidence_threshold)} sure)`);
-    if (result.hidden_other_labels) hidden.push(`${result.hidden_other_labels} ${result.hidden_other_labels === 1 ? "finding" : "findings"} of things this screen is not set up to show`);
-    const scoreNote = CS.scoreNote(render);
+    if (!isText && result.hidden_below_threshold) hidden.push(`${result.hidden_below_threshold} weaker ${result.hidden_below_threshold === 1 ? "guess" : "guesses"} (less than ${CS.percent(render.confidence_threshold)} sure)`);
+    if (!isText && result.hidden_other_labels) hidden.push(`${result.hidden_other_labels} ${result.hidden_other_labels === 1 ? "finding" : "findings"} of things this screen is not set up to show`);
+    const scoreNote = isText
+      ? "The reading is the computer’s own. Handwriting reading is not checked with a score; read it against the picture."
+      : CS.scoreNote(render);
     ui.hiddenNote.textContent = hidden.length ? `${scoreNote} The computer also had ${hidden.join(" and ")}, which ${hidden.length === 1 && result.hidden_below_threshold + result.hidden_other_labels === 1 ? "is" : "are"} not shown.` : scoreNote;
 
     // “The computer missed something”
@@ -197,10 +218,15 @@
 
     // decisions
     ui.noteReq.textContent = noteNeeded ? "(required if you reject the result)" : "(optional)";
-    ui.decisionHelp.textContent = (render.human_review_required
-      ? "Look at the picture, then say whether you agree with the computer. The result stays marked for review until you decide."
-      : "You can record what you decided. This screen does not require it.")
-      + " This is about the whole picture. The “right” and “wrong” buttons above are about one finding each.";
+    ui.decisionHelp.textContent = isText
+      ? (render.human_review_required
+        ? "Read what the computer wrote, compare it with the picture, then say whether you agree. The result stays marked for review until you decide."
+        : "You can record what you decided. This screen does not require it.")
+        + " This is about the whole reading. If it is wrong, say so with a note: which words the computer got wrong."
+      : (render.human_review_required
+        ? "Look at the picture, then say whether you agree with the computer. The result stays marked for review until you decide."
+        : "You can record what you decided. This screen does not require it.")
+        + " This is about the whole picture. The “right” and “wrong” buttons above are about one finding each.";
     render.decision_controls.options.forEach((key) => {
       const meta = CS.DECISIONS[key];
       const button = el("button", key === "confirm" ? "primary cs-decide" : "secondary cs-decide");

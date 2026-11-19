@@ -49,6 +49,21 @@ def fail_stale_observations() -> int:
     )
 
 
+def _text_predictions(backend, artifact, image) -> list[dict]:
+    """Run one text-reading model and shape its single answer as the stored prediction.
+
+    The shape mirrors the box path's list (a reader that has no index-based feedback simply has
+    one entry): ``[{"index": 0, "text": str, "confidence": None}]``."""
+    answer = backend.predict_transcript(artifact, image)
+    text = str(answer.get("text") or "")
+    confidence = answer.get("confidence")
+    if confidence is not None and isinstance(confidence, (int, float)):
+        confidence = round(float(confidence), 6)
+    else:
+        confidence = None
+    return [{"index": 0, "text": text, "confidence": confidence}]
+
+
 def process_observation(observation: ObservationRecord, backend=None) -> ObservationRecord:
     """Predict for a claimed observation. Never raises; failures are stored on the row."""
     try:
@@ -59,6 +74,14 @@ def process_observation(observation: ObservationRecord, backend=None) -> Observa
             opened.load()
             image = opened.convert("RGB")
         started = time.monotonic()
+        if observation.config_snapshot.get("output") == "text":
+            predictions = _text_predictions(backend, artifact, image)
+            elapsed = time.monotonic() - started
+            logger.info("Observation %s: text read in %.1fs", observation.pk, elapsed)
+            ObservationRecord.objects.filter(pk=observation.pk, status=ObservationRecord.RUNNING).update(
+                status=ObservationRecord.SUCCEEDED, predictions=predictions, finished_at=timezone.now(), error=""
+            )
+            return ObservationRecord.objects.get(pk=observation.pk)
         found = backend.predict(artifact, image, {"confidence": PREDICTION_FLOOR, "max_boxes": MAX_PREDICTIONS})
         elapsed = time.monotonic() - started
         ordered = sorted(

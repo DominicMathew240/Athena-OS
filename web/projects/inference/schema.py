@@ -16,6 +16,10 @@ from ..training.operating_points import NOT_MEASURED_NOTE as _NOT_MEASURED_NOTE
 ACCEPTED_INPUTS = ("image/jpeg", "image/png", "image/webp")
 DECISION_OPTIONS = ("confirm", "reject", "needs_second_look")
 STATE_KEYS = ("clear", "flagged", "needs_review")
+OUTPUT_MODES = ("boxes", "text")
+#: The one task key whose models answer with text: the handwriting-OCR recipe (a transcript model).
+#: A model of any other task (or with none, the pre-recipe vision default) serves boxes.
+TEXT_TASKS = frozenset({"handwriting-ocr"})
 CONFIG_KEYS = {
     "task_title",
     "accepted_inputs",
@@ -25,6 +29,10 @@ CONFIG_KEYS = {
     "decision_controls",
     "human_review_required",
 }
+#: The output mode the server itself sets from the bound model (see ``output_mode_for``); a
+#: caller's patch may carry it only with the value the model serves. It is normalized last, so
+#: the caller's stored config keeps its field order and the mode reads as a settled fact.
+OUTPUT_KEY = "output"
 DISCLAIMER = (
     "This is a model's output, not a final determination. It can be wrong. "
     "A person must check it before anything is decided or acted on."
@@ -68,6 +76,15 @@ class ConfigError(ValueError):
     """The configuration is invalid; the message says which field and what is allowed."""
 
 
+def output_mode_for(model) -> str:
+    """The output mode a bound model must be served with: "text" for a text-reading task, else "boxes"."""
+    return output_mode_for_type(getattr(model, "task", None))
+
+
+def output_mode_for_type(task: str | None) -> str:
+    return "text" if task in TEXT_TASKS else "boxes"
+
+
 def default_config(name: str, labels: list[str]) -> dict[str, Any]:
     return {
         "task_title": name,
@@ -92,7 +109,7 @@ def _text(value: Any, field: str, limit: int = MAX_TEXT) -> str:
 def merged(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(patch, dict):
         raise ConfigError("config must be an object.")
-    unknown = set(patch) - CONFIG_KEYS
+    unknown = set(patch) - CONFIG_KEYS - {OUTPUT_KEY}
     if unknown:
         raise ConfigError(f"Unsupported config field: {', '.join(sorted(map(str, unknown)))}.")
     result = copy.deepcopy(base)
@@ -106,10 +123,18 @@ def merged(base: dict[str, Any], patch: dict[str, Any]) -> dict[str, Any]:
     return result
 
 
-def validate_config(config: dict[str, Any], model_labels: list[str]) -> dict[str, Any]:
-    """Return the normalized config or raise ``ConfigError``."""
-    if set(config) != CONFIG_KEYS:
-        missing = CONFIG_KEYS - set(config)
+def validate_config(
+    config: dict[str, Any], model_labels: list[str], *, task: str | None = None
+) -> dict[str, Any]:
+    """Return the normalized config or raise ``ConfigError``.
+
+    ``task`` is the bound model's task key (a ``ModelVersion``): it decides which ``output``
+    modes the model can serve - a handwriting-OCR (transcript) model answers in text, every
+    vision model in boxes. It may be omitted by callers that have no model (tests of the shape
+    alone); then any output mode passes."""
+    missing = CONFIG_KEYS - set(config)
+    unknown = set(config) - CONFIG_KEYS - {OUTPUT_KEY}
+    if missing or unknown:
         raise ConfigError(f"Config is missing: {', '.join(sorted(missing))}." if missing else "Unsupported config field.")
     title = _text(config["task_title"], "task_title", 120)
 
@@ -158,7 +183,21 @@ def validate_config(config: dict[str, Any], model_labels: list[str]) -> dict[str
         raise ConfigError(
             "When human review is required, decision_controls.options must include confirm or reject so a person can record a decision."
         )
-    return {
+
+    output = config.get(OUTPUT_KEY, "boxes")
+    if output not in OUTPUT_MODES:
+        raise ConfigError(f"output must be one of: {', '.join(OUTPUT_MODES)}.")
+    if task is not None:
+        allowed = output_mode_for_type(task)
+        if output != allowed:
+            if output == "text":
+                raise ConfigError(
+                    "output cannot be text: this model finds things in pictures; it does not read text."
+                )
+            raise ConfigError(
+                "output cannot be boxes: this model reads handwriting and answers with the text it read."
+            )
+    result = {
         "task_title": title,
         "accepted_inputs": [item for item in ACCEPTED_INPUTS if item in inputs],
         "displayed_labels": [label for label in model_labels if label in shown],
@@ -170,3 +209,5 @@ def validate_config(config: dict[str, Any], model_labels: list[str]) -> dict[str
         },
         "human_review_required": config["human_review_required"],
     }
+    result[OUTPUT_KEY] = output  # normalized last: the mode the server settled on
+    return result
