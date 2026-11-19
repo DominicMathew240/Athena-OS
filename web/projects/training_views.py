@@ -5,12 +5,13 @@ from __future__ import annotations
 import uuid
 from typing import Any
 
-from django.http import HttpRequest, JsonResponse
+from django.http import Http404, HttpRequest, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_http_methods
 
 from . import training
 from .api_common import HttpError, image_project, json_errors, json_payload, no_store, reject_unknown
+from .annotations import image_project_uses_boxes
 from .datasets.manifest import opaque_user
 from .models import DatasetVersion, InferenceApp, ModelVersion, Project, TrainingRun
 from .training import lifecycle, report, runner
@@ -18,21 +19,36 @@ from .permissions import access
 
 LIST_LIMIT = 100
 
+#: The only backend a handwriting-OCR (transcript) project may run; imported lazily-free (the
+#: name is a plain string; the module itself imports nothing heavy at import time anyway).
+OCR_BACKEND = "ocr-trocr"
 
-def trainable_project(project_id) -> Project:
-    """The project whose runs/models these routes serve: image projects (unchanged), plus any
-    project whose data type has a registered plugin with an annotation kind - the same rule
-    the generic dataset views use. Anything else 404s exactly as before."""
-    from django.http import Http404
 
-    from .modalities import get_plugin
-
-    project = Project.objects.filter(id=project_id).first()
-    if project is not None and (
-        project.modality == "image" or getattr(get_plugin(project.modality), "annotation_kind", "")
-    ):
+def teachable_project(project_id) -> Project:
+    """The project a training run or model belongs to: image projects (unchanged) plus every
+    project whose data type can be trained today — a registered modality plugin with an
+    annotation kind (audio clips, tables) or an available recipe (handwriting OCR, whose
+    plugin is recipe-dispatched). Others 404 exactly as before, so the page shows its
+    "not available yet" refusal instead of an error. Image projects whose recipe is not
+    box-shaped (handwriting-OCR transcripts) train through the generic-snapshot path with
+    their own backend; the API stays honest: a run on an OCR project must use its recipe's
+    backend (``ocr-trocr``), not a box backend."""
+    project = get_object_or_404(Project, id=project_id)
+    if project.modality == "image":
         return project
-    raise Http404
+    from .modalities import get_plugin
+    from .tasks import recipe_for_project
+
+    if getattr(get_plugin(project.modality), "annotation_kind", ""):
+        return project
+    recipe = recipe_for_project(project)
+    if recipe is not None and recipe.available:
+        return project
+    raise Http404("This project's task has no teaching tools yet.")
+
+
+#: Historical alias for the generalized gate above (the routes all use one rule now).
+trainable_project = teachable_project
 
 
 def run_data(run: TrainingRun, *, detail: bool = False) -> dict[str, Any]:
@@ -183,7 +199,7 @@ def _app_refs(apps) -> list[dict[str, str]]:
 @access()
 @require_http_methods(["GET"])
 def training_backends(request: HttpRequest, project_id) -> JsonResponse:
-    image_project(project_id)  # the backend list is the image one; other recipes 404 like before
+    image_project(project_id)  # the backend list is the image one; other modalities 404 like before
     worker = lifecycle.worker_status()
     for_options = {"online": worker["online"], "downloads_allowed": worker["downloads_allowed"]}
     backends = []
@@ -262,7 +278,7 @@ def _task_unavailable_readiness(project) -> dict[str, Any]:
 @require_http_methods(["GET", "POST"])
 @json_errors
 def training_runs(request: HttpRequest, project_id) -> JsonResponse:
-    project = trainable_project(project_id)
+    project = teachable_project(project_id)
     if request.method == "GET":
         runs = project.training_runs.select_related("dataset_version")[:LIST_LIMIT]
         return no_store(JsonResponse({"runs": [run_data(run) for run in runs]}))
@@ -298,7 +314,21 @@ def training_runs(request: HttpRequest, project_id) -> JsonResponse:
         else:
             dataset = lifecycle.latest_dataset(project)
             if dataset is None:
-                raise HttpError("There is no dataset version yet. Create one from reviewed boxes, then start training.", 400)
+                raise HttpError(
+                    "There is no dataset version yet. Create one from reviewed labels, then start training.", 400
+                )
+        if project.modality == "image" and not image_project_uses_boxes(project):
+            # A transcript snapshot is not a box one: default to this recipe's backend, and
+            # refuse a box backend in plain words rather than fail deep inside training.
+            # (An image project only: other modalities pick their own backend, e.g. audio-wav-cnn.)
+            if "backend" not in payload:
+                backend_name = OCR_BACKEND
+            elif backend_name != OCR_BACKEND:
+                raise HttpError(
+                    f"This project reads handwriting, so its runs use the {OCR_BACKEND} backend. "
+                    "Leave backend out of the request or send that name.",
+                    400,
+                )
         run = lifecycle.create_run(
             project, request.user, dataset=dataset, backend_name=backend_name, config=config,
             acknowledged_terms=payload.get("acknowledge_pretrained_terms", False),
@@ -320,7 +350,7 @@ def training_runs(request: HttpRequest, project_id) -> JsonResponse:
 @access()
 @require_http_methods(["GET"])
 def training_run_detail(request: HttpRequest, project_id, run_id) -> JsonResponse:
-    project = trainable_project(project_id)
+    project = teachable_project(project_id)
     run = get_object_or_404(TrainingRun.objects.select_related("dataset_version"), id=run_id, project=project)
     runner.fail_stale_runs()
     run.refresh_from_db()
@@ -331,7 +361,7 @@ def training_run_detail(request: HttpRequest, project_id, run_id) -> JsonRespons
 @require_http_methods(["POST"])
 @json_errors
 def training_run_cancel(request: HttpRequest, project_id, run_id) -> JsonResponse:
-    project = trainable_project(project_id)
+    project = teachable_project(project_id)
     run = get_object_or_404(TrainingRun.objects.select_related("dataset_version"), id=run_id, project=project)
     if run.status not in TrainingRun.ACTIVE_STATUSES:
         raise lifecycle.LifecycleError(f"This run already {run.get_status_display().lower()}; there is nothing to cancel.", 409)
@@ -342,7 +372,7 @@ def training_run_cancel(request: HttpRequest, project_id, run_id) -> JsonRespons
 @access()
 @require_http_methods(["GET"])
 def model_collection(request: HttpRequest, project_id) -> JsonResponse:
-    project = trainable_project(project_id)
+    project = teachable_project(project_id)
     models = project.model_versions.select_related("training_run__dataset_version")[:LIST_LIMIT]
     approved = next((m for m in models if m.stage == ModelVersion.APPROVED), None)
     return no_store(
@@ -358,14 +388,14 @@ def model_collection(request: HttpRequest, project_id) -> JsonResponse:
 @access()
 @require_http_methods(["GET"])
 def model_detail(request: HttpRequest, project_id, model_id) -> JsonResponse:
-    project = trainable_project(project_id)
+    project = teachable_project(project_id)
     return no_store(JsonResponse({"model": model_data(_get_model(project, model_id), detail=True)}))
 
 
 @access()
 @require_http_methods(["GET"])
 def model_evaluation(request: HttpRequest, project_id, model_id) -> JsonResponse:
-    project = trainable_project(project_id)
+    project = teachable_project(project_id)
     model = _get_model(project, model_id)
     result = report.build_report(model.evaluation)
     return no_store(
@@ -389,7 +419,7 @@ def model_evaluation(request: HttpRequest, project_id, model_id) -> JsonResponse
 @require_http_methods(["POST"])
 @json_errors
 def model_stage(request: HttpRequest, project_id, model_id) -> JsonResponse:
-    project = trainable_project(project_id)
+    project = teachable_project(project_id)
     model = _get_model(project, model_id)
     payload = json_payload(request, allow_empty=True)
     reject_unknown(payload, {"note"})
@@ -401,7 +431,7 @@ def model_stage(request: HttpRequest, project_id, model_id) -> JsonResponse:
 @require_http_methods(["POST"])
 @json_errors
 def model_approve(request: HttpRequest, project_id, model_id) -> JsonResponse:
-    project = trainable_project(project_id)
+    project = teachable_project(project_id)
     model = _get_model(project, model_id)
     payload = json_payload(request)
     reject_unknown(payload, {"note", "acknowledge_weak_results", "repoint_apps", "repoint_app_ids"})
@@ -438,7 +468,7 @@ def model_approve(request: HttpRequest, project_id, model_id) -> JsonResponse:
 @require_http_methods(["POST"])
 @json_errors
 def model_rollback(request: HttpRequest, project_id, model_id) -> JsonResponse:
-    project = trainable_project(project_id)
+    project = teachable_project(project_id)
     model = _get_model(project, model_id)
     payload = json_payload(request)
     reject_unknown(payload, {"note", "repoint_apps", "repoint_app_ids"})

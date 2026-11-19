@@ -6,6 +6,7 @@ only inside the worker (``manage.py train_worker``).
 
 from __future__ import annotations
 
+import json
 import logging
 import platform
 import shutil
@@ -176,6 +177,49 @@ def export_entries(run: TrainingRun, dest: Path) -> list[Path]:
     return written
 
 
+def build_generic_dataset(run: TrainingRun, dest: Path) -> tuple[list[EvalItem], dict[str, Any]]:
+    """A ready-made generic export for backends that train on files + annotations (e.g. OCR).
+
+    Combines ``export_entries`` (the frozen files, checksum-verified) with
+    ``entry_ground_truth`` (the frozen annotations) into one documented layout under ``dest``:
+
+    * ``images/<split>/<n>_<sha12>.<ext>`` - each entry's file, renamed to ``images/`` so every
+      backend reads one obvious directory tree (the bytes are the entry files verbatim);
+    * ``transcripts.json`` - ``[{"split", "asset_id", "filename", "sha256", "text"}]`` in the
+      same order as the files, one entry per file, ``text`` read from the annotation's
+      ``"text"`` key (``""`` when the annotation has none - an OCR backend refuses those).
+
+    Returns ``(eval_items, labels)`` where ``eval_items`` is a list of ``EvalItem`` whose
+    ``path`` points at the test-split files and whose ``boxes`` are unused (empty); the backend
+    reads the transcripts from ``transcripts.json``. ``labels`` is the project's label list.
+    """
+    files = export_entries(run, dest)
+    ground_truth = entry_ground_truth(run)
+    entries = []
+    for source, truth in zip(files, ground_truth):
+        target = dest / "images" / truth["split"] / source.name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.move(str(source), target)
+        annotation = truth["annotation"] if isinstance(truth["annotation"], dict) else {}
+        entries.append(
+            {
+                "split": truth["split"],
+                "asset_id": truth["asset_id"],
+                "filename": truth["filename"],
+                "sha256": truth["sha256"],
+                "text": str(annotation.get("text") or ""),
+                "path": str(target.relative_to(dest)),
+            }
+        )
+    (dest / "transcripts.json").write_text(json.dumps(entries, indent=2), encoding="utf-8")
+    test_items = [
+        EvalItem(dest / item["path"], [], 0, 0, item["asset_id"])
+        for item in entries
+        if item["split"] == "test"
+    ]
+    return test_items, list(run.dataset_version.label_names)
+
+
 def entry_ground_truth(run: TrainingRun) -> list[dict[str, Any]]:
     """Every frozen entry of the run's version: its split, primary label and annotation.
 
@@ -207,7 +251,9 @@ def entry_ground_truth(run: TrainingRun) -> list[dict[str, Any]]:
 
 
 def _split_items(manifest: dict[str, Any], dest: Path, split: str) -> list[EvalItem]:
-    grouped = writers._by_split(manifest["images"])  # noqa: SLF001 - same package, same naming rule
+    # A generic (recipe) manifest has no "images": it freezes files + annotations in "entries",
+    # and a non-box backend builds its own eval items, so the box-shaped answer is simply none.
+    grouped = writers._by_split(manifest.get("images") or [])  # noqa: SLF001 - same package, same naming rule
     items = []
     for index, image in grouped.get(split, []):
         name = writers.image_name(index, image)
@@ -229,7 +275,12 @@ def test_items(manifest: dict[str, Any], dest: Path) -> list[EvalItem]:
 def val_items(manifest: dict[str, Any], dest: Path) -> list[EvalItem]:
     """The validation ("Checking") images with ground truth, built exactly like ``test_items``. Used only to choose
     confidence thresholds (``operating_points``); the model was not trained on the test split but may have been
-    steered by these, which is why numbers about new pictures come from the test split."""
+    steered by these, which is why numbers about new pictures come from the test split.
+
+    Generic (non-image) versions have no image manifest; they answer nothing here, so a
+    non-vision backend simply gets no ``operating_points`` block."""
+    if "images" not in manifest:
+        return []
     return _split_items(manifest, dest, "val")
 
 
@@ -365,7 +416,7 @@ def run_training(run: TrainingRun, backend: TrainingBackend | None = None) -> Tr
         work.mkdir(parents=True, exist_ok=True)
         dataset_dir = work / "dataset"
         items, labels = build_dataset(run, backend, dataset_dir)
-        log.add(f"Dataset ready: {run.dataset_version.image_count} images, {len(items)} held-out test images")
+        log.add(f"Dataset ready: {run.dataset_version.image_count} images, {len(items)} held-out test items")
 
         def check_limits() -> None:
             if _cancelled(run):
@@ -388,14 +439,23 @@ def run_training(run: TrainingRun, backend: TrainingBackend | None = None) -> Tr
         log.flush(force=True)
         boxes_per_label = {label: 0 for label in labels}
         for item in items:
-            # Vision items carry their ground truth as .boxes; a non-vision backend's items
-            # may not (a table row has none), and the per-label counts are only used when the
-            # evaluation cannot run, so they are skipped rather than guessed.
-            for label, *_ in getattr(item, "boxes", ()):
+            # Non-vision backends hand back their own ground-truth items; only the image ones
+            # carry ``.boxes`` (this counter feeds the box-shaped "not available" fallback).
+            # A clip-classification item has ``.label`` instead; an OCR-style and table-row
+            # item has neither (its truth lives beside the files), so it contributes nothing here.
+            for label, *_ in getattr(item, "boxes", [(getattr(item, "label", ""),)]):
                 boxes_per_label[label] = boxes_per_label.get(label, 0) + 1
         if items:
             evaluation = backend.evaluate(
                 Path(result.artifact_path), items, labels, {"confidence": EVAL_CONFIDENCE, "max_boxes": 100}
+            )
+        elif run.annotation_kind and run.annotation_kind != "boxes":
+            # A non-box recipe with an empty test split: its backend speaks its own evaluation
+            # shape, so the generic not_available answer names its kind, not boxes.
+            evaluation = evaluation_lib.not_available(
+                "The dataset version's test split has no files, so there is nothing held out to measure against.",
+                0,
+                boxes_per_label,
             )
         else:
             evaluation = evaluation_lib.not_available(
@@ -449,15 +509,30 @@ def run_training(run: TrainingRun, backend: TrainingBackend | None = None) -> Tr
 def register_candidate(
     run: TrainingRun, artifact: Path, labels: list[str], evaluation: dict[str, Any], metrics: dict[str, Any]
 ) -> ModelVersion:
-    """Move the artifact under the data home, hash it, and create a ``candidate`` - never anything more."""
+    """Move the artifact under the data home, hash it, and create a ``candidate`` - never anything more.
+
+    ``artifact`` is one file for most backends; a backend whose artifact is a folder of files
+    (the audio backend's model plus its metadata sidecar) passes the folder, and every file in
+    it is copied next to the same ``model.bin`` path, verbatim and hashed file by file."""
     import uuid
 
     model_id = uuid.uuid4()
     relative = f"models/{run.project_id}/{model_id}/model.bin"
     target = models_root().parent / relative
     target.parent.mkdir(parents=True, exist_ok=True)
-    shutil.copyfile(artifact, target)
-    target.chmod(0o600)
+    source = Path(artifact)
+    if source.is_dir():
+        # A folder artifact: every file in it lands beside the same model.bin path, under its
+        # own name, so sidecar files (the audio backend's metadata.json) survive together.
+        for entry in sorted(source.iterdir()):
+            if entry.is_file():
+                shutil.copyfile(entry, target.parent / entry.name)
+                (target.parent / entry.name).chmod(0o600)
+        if not target.is_file():
+            raise ValueError("The training backend produced no model file. Nothing was saved.")
+    else:
+        shutil.copyfile(source, target)
+        target.chmod(0o600)
     with transaction.atomic():
         model = ModelVersion.objects.create(
             id=model_id,

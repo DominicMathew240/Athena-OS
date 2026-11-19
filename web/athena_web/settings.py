@@ -259,7 +259,7 @@ AUTOLABEL = {
     "ALLOW_DOWNLOAD": _flag("ATHENA_AUTOLABEL_ALLOW_DOWNLOAD", True),
 }
 
-TRAINING = {"BACKENDS": ["projects.training.dfine:DFineBackend"]}  # opt-in D-FINE tool; the default backend is unchanged
+TRAINING = {"BACKENDS": ["projects.training.dfine:DFineBackend", "projects.training.ocr_trocr:OcrTrOCRBackend"]}  # opt-in D-FINE and handwriting-OCR tools; the default backend is unchanged
 
 # --- Vision inspections (a vision-language model that explains what it sees) -----------------
 # The built-in model is an open Qwen vision model served by your own Ollama or vLLM server through

@@ -285,11 +285,20 @@ def _one_click_preview(
 
 
 def _train_images(dataset: DatasetVersion) -> int:
-    return split_counts(dataset).get("train", {}).get("images", 0)
+    return _split_files(dataset, "train")
 
 
 def _test_images(dataset: DatasetVersion) -> int:
-    return split_counts(dataset).get("test", {}).get("images", 0)
+    return _split_files(dataset, "test")
+
+
+def _split_files(dataset: DatasetVersion, split: str) -> int:
+    """How many files a version's split holds. Vision manifests count ``images``, generic
+    (recipe) manifests count ``entries``; either way it is the number of things to train or
+    score on, which is all the run rules need."""
+    group = split_counts(dataset).get(split, {})
+    return group.get("images", group.get("entries", 0))
+
 
 
 def prepare_start(

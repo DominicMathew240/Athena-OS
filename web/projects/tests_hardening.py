@@ -170,7 +170,9 @@ class UnknownProjectSweep(InferenceBase):
                 self.assertFalse([m for m, code in statuses.items() if code < 400], statuses)
 
     def test_non_image_projects_are_invisible_to_the_image_apis(self) -> None:
-        audio = Project.objects.create(name="Sound", modality="audio", task="Classify", labels=["a"])
+        # Audio landed tools in Wave 1, so the unsupported kind here is speech: every image-only
+        # API must refuse it exactly as before.
+        speech = Project.objects.create(name="Speech", modality="speech", task="Transcribe", labels=["a"])
         for route, converters in walk():
             if "project_id" not in converters or route.startswith("api/projects/<uuid:project_id>") is False:
                 continue
@@ -182,7 +184,7 @@ class UnknownProjectSweep(InferenceBase):
                 # can show the refusal instead of an error; every other image API still refuses.
                 continue
             values = {name: str(uuid.uuid4()) for name in converters}
-            values["project_id"] = str(audio.id)
+            values["project_id"] = str(speech.id)
             path = render(route, values)
             with self.subTest(route=route):
                 for method in ("get", "post", "delete"):

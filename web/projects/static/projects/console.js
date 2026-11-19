@@ -13,7 +13,7 @@ const modalityInfo = {
 let projects = [];
 let currentFilter = "all";
 let selectedId = null;
-const PANEL_ORDER = ["checklist-panel", "labels-panel", "image-assets-panel", "dataset-panel", "train-panel", "apps-panel"];
+const PANEL_ORDER = ["checklist-panel", "labels-panel", "image-assets-panel", "audio-assets-panel", "dataset-panel", "train-panel", "apps-panel"];
 let currentPanelId = "checklist-panel"; // which part of the open project is on screen
 let loadError = "";
 const tableBody = document.getElementById("dataset-rows");
@@ -41,6 +41,14 @@ const autoAfterUpload = document.getElementById("autolabel-after-upload");
 const autoAfterUploadField = document.getElementById("autolabel-after-upload-field");
 const assetList = document.getElementById("asset-list");
 const assetStatus = document.getElementById("asset-status");
+// --- Sound clips (audio projects) -----------------------------------------------------------------------
+const audioAssetsPanel = document.getElementById("audio-assets-panel");
+const audioUploadForm = document.getElementById("audio-upload-form");
+const audioUploadInput = document.getElementById("audio-upload");
+const audioUploadError = document.getElementById("audio-upload-error");
+const clipList = document.getElementById("clip-list");
+const clipStatus = document.getElementById("audio-asset-status");
+let currentClips = [];
 const imageAssetsHeading = document.getElementById("image-assets-heading");
 imageAssetsHeading.tabIndex = -1;
 const annotationDialog = document.getElementById("annotation-dialog");
@@ -97,8 +105,17 @@ const annotationAcceptAll = document.getElementById("annotation-accept-all");
 const annotationAutoNote = document.getElementById("annotation-auto-note");
 const searchable = project => `${project.name} ${project.id} ${project.modality} ${project.custom_modality || ""} ${project.task} ${project.labels.join(" ")}`.toLowerCase();
 
+// A handwriting project: pictures, but the label is the corrected text (the "transcript"), not a box.
+// Everything that is box-shaped (drawing, auto-suggest, corrections) must not appear for it.
+const isOcrProject = project => Boolean(project) && project.modality === "image" && project.recipe === "handwriting-ocr";
+
 function projectState(project) {
   if (project.modality !== "image") return { text: "No labelling tools yet", tone: "plugin" };
+  if (isOcrProject(project)) {
+    if (!project.labels.length) return { text: "Next: add the transcript label", tone: "review" };
+    if (!project.image_count) return { text: "Next: add pictures", tone: "ready" };
+    return { text: "Ready: type what the handwriting says", tone: "live" };
+  }
   if (!project.labels.length) return { text: "Next: add labels", tone: "review" };
   if (!project.image_count) return { text: "Next: add pictures", tone: "ready" };
   if (project.pending_boxes) return { text: `${project.pending_boxes.toLocaleString()} to review`, tone: "review" };
@@ -371,15 +388,24 @@ assetFilterFeedback.addEventListener("click", () => {
 
 async function loadAssets(projectId) {
   const project = projects.find(candidate => candidate.id === projectId);
+  const ocr = isOcrProject(project);
   imageAssetsPanel.hidden = !project || project.modality !== "image";
-  datasetPanel.hidden = imageAssetsPanel.hidden;
-  trPanel.hidden = imageAssetsPanel.hidden;
+  audioAssetsPanel.hidden = !project || project.modality !== "audio";
+  datasetPanel.hidden = imageAssetsPanel.hidden && audioAssetsPanel.hidden;
+  trPanel.hidden = datasetPanel.hidden;
   if (appsPanel) appsPanel.hidden = imageAssetsPanel.hidden;
+  // Box-only machinery stays hidden for a handwriting project: auto-suggest draws boxes and
+  // corrections arrive as boxes, and a transcript project has no use for either.
+  if (ocr) { autolabelPanel.hidden = true; if (correctionsPanel) correctionsPanel.hidden = true; }
   assetList.replaceChildren();
+  clipList.replaceChildren();
   assetFilter.hidden = true;
   autolabelFeedbackNote.hidden = true;
   if (assetFilterProject !== projectId) { assetFilterProject = projectId; assetFeedbackOnly = false; autolabelOutcome.textContent = ""; }
-  if (imageAssetsPanel.hidden) return;
+  if (imageAssetsPanel.hidden) {
+    if (!audioAssetsPanel.hidden) loadClips(projectId);
+    return;
+  }
   resetCorrections(projectId); // forget the last project's count now, before any request is waited for
   assetStatus.textContent = "Loading pictures…";
   try {
@@ -406,9 +432,11 @@ async function loadAssets(projectId) {
       counts.className = "asset-counts";
       const accepted = document.createElement("span");
       accepted.className = "count-chip";
-      accepted.textContent = `${asset.accepted_boxes} ${asset.accepted_boxes === 1 ? "box" : "boxes"} saved`;
+      accepted.textContent = ocr
+        ? `${asset.accepted_boxes === 1 ? "transcript saved" : `${asset.accepted_boxes} transcripts saved`}`
+        : `${asset.accepted_boxes} ${asset.accepted_boxes === 1 ? "box" : "boxes"} saved`;
       counts.append(accepted);
-      if (asset.pending_boxes) {
+      if (!ocr && asset.pending_boxes) {
         const review = document.createElement("span");
         review.className = "count-chip review";
         review.textContent = `${asset.pending_boxes} to review`;
@@ -435,11 +463,13 @@ async function loadAssets(projectId) {
       const annotate = document.createElement("button");
       annotate.type = "button";
       annotate.className = "asset-annotate";
-      // Someone who cannot change boxes can still open the picture to look at them.
-      const annotateText = !Athena.can("label") ? "See boxes" : asset.pending_boxes ? "Review suggestions" : "Mark items";
+      // Someone who cannot change labels can still open the picture to look at them.
+      const annotateText = ocr
+        ? (asset.accepted_boxes ? "Change the text" : "Type the text")
+        : (!Athena.can("label") ? "See boxes" : asset.pending_boxes ? "Review suggestions" : "Mark items");
       annotate.textContent = annotateText;
-      annotate.setAttribute("aria-label", `${annotateText} in ${asset.filename}`);
-      annotate.addEventListener("click", () => openAnnotation(projectId, asset));
+      annotate.setAttribute("aria-label", `${annotateText} for ${asset.filename}`);
+      annotate.addEventListener("click", () => (ocr ? openTranscript(projectId, asset) : openAnnotation(projectId, asset)));
       const actions = document.createElement("div");
       actions.className = "asset-actions";
       actions.append(annotate, remove);
@@ -456,6 +486,142 @@ async function loadAssets(projectId) {
   } catch (error) {
     if (selectedId === projectId) assetStatus.textContent = `Could not load the pictures. ${error.message}`;
   }
+}
+
+// --- Sound clips: upload, list, one label per clip --------------------------------------------------------
+// The minimal audio panel: the generic asset API already works for any data kind, so this lists a
+// project's clips with their stored facts (duration, sample rate, channels) and offers a label
+// picker per clip. No timeline editor, no waveform; those come with later audio work.
+const clipMeta = clip => {
+  const meta = clip.metadata || {};
+  const duration = Number.isFinite(meta.duration_seconds) ? `${meta.duration_seconds.toFixed(2)} s` : "unknown length";
+  const rate = Number.isInteger(meta.sample_rate) ? `${meta.sample_rate.toLocaleString()} Hz` : "";
+  const channels = meta.channels === 1 ? "mono" : meta.channels === 2 ? "stereo" : "";
+  return [duration, rate, channels].filter(Boolean).join(" · ") || "WAV clip";
+};
+
+async function loadClips(projectId) {
+  clipStatus.textContent = "Loading sound clips…";
+  try {
+    const body = await api(`/api/projects/${encodeURIComponent(projectId)}/assets`);
+    if (selectedId !== projectId) return;
+    currentClips = body.assets;
+    renderClips(projectId);
+    refreshDatasets(projectId);
+  } catch (error) {
+    if (selectedId === projectId) clipStatus.textContent = `Could not load the sound clips. ${error.message}`;
+  }
+}
+
+function renderClips(projectId) {
+  const project = projects.find(candidate => candidate.id === projectId);
+  const labels = Array.isArray(project && project.labels) ? project.labels : [];
+  clipList.replaceChildren();
+  currentClips.forEach(clip => {
+    const accepted = clip.accepted_boxes > 0;
+    const row = document.createElement("li");
+    row.className = "clip-row";
+    row.dataset.clipId = clip.id;
+    const details = document.createElement("div");
+    const name = document.createElement("div");
+    name.className = "asset-name";
+    name.textContent = clip.filename;
+    const metadata = document.createElement("div");
+    metadata.className = "asset-meta";
+    metadata.textContent = `${clipMeta(clip)} · ${formatBytes(clip.size_bytes)}`;
+    details.append(name, metadata);
+    const actions = document.createElement("div");
+    actions.className = "clip-label-form";
+    const picker = document.createElement("select");
+    picker.setAttribute("aria-label", `Label for ${clip.filename}`);
+    const placeholder = document.createElement("option");
+    placeholder.value = "";
+    placeholder.textContent = accepted ? "Label saved (choose to change)" : "Choose a label…";
+    picker.append(placeholder);
+    labels.forEach(label => {
+      const option = document.createElement("option");
+      option.value = label;
+      option.textContent = label;
+      picker.append(option);
+    });
+    picker.disabled = !Athena.can("label") || !labels.length;
+    picker.addEventListener("change", () => {
+      if (picker.value) void saveClipLabel(projectId, clip, picker.value);
+      picker.value = "";
+    });
+    const remove = document.createElement("button");
+    remove.type = "button";
+    remove.className = "asset-remove";
+    remove.textContent = "Remove clip";
+    remove.setAttribute("aria-label", `Remove clip ${clip.filename}`);
+    remove.dataset.needs = "label";
+    remove.addEventListener("click", () => removeClip(projectId, clip));
+    actions.append(picker, remove);
+    row.append(details, actions);
+    clipList.append(row);
+  });
+  clipStatus.textContent = currentClips.length
+    ? `${plural(currentClips.length, "sound clip", "sound clips")} in this project.`
+    : "No sound clips yet. Choose files above to add your first ones.";
+}
+
+async function saveClipLabel(projectId, clip, label) {
+  try {
+    const body = await api(`/api/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(clip.id)}/annotations`, {
+      method: "POST",
+      body: JSON.stringify({ label })
+    });
+    const created = body.annotation || {};
+    const label2 = created.data && created.data.label;
+    showNotice(`The clip “${clip.filename}” was labelled “${label2 || label}”.`);
+    await loadClips(projectId);
+  } catch (error) {
+    showNotice(`The label was not saved. ${error.message}`, { problem: true });
+  }
+}
+
+async function removeClip(projectId, clip) {
+  if (!(await Athena.askConfirm({
+    title: "Remove this sound clip?",
+    message: `This removes “${clip.filename}” and its label from the server. This cannot be undone.`,
+    keepLabel: "Keep the clip",
+    confirmLabel: "Remove clip"
+  }))) return;
+  try {
+    await api(`/api/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(clip.id)}`, { method: "DELETE" });
+    currentClips = currentClips.filter(item => item.id !== clip.id);
+    renderClips(projectId);
+  } catch (error) {
+    showNotice(`The clip was not removed. ${error.message}`, { problem: true });
+  }
+}
+
+if (audioUploadForm) {
+  audioUploadForm.addEventListener("submit", async event => {
+    event.preventDefault();
+    audioUploadError.textContent = "";
+    const files = [...(audioUploadInput.files || [])];
+    if (!files.length) {
+      audioUploadError.textContent = "Choose one or more WAV files first.";
+      return;
+    }
+    const button = audioUploadForm.querySelector('[type="submit"]');
+    button.disabled = true;
+    try {
+      const form = new FormData();
+      files.forEach(file => form.append("images", file));
+      const body = await api(`/api/projects/${encodeURIComponent(selectedId)}/assets`, { method: "POST", body: form });
+      const added = (body.assets || []).length;
+      showNotice(added === 1 ? "1 sound clip was added." : `${added.toLocaleString()} sound clips were added.`);
+      audioUploadInput.value = "";
+      await loadClips(selectedId);
+      void refreshProjectCounts();
+    } catch (error) {
+      audioUploadError.textContent = error.message;
+    } finally {
+      button.disabled = false;
+    }
+  });
 }
 
 // --- Corrections from check screens ----------------------------------------------------------------
@@ -733,6 +899,145 @@ correctionsImport.addEventListener("click", async () => {
 function annotationEndpoint() {
   if (!activeAnnotationAsset) return "";
   return `/api/projects/${encodeURIComponent(activeAnnotationAsset.projectId)}/assets/${encodeURIComponent(activeAnnotationAsset.asset.id)}/annotations`;
+}
+
+// --- Handwriting transcripts --------------------------------------------------------------------
+// A handwriting project labels each picture with the text a person types, not a box. The dialog is
+// built once from JavaScript (no inline handlers anywhere, so the Content-Security-Policy stays
+// strict) and reuses the same generic annotation endpoints as every non-box project.
+let transcriptDialog = null;
+let transcriptState = { projectId: null, asset: null, annotationId: null, busy: false };
+
+function ensureTranscriptDialog() {
+  if (transcriptDialog) return transcriptDialog;
+  const dialog = document.createElement("dialog");
+  dialog.className = "annotation-dialog transcript-dialog";
+  dialog.id = "transcript-dialog";
+  const head = document.createElement("div");
+  head.className = "dialog-head";
+  const headInner = document.createElement("div");
+  const headTitle = document.createElement("h2");
+  headTitle.textContent = "Type what this picture says";
+  const headFile = document.createElement("p");
+  headFile.id = "transcript-filename";
+  headInner.append(headTitle, headFile);
+  head.append(headInner);
+  const close = document.createElement("button");
+  close.className = "dialog-close";
+  close.type = "button";
+  close.setAttribute("aria-label", "Close this picture and go back to the project");
+  close.textContent = "×";
+  close.addEventListener("click", () => dialog.close());
+  head.append(close);
+  const content = document.createElement("div");
+  content.className = "annotation-content";
+  const help = document.createElement("p");
+  help.className = "asset-help";
+  help.textContent = "Type the handwriting exactly as it should read, then press Save. One clear line of handwriting per picture works best.";
+  const image = document.createElement("img");
+  image.id = "transcript-image";
+  image.alt = "The picture you are reading";
+  const label = document.createElement("label");
+  label.htmlFor = "transcript-text";
+  label.textContent = "What does the handwriting say?";
+  const textarea = document.createElement("textarea");
+  textarea.id = "transcript-text";
+  textarea.rows = 3;
+  textarea.maxLength = 1000;
+  const actions = document.createElement("div");
+  actions.className = "form-actions";
+  const cancel = document.createElement("button");
+  cancel.type = "button";
+  cancel.className = "secondary";
+  cancel.textContent = "Cancel";
+  cancel.addEventListener("click", () => dialog.close());
+  const save = document.createElement("button");
+  save.type = "button";
+  save.className = "primary";
+  save.id = "transcript-save";
+  save.textContent = "Save";
+  save.addEventListener("click", () => void saveTranscript());
+  actions.append(cancel, save);
+  const status = document.createElement("p");
+  status.id = "transcript-status";
+  status.className = "annotation-status";
+  status.setAttribute("role", "status");
+  status.setAttribute("aria-live", "polite");
+  const form = document.createElement("form");
+  form.addEventListener("submit", event => { event.preventDefault(); void saveTranscript(); });
+  form.append(label, textarea, actions);
+  content.append(help, image, form, status);
+  dialog.append(head, content);
+  document.body.append(dialog);
+  transcriptDialog = dialog;
+  return dialog;
+}
+
+async function openTranscript(projectId, asset) {
+  const project = projects.find(candidate => candidate.id === projectId);
+  if (!project) return;
+  const dialog = ensureTranscriptDialog();
+  transcriptState = { projectId, asset, annotationId: null, busy: false };
+  dialog.querySelector("#transcript-filename").textContent = `${asset.filename} · ${asset.width} × ${asset.height} pixels`;
+  const text = dialog.querySelector("#transcript-text");
+  const image = dialog.querySelector("#transcript-image");
+  const status = dialog.querySelector("#transcript-status");
+  text.value = "";
+  image.src = asset.content_url;
+  status.textContent = "Loading the saved text…";
+  dialog.showModal();
+  try {
+    const body = await api(`/api/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(asset.id)}/annotations`);
+    const saved = (body.annotations || []).find(annotation => annotation.kind === "transcripts" && annotation.status === "accepted");
+    if (transcriptState.asset !== asset) return;
+    transcriptState.annotationId = saved ? saved.id : null;
+    text.value = saved ? (saved.data?.text || "") : "";
+    status.textContent = saved ? "A transcript is saved for this picture. Change it here if the handwriting reads differently." : "No text saved yet. Type what the handwriting says.";
+  } catch (error) {
+    if (transcriptState.asset === asset) status.textContent = `Could not load the saved text. ${error.message}`;
+  }
+  text.focus();
+}
+
+async function saveTranscript() {
+  const { projectId, asset, annotationId, busy } = transcriptState;
+  if (!projectId || !asset || busy) return;
+  const dialog = ensureTranscriptDialog();
+  const text = dialog.querySelector("#transcript-text").value.trim();
+  const status = dialog.querySelector("#transcript-status");
+  const save = dialog.querySelector("#transcript-save");
+  if (!text) {
+    status.textContent = "Type what the handwriting says before saving.";
+    return;
+  }
+  transcriptState.busy = true;
+  save.disabled = true;
+  status.textContent = "Saving…";
+  const url = annotationId
+    ? `/api/projects/${encodeURIComponent(projectId)}/asset-annotations/${encodeURIComponent(annotationId)}`
+    : `/api/projects/${encodeURIComponent(projectId)}/assets/${encodeURIComponent(asset.id)}/annotations`;
+  try {
+    await api(url, {
+      method: annotationId ? "PATCH" : "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ label: "transcript", text })
+    });
+    status.textContent = "Saved. Open the next picture and keep going.";
+    await loadAssets(projectId); // refreshes the "transcript saved" chips and the readiness checks
+    transcriptState.busy = false;
+    save.disabled = false;
+    const next = currentAssets.find(candidate => candidate.id !== asset.id && !candidate.accepted_boxes);
+    if (next) {
+      status.textContent = "Saved. Opening the next picture without text…";
+      void openTranscript(projectId, next);
+    } else {
+      dialog.close();
+    }
+  } catch (error) {
+    transcriptState.busy = false;
+    save.disabled = false;
+    status.textContent = `Not saved. ${error.message}`;
+  }
 }
 
 function updateAnnotationHistoryControls() {
@@ -1493,9 +1798,9 @@ const PROJECT_RECIPES = {
     modality: "audio",
     task: "Classify equipment sounds or unusual faults",
     labelsPlaceholder: "e.g. healthy_motor, bearing_fault, belt_slip",
-    note: "Coming soon (Wave 1) · Data needed: WAV recordings + event labels · Quality check: missed sound events and false alarms. Saving now keeps your project name and labels.",
+    note: "Available today · Data needed: WAV recordings + one label per clip · Quality check: accuracy on held-out clips.",
     recipeKey: "audio-classification",
-    available: false
+    available: true
   },
   ocr: {
     modality: "image",
@@ -1545,6 +1850,13 @@ async function loadProjectRecipes() {
       entry.available = Boolean(recipe.available);
       if (!recipe.available && recipe.unavailable_reason && !entry.note.startsWith("Coming soon")) {
         entry.note = recipe.unavailable_reason;
+      }
+      // The handwriting entry's wording dates from when it was "coming soon": refresh it when
+      // the server says the recipe has landed, so the picker never sells the wrong expectation.
+      if (recipe.available && entry.recipeKey === "handwriting-ocr") {
+        entry.note = "Available today · Data needed: pictures of handwriting + the corrected text typed for each · Quality check: characters and words read wrong on pictures kept back from teaching.";
+        entry.task = "Read handwritten text in pictures";
+        entry.labelsPlaceholder = "Keep the single label: transcript";
       }
     }
   } catch (error) {
@@ -1745,6 +2057,7 @@ async function deleteCurrentProject() {
     Athena.useProject(null);
     history.replaceState(null, "", location.pathname);
     imageAssetsPanel.hidden = true;
+    audioAssetsPanel.hidden = true;
     autolabelPanel.hidden = true;
     assetList.replaceChildren();
     render();
@@ -2614,15 +2927,21 @@ function setDatasetError(message = "") {
 
 function updateSaveControls() {
   const parsed = readSplitForm();
+  const project = selectedProject();
+  const ocr = isOcrProject(project);
   let reason = "";
   if (!Athena.can("label")) reason = Athena.reasonFor("label");
   else if (dsState.saving) reason = "Saving your snapshot…";
   else if (!dsState.readiness) reason = "Checking your work…";
-  else if (!dsState.readiness.counts.accepted_boxes) reason = "You need at least one accepted box before you can save a snapshot.";
+  else if (!dsState.readiness.counts.accepted_boxes) reason = ocr
+    ? "You need at least one saved transcript before you can save a snapshot."
+    : "You need at least one accepted box before you can save a snapshot.";
   else if (!dsState.ready) reason = "Fix the problems listed above first, then press “Check again”.";
   else if (!parsed.ok) reason = parsed.message;
   datasetSave.disabled = Boolean(reason);
-  datasetSaveHelp.textContent = reason || "Saving does not change your pictures or boxes. You can save as many snapshots as you like.";
+  datasetSaveHelp.textContent = reason || (ocr
+    ? "Saving does not change your pictures or transcripts. You can save as many snapshots as you like."
+    : "Saving does not change your pictures or boxes. You can save as many snapshots as you like.");
 }
 
 function showAsset(assetId, { openIt }) {
@@ -2709,14 +3028,20 @@ function renderReadiness(data) {
   const waiting = counts.suggested_boxes || 0;
   const noBoxPictures = left.images_without_accepted_boxes || 0;
   const hasProblems = (data.problem_count || 0) > 0;
+  const project = selectedProject();
+  const ocr = isOcrProject(project);
   datasetFacts.replaceChildren();
 
   if (!counts.accepted_boxes) {
-    datasetHeadline.textContent = "Not ready yet: you have no accepted boxes.";
+    datasetHeadline.textContent = ocr
+      ? "Not ready yet: no picture has its text typed."
+      : "Not ready yet: you have no accepted boxes.";
   } else if (hasProblems) {
     datasetHeadline.textContent = `Not ready yet: ${plural(data.problem_count, "thing needs", "things need")} fixing before you can save a snapshot.`;
   } else {
-    datasetHeadline.textContent = `Ready. A snapshot made now would hold ${plural(counts.images, "picture", "pictures")} and ${plural(counts.accepted_boxes, "box", "boxes")}.`;
+    datasetHeadline.textContent = ocr
+      ? `Ready. A snapshot made now would hold ${plural(counts.images, "picture", "pictures")} and ${plural(counts.accepted_boxes, "typed transcript", "typed transcripts")}.`
+      : `Ready. A snapshot made now would hold ${plural(counts.images, "picture", "pictures")} and ${plural(counts.accepted_boxes, "box", "boxes")}.`;
   }
   datasetHeadline.dataset.state = counts.accepted_boxes && !hasProblems ? "ready" : "blocked";
 
@@ -2732,24 +3057,30 @@ function renderReadiness(data) {
     }
     datasetFacts.append(item);
   };
-  const project = selectedProject();
   const firstWaiting = currentAssets.find(asset => asset.pending_boxes) || null;
   const firstAny = currentAssets[0] || null;
 
   if (!counts.images_total) {
     addFact("You have not added any pictures yet.", { label: "Add pictures", run: () => scrollAndFocus(imageUploadInput) });
   } else if (!counts.accepted_boxes) {
-    addFact("None of your boxes are accepted yet. Draw a box on a picture, or accept the computer’s suggestions.", firstAny ? { label: "Open a picture", run: () => openAnnotation(project.id, firstWaiting || firstAny) } : null);
+    addFact(ocr
+      ? "None of your pictures have their text typed yet. Open a picture and type what the handwriting says."
+      : "None of your boxes are accepted yet. Draw a box on a picture, or accept the computer’s suggestions.",
+      firstAny ? { label: ocr ? "Open a picture" : "Open a picture", run: () => (ocr ? openTranscript(project.id, firstAny) : openAnnotation(project.id, firstWaiting || firstAny)) } : null);
   } else {
     // When everything is fine the headline already says this; only repeat it while something blocks saving.
-    if (hasProblems) addFact(`${plural(counts.images, "picture", "pictures")} with ${plural(counts.accepted_boxes, "accepted box", "accepted boxes")} can go into the snapshot once the problems below are fixed.`);
+    if (hasProblems) addFact(ocr
+      ? `${plural(counts.images, "picture", "pictures")} with ${plural(counts.accepted_boxes, "typed transcript", "typed transcripts")} can go into the snapshot once the problems below are fixed.`
+      : `${plural(counts.images, "picture", "pictures")} with ${plural(counts.accepted_boxes, "accepted box", "accepted boxes")} can go into the snapshot once the problems below are fixed.`);
   }
-  if (waiting) {
+  if (waiting && !ocr) {
     addFact(`${plural(waiting, "box still says", "boxes still say")} “Needs your review”, so ${waiting === 1 ? "it is" : "they are"} left out. Accept ${waiting === 1 ? "it" : "them"} if you want ${waiting === 1 ? "it" : "them"} included.`,
       firstWaiting ? { label: "Review these boxes", run: () => openAnnotation(project.id, firstWaiting) } : null);
   }
   if (noBoxPictures && counts.accepted_boxes) {
-    addFact(`${plural(noBoxPictures, "picture has", "pictures have")} no accepted boxes, so ${noBoxPictures === 1 ? "it is" : "they are"} left out.`);
+    addFact(ocr
+      ? `${plural(noBoxPictures, "picture has", "pictures have")} no typed text, so ${noBoxPictures === 1 ? "it is" : "they are"} left out.`
+      : `${plural(noBoxPictures, "picture has", "pictures have")} no accepted boxes, so ${noBoxPictures === 1 ? "it is" : "they are"} left out.`);
   }
   renderProblems(data);
   renderGroupNotes(data);
@@ -3295,6 +3626,11 @@ const TR_TOOLS = {
     label: "D-FINE teaching tool (optional second tool)",
     licence: "This is an optional second teaching tool. The main button never uses it: it is only used when you choose it here and press “Teach with exactly these settings”. It always starts from a ready-made model, so a download and the terms of that model are involved. Athena cannot tell you whether you may use it, or a model taught with it, for your work: ask a lawyer before commercial use. You are still responsible for having the right to use your own pictures.",
     speed: "It uses this computer’s processor only. It learns new kinds of item more slowly than the built-in tool, so give it a few more rounds of learning, and read the results carefully."
+  },
+  "ocr-trocr": {
+    label: "Handwriting reading tool (TrOCR)",
+    licence: "This is the handwriting reading tool. It always starts from Microsoft’s published handwriting reader (the model card says MIT licence), so a download and the terms of that model are involved. Athena cannot tell you whether you may use it, or a model taught with it, for your work: ask a lawyer before commercial use. You are still responsible for having the right to use your own pictures.",
+    speed: "It uses this computer’s processor only, so teaching a handful of pictures takes minutes. The measure is how many characters of every 100 come out wrong, which is not comparable with the box tools’ scores."
   }
 };
 // The two sizes of the ready-made model that the second tool offers, in plain words.
@@ -3420,6 +3756,9 @@ function trSelectedTool() {
 function trMainTool() {
   const data = trState.backends;
   if (!data) return null;
+  // A handwriting project has exactly one tool that can read its transcripts; the box tools
+  // cannot, so they are never picked for it (the server refuses them too).
+  if (isOcrProject(selectedProject())) return data.backends.find(tool => tool.name === "ocr-trocr") || null;
   // Never “the first tool that can run”: that would be the optional second tool when the default cannot run here.
   return data.backends.find(tool => tool.name === data.default) || data.backends.find(tool => tool.name === TR_DEFAULT_TOOL) || null;
 }
@@ -3791,6 +4130,38 @@ function trRenderStartFrom() {
   const options = trStartOptions();
   trStartFrom.hidden = options.length === 0;
   if (!options.length) { trPreAck.checked = false; trPreLicence.hidden = true; return; }
+  // A tool whose ready-made start has no radio yet (the handwriting reader) gets one, built
+  // here so the page markup stays free of tool-specific ids; it is the same shape as the rest.
+  options.forEach(option => {
+    if (trStartFromOptions.querySelector(`input[value="${CSS.escape(option.value)}"]`)) return;
+    const box = document.createElement("div");
+    box.className = "start-choice";
+    box.dataset.value = option.value;
+    const id = `tr-pre-${option.value.replace(/[^a-z0-9_]/gi, "_")}`;
+    const label = document.createElement("label");
+    label.className = "start-choice-label";
+    label.htmlFor = id;
+    const radio = document.createElement("input");
+    radio.type = "radio";
+    radio.id = id;
+    radio.name = "tr-start-from";
+    radio.value = option.value;
+    radio.autocomplete = "off";
+    const title = document.createElement("span");
+    title.dataset.field = "title";
+    const summary = document.createElement("p");
+    summary.className = "field-help";
+    summary.id = `${id}-text`;
+    summary.dataset.field = "summary";
+    const state = document.createElement("p");
+    state.className = "field-help";
+    state.id = `${id}-state`;
+    state.dataset.field = "state";
+    radio.setAttribute("aria-describedby", `${id}-text ${id}-state`);
+    label.append(radio, title);
+    box.append(label, summary, state);
+    trStartFromOptions.append(box);
+  });
   const radios = [...trStartFromOptions.querySelectorAll("input[type=radio]")];
   let blockedReason = "";
   let blockedSteps = "";
@@ -4107,7 +4478,8 @@ function resetTraining(projectId) {
   trFacts.replaceChildren();
   trSnapshot.replaceChildren();
   trTool.replaceChildren();
-  trStartFromOptions.querySelector("#tr-pre-none").checked = true;
+  const fallbackRadio = trStartFromOptions.querySelector("#tr-pre-none") || trStartFromOptions.querySelector("input[type=radio]");
+  if (fallbackRadio) fallbackRadio.checked = true;
   trStartFrom.hidden = true;
   trPreAck.checked = false;
   trPreLicence.hidden = true;
@@ -4276,7 +4648,9 @@ async function trStartExactSettings(errorElement = trExactError) {
   const start = trSelectedStart();
   const payload = { dataset_id: snapshot.id, backend: tool.name, config: { ...settings.config } };
   if (start) {
-    payload.config.pretrained = start.value;
+    // The handwriting tool names its ready-made start "trocr" (its config key is base_model, not pretrained).
+    if (tool.name === "ocr-trocr") payload.config.base_model = start.value === "trocr" ? "auto" : start.value;
+    else payload.config.pretrained = start.value;
     if (start.needs_acknowledgement) {
       if (!trPreAck.checked) {
         trAdmin.open = true;
@@ -5109,12 +5483,49 @@ function trPlainBlock(model, plain) {
   return nodes;
 }
 
+// What a handwriting model's evaluation says, in plain words: the character error rate and the
+// word score, per held-out picture and overall. No boxes are involved anywhere in it.
+function trFillOcrResults(container, model, numbers, name) {
+  if (!numbers.available) {
+    const headline = dsNode("p", "result-headline", `Results are not available for ${name}.`);
+    headline.dataset.state = "none";
+    container.append(headline,
+      trBlock("Why", trText(trPlainMessage(numbers.reason || "No held-out pictures were available."))),
+      trBlock("How to get results", trList([
+        "Add more pictures with their text typed, so some can be held back to check the reader on.",
+        "Press “Teach the computer” again.",
+        "Read the results of the new model here."
+      ], true)));
+    return;
+  }
+  const pictures = numbers.counts?.test_pictures || 0;
+  const wrong = Math.round((numbers.cer || 0) * 100);
+  container.append(
+    dsNode("p", "result-headline", `${name} was checked on ${plural(pictures, "held-out picture", "held-out pictures")} of handwriting. These pictures were kept back: the computer never saw them while it was learning.`),
+    trNotFinalNode(),
+    trBlock("How well did it read?", trList([
+      numbers.plain_language || `Out of every 100 characters, about ${wrong} came out wrong.`,
+      `The character error rate is ${Math.round((numbers.cer || 0) * 1000) / 10}%. About ${Math.round((numbers.word_accuracy || 0) * 100)} in 100 words were read correctly.`
+    ])));
+  const rows = (numbers.per_picture || []).map(picture => `${picture.filename}: ${Math.round(picture.cer * 1000) / 10}% of characters wrong${picture.hypothesis ? ` — it read “${picture.hypothesis.slice(0, 80)}”` : ""}`);
+  if (rows.length) container.append(trBlock("Picture by picture", trList(rows)));
+  const limits = trBlock("Limits: how far to trust this", trList([
+    `This report rests on only ${plural(pictures, "picture", "pictures")}.${pictures < 10 ? " That is very few: one hard picture can change every number a lot." : ""}`,
+    "These numbers describe those test pictures only. Other pens, hands, lighting or paper can give worse results.",
+    "The numbers count wrong characters but cannot say how serious each mistake would be where you work. That judgement is yours."
+  ]));
+  container.append(limits);
+}
+
 function trFillResults(container, model, payload, plain) {
   container.replaceChildren();
   const report = payload.report;
   const numbers = report.numbers || {};
   const name = trModelName(model);
   const run = trRunFor(model);
+
+  // A handwriting model's evaluation is the CER shape, not the box shape: read it in its own words.
+  if (numbers.schema === "athena.ocr-evaluation/1") { trFillOcrResults(container, model, numbers, name); return; }
 
   if (!report.available) {
     const reason = /test split has no images/i.test(numbers.reason || "")
@@ -5744,6 +6155,61 @@ function checklistSteps(project) {
   const firstWaiting = currentAssets.find(asset => asset.pending_boxes) || null;
   const firstUnmarked = currentAssets.find(asset => !asset.accepted_boxes && !asset.pending_boxes) || firstAsset;
   const ready = pictures > 0 && hasLabels;
+  // A handwriting project types the text instead of drawing: its steps 3 and 4 are the same
+  // one action (type and save the transcript), and nothing arrives as a suggested box.
+  if (isOcrProject(project)) {
+    const typed = accepted;
+    return [
+      {
+        title: "Add pictures",
+        state: pictures ? "done" : "todo",
+        detail: pictures ? `${plural(pictures, "picture", "pictures")} added.` : "Add the pictures of handwriting you want to read (JPEG, PNG or WebP).",
+        action: { label: pictures ? "Add more pictures" : "Choose pictures", run: () => scrollAndFocus(imageUploadInput) }
+      },
+      {
+        title: "Keep the single label",
+        state: hasLabels ? "done" : "todo",
+        detail: hasLabels ? `Labels: ${project.labels.join(", ")}.` : "This project needs exactly one label, named “transcript”.",
+        action: { label: hasLabels ? "Edit labels" : "Add the label", run: () => scrollAndFocus(labelNew) }
+      },
+      {
+        title: "Type what each picture says",
+        state: typed ? "done" : ready ? "todo" : "blocked",
+        detail: typed
+          ? `${plural(typed, "picture has", "pictures have")} their text typed and saved.`
+          : ready ? "Open each picture and type the handwriting exactly as it should read."
+            : "Finish steps 1 and 2 first.",
+        action: ready && firstAsset ? { label: "Open a picture", run: () => openTranscript(project.id, firstUnmarked || firstAsset) } : null
+      },
+      {
+        title: "Check the saved texts",
+        state: typed ? "done" : "blocked",
+        detail: typed ? "Every saved text was typed or checked by a person." : "Once a picture has its text, it is ready for the snapshot.",
+        action: null
+      },
+      {
+        title: "Make a training set",
+        state: snapshots ? "done" : typed ? "todo" : "blocked",
+        detail: snapshots
+          ? `${plural(snapshots, "snapshot", "snapshots")} saved. A snapshot never changes, so you can download it whenever you need it.`
+          : typed
+            ? `You have ${plural(typed, "typed transcript", "typed transcripts")}. Save a snapshot to package them for the reading tool.`
+            : "Finish steps 3 and 4 first. You need at least one typed transcript.",
+        action: snapshots || typed ? { label: snapshots ? "See snapshots" : "Make a training set", run: () => scrollAndFocus(datasetHeading) } : null
+      },
+      {
+        title: "Teach the computer",
+        state: approvedModels ? "done" : snapshots ? "todo" : "blocked",
+        detail: approvedModels
+          ? "A reading model has been approved by a person. You can teach it again at any time; a new model is never used until someone approves it."
+          : snapshots
+            ? "Let the computer learn to read from a snapshot, read how many characters of every 100 it gets wrong on pictures it has never seen, then decide whether to approve it. This step ticks only when a person approves a model."
+            : "Finish step 5 first. You need a saved snapshot.",
+        action: snapshots ? { label: approvedModels ? "See your models" : "Teach the computer", run: () => scrollAndFocus(trHeading) } : null
+      },
+      { title: "Set up the check screen", state: "soon", detail: "Reading models cannot feed the box-shaped check screens yet. This step is planned for a later version.", action: null }
+    ];
+  }
   return [
     {
       title: "Add pictures",
@@ -5955,7 +6421,9 @@ function renderChecklist(project) {
   checklistProgress.textContent = `${done} of ${countable} steps done`;
   const firstSixDone = steps.slice(0, 6).every(step => step.state === "done");
   const lastDone = steps[6] && steps[6].state === "done";
-  const keepGoing = "You can keep adding pictures and boxes, save a new snapshot, and teach a new model at any time. A new model is never used until a person approves it.";
+  const keepGoing = isOcrProject(project)
+    ? "You can keep adding pictures and typed texts, save a new snapshot, and teach a new reader at any time. A new model is never used until a person approves it."
+    : "You can keep adding pictures and boxes, save a new snapshot, and teach a new model at any time. A new model is never used until a person approves it.";
   checklistIntro.textContent = firstSixDone
     ? (lastDone ? `Every step is done. ${keepGoing}` : `Steps 1 to 6 are done. ${keepGoing}${checklistEl.dataset.checkUrlTemplate ? " Step 7 is where people check what the approved model finds." : " The last step is coming soon."}`)
     : "Follow these steps in order. The list updates itself as you work.";
@@ -5997,6 +6465,7 @@ function renderWorkspace() {
   labelsPanel.hidden = !project;
   if (!project) {
     imageAssetsPanel.hidden = true;
+    audioAssetsPanel.hidden = true;
     datasetPanel.hidden = true;
     trPanel.hidden = true;
     if (appsPanel) appsPanel.hidden = true;

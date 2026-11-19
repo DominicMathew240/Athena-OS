@@ -869,8 +869,21 @@ class MainButtonToolTests(TrainingBase):
 class FallbackToolAndReadOnlyDownloadsTests(TrainingBase):
     """The main button never falls back to the optional second tool; a trainer reads the switch but cannot change it."""
 
-    def main_tool(self, data: dict | None) -> str | None:
-        source = js_function("TR_DEFAULT_TOOL", "const") + "const trState = { backends: %s };\n" % json.dumps(data) + js_function("trMainTool")
+    def main_tool(self, data: dict | None, project: dict | None = None) -> str | None:
+        # trMainTool asks the page which project is open (selectedProject/isOcrProject live
+        # outside the Teach section); the test stands in for the page with the same rule.
+        js = (STATIC / "console.js").read_text()
+        is_ocr = js[js.index("const isOcrProject =") : js.index("\n", js.index("const isOcrProject =")) + 1]
+        source = (
+            js_function("TR_DEFAULT_TOOL", "const")
+            + "const projects = %s; const selectedId = %s;\n" % (
+                json.dumps([{"id": "p1", **project}] if project else []), json.dumps("p1" if project else None),
+            )
+            + "const selectedProject = () => projects.find(project => project.id === selectedId) || null;\n"
+            + is_ocr
+            + "const trState = { backends: %s };\n" % json.dumps(data)
+            + js_function("trMainTool")
+        )
         return run_js(source, "(() => { const t = trMainTool(); return t && t.name; })()")
 
     def tools(self, **usable) -> list:
@@ -888,6 +901,22 @@ class FallbackToolAndReadOnlyDownloadsTests(TrainingBase):
         self.assertEqual(self.main_tool({"backends": both}), "torchvision-fasterrcnn")
         self.assertIsNone(self.main_tool({"default": "no-such-tool", "backends": self.tools(**{"dfine-coco": True})}))  # never the second tool
         self.assertIsNone(self.main_tool(None))
+
+    def test_a_handwriting_project_only_gets_the_ocr_tool(self) -> None:
+        both = self.tools(**{"ocr-trocr": True, "torchvision-fasterrcnn": True, "dfine-coco": True})
+        ocr_project = {"id": "p1", "modality": "image", "recipe": "handwriting-ocr"}
+        # The recipe's own tool is picked even though the box default exists and runs here...
+        self.assertEqual(
+            self.main_tool({"default": "torchvision-fasterrcnn", "backends": both}, project=ocr_project), "ocr-trocr"
+        )
+        # ...and when the recipe's tool is not installed, nothing is offered rather than a box tool.
+        self.assertIsNone(
+            self.main_tool({"default": "torchvision-fasterrcnn", "backends": self.tools(**{"torchvision-fasterrcnn": True})}, project=ocr_project)
+        )
+        # A vision project (no recipe) is unaffected: the default still wins.
+        self.assertEqual(
+            self.main_tool({"default": "torchvision-fasterrcnn", "backends": both}, project={"id": "p2", "modality": "image"}), "torchvision-fasterrcnn"
+        )
 
     def test_the_tool_picker_does_not_choose_the_second_tool_for_anyone(self) -> None:
         render = js_function("trRenderTools")

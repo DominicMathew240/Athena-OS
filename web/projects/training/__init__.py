@@ -26,6 +26,7 @@ logger = logging.getLogger(__name__)
 ENTRY_POINT_GROUP = "athena.training_backends"
 BUILTIN_BACKENDS = (
     "projects.training.torchvision_frcnn:TorchvisionFasterRCNN",
+    "projects.training.audio_wav:AudioWavBackend",
     "projects.training.tabular_sklearn:TabularSklearnBackend",
 )
 DEFAULT_BACKEND = "torchvision-fasterrcnn"

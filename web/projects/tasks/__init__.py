@@ -38,9 +38,9 @@ VISION_DETECTION = TaskRecipe(
     available=True,
 )
 
-#: Placeholders for the Wave 1 recipes. To make one available, register a recipe with the same
-#: key from the plugin module that ships its modality plugin and training backend, e.g.
-#: ``register_recipe(replace(...))`` here or ``settings.RECIPES += ["my_pkg.recipes:Audio"]``.
+#: Sound classification (Wave 1, OS-AUD-001): WAV clips, one label per clip, taught by the
+#: audio-wav-cnn backend. A project created with it can upload clips, label them, freeze
+#: dataset versions and train today.
 AUDIO_CLASSIFICATION = TaskRecipe(
     key="audio-classification",
     title="Recognize sounds or equipment faults",
@@ -48,19 +48,31 @@ AUDIO_CLASSIFICATION = TaskRecipe(
     summary="Teach Athena to tell equipment sounds or unusual faults apart from short recordings.",
     annotation_kind="clip_labels",
     labels_help="One label per sound or fault, e.g. healthy_motor, bearing_fault, belt_slip.",
-    available=False,
-    unavailable_reason="Sound projects are coming soon. You can save the project name and labels today.",
+    available=True,
 )
+#: Handwriting OCR (Wave 1). The labels_help explains the one-label convention: the project's
+#: single label is named "transcript" (it satisfies the snapshot convention's data["label"]),
+#: and the actual corrected text lives in the annotation's "text" key. See
+#: ``projects/modalities/ocr.py`` for the full contract.
 HANDWRITING_OCR = TaskRecipe(
     key="handwriting-ocr",
     title="Read handwriting",
     modality="image",
-    summary="Teach Athena to read handwritten forms and check the text it recognizes.",
+    summary=(
+        "Teach Athena to read handwritten text in pictures. You type the correct text for each "
+        "picture; Athena learns to read it herself and is checked by character and word errors."
+    ),
     annotation_kind="transcripts",
-    labels_help="One label per kind of entry, e.g. date_field, signature, total_amount.",
-    available=False,
-    unavailable_reason="Handwriting tools are coming soon. Picture projects can store images today.",
+    labels_help=(
+        "Keep exactly one label, named transcript. The picture's corrected text goes with it: "
+        "open a picture and type what the handwriting says."
+    ),
+    available=True,
 )
+
+#: Placeholders for the remaining Wave 1 recipes. To make one available, register a recipe with
+#: the same key from the plugin module that ships its modality plugin and training backend,
+#: e.g. ``register_recipe(replace(...))`` here or ``settings.RECIPES += ["my_pkg.recipes:Table"]``.
 TABULAR_PREDICTION = TaskRecipe(
     key="tabular-prediction",
     title="Predict from a spreadsheet",

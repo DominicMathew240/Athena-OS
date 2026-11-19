@@ -10,6 +10,7 @@ from __future__ import annotations
 from .base import ModalityPlugin, UnsupportedModalityError
 from .registry import (
     available_modalities,
+    get_annotation_plugin,
     get_plugin,
     plugin_or_refusal,
     register_plugin,
@@ -21,6 +22,7 @@ __all__ = [
     "ModalityPlugin",
     "UnsupportedModalityError",
     "available_modalities",
+    "get_annotation_plugin",
     "get_plugin",
     "plugin_or_refusal",
     "register_plugin",
