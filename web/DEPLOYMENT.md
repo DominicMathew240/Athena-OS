@@ -98,6 +98,41 @@ docker compose logs -f train_worker                # "Training worker ready. Bac
   and reports which backends it can actually load.
 - GPUs are not configured. Read NVIDIA's licence terms first (see the licence audit).
 
+### Which recipes run with which worker extras (sound and handwriting, added 2026-11-19)
+
+The teaching recipes now number three: vision detection (unchanged), **audio classification** (`audio-wav-cnn`
+backend) and **handwriting OCR** (`ocr-trocr` backend). All backends live in the *training worker*, never the web
+process, and all of them run on the one requirements file above:
+
+| Recipe | Backend | Worker needs (beyond `requirements.txt`) |
+| --- | --- | --- |
+| Vision detection | `torchvision-fasterrcnn` (default) | `requirements-autolabel.txt` (torch, torchvision, transformers, numpy) |
+| Sound classification | `audio-wav-cnn` | the same file (torch, numpy); `onnxruntime` additionally gives ONNX artifacts and ONNX-based prediction — without it the model is saved and run as a torch state-dict, so it is optional |
+| Handwriting reading | `ocr-trocr` | the same file (torch, transformers; the fine-tuning loop is Athena's own code) |
+
+In other words: a worker built the way this guide describes (the Dockerfile path, or
+`pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements-autolabel.txt`) can teach all
+three recipes. Nothing new is installed for the tabular recipe — it is registered as "coming soon" and its slice is
+not in this release.
+
+**The TrOCR weight download.** The first handwriting run needs the ready-made base model
+(`microsoft/trocr-small-handwritten`, about 258 MB, MIT licence declared on its model card). It is fetched **only**
+when the same administrator switch as every ready-made model is on — the console's **Access → Ready-made model
+downloads**, or `ATHENA_TRAINING_ALLOW_DOWNLOAD=1` in the training helper's environment (see
+[Ready-made starting models](#ready-made-starting-models-in-the-teach-panel); the precedence rules there apply
+unchanged). The download runs in the training worker (never the web process), from `huggingface.co` and `*.hf.co`
+only, each file cut off past its expected size and the safetensors file checksum-verified by the loader; it is cached
+under `<data home>/models/pretrained/trocr/` so it happens once. The Teach start option shows the licence note and
+requires the acknowledgement tick before the run, exactly like the torchvision COCO start and D-FINE. The licence
+summary is in [Licences and model terms](#licences-and-model-terms) and the engineering detail in
+[`docs/LICENSE_AUDIT.md`](../docs/LICENSE_AUDIT.md) §5 (added 2026-11-19); none of it is legal advice.
+
+**What was verified.** Both new recipes were exercised by the test suite in two environments: the ML venv (a real
+12-epoch audio training run on generated two-tone WAVs; a full OCR fine-tune with the base model stubbed, because
+tests refuse the network) and a lean environment without torch, where the ML tests skip cleanly. No real recording
+or scan has been taught, model quality is unmeasured, and the OCR model cannot be used through the box-shaped check
+screens (they say so plainly); it is usable through the backend's `predict_text` at the API level only.
+
 ## Configuration
 
 Settings are production-safe by default; the app refuses to start without a strong secret
@@ -161,6 +196,7 @@ read its §5 for the sources.
 | --- | --- | --- |
 | SAM `facebook/sam-vit-base` | Hugging Face tag and model card declare **Apache-2.0**; the upstream repository's LICENSE is Apache-2.0. | Commercial use is permitted; keep the Apache-2.0 notice. The SA-1B *training dataset* has its own research licence that governs downloading the dataset, not using the weights; its text could not be fetched, so its terms are unverified. |
 | CLIP `openai/clip-vit-base-patch32` | The Hugging Face repo **declares no licence** (no `license:` tag, no LICENSE file; rechecked 2026-10-17). The upstream code repo `openai/CLIP` is MIT, but that licence covers "the Software" in that repo, and no statement explicitly licensing the *weights* was found. The model card says: "**Any** deployed use case of the model - whether commercial or not - is currently out of scope." It also lists "surveillance and facial recognition" use as always out of scope, and says the training data (web-crawled image-caption data) will not be released. | This is an intended-use statement, not a licence term, but a customer or regulator can point to it, and running the auto-labeller on your server is a deployed use. Athena's design (CLIP only proposes labels, a person must accept each one) reduces the exposure; it does not remove it. **Do not describe these weights as MIT-licensed or cleared for commercial use.** |
+| TrOCR `microsoft/trocr-small-handwritten` (handwriting recipe, added 2026-11-19) | The Hugging Face model card declares **MIT** (the audit's engineering read of the card's own licence statement; the repository's licence file was not opened — see [`docs/LICENSE_AUDIT.md`](../docs/LICENSE_AUDIT.md) §5, added 2026-11-19). Downloaded at runtime, admin-gated (the same switch as every ready-made model), from `huggingface.co`/`*.hf.co` only, size-capped and checksum-verified, cached under `<data home>/models/pretrained/trocr/`. | MIT is permissive: commercial use appears fine, keep Microsoft's notice if you redistribute the base or your fine-tuned artifact, and state your changes. The model card's training data (the IAM Handwriting Database) has its own terms for the *dataset*; whether they reach the trained weights was not researched — unverified. Models you teach also derive from your own pictures; check you may use them. Not legal advice. |
 
 ### CLIP: what ships by default, and what you must decide yourself
 

@@ -1,10 +1,11 @@
 # Athena OS
 
-**Current release: 1.5.0** — the version is declared once in [`web/athena_web/settings.py`](web/athena_web/settings.py) (`RELEASE_VERSION`) and shown in the console sidebar footer, the public [`GET /api/version`](web/projects/views.py) endpoint, and the `/healthz` probe. A deployment may set `ATHENA_VERSION` only to *add* a packaging suffix (for example `1.5.0+acme`); it can never mask the released version.
+**Current release: 1.6.0** — the version is declared once in [`web/athena_web/settings.py`](web/athena_web/settings.py) (`RELEASE_VERSION`) and shown in the console sidebar footer, the public [`GET /api/version`](web/projects/views.py) endpoint, and the `/healthz` probe. A deployment may set `ATHENA_VERSION` only to *add* a packaging suffix (for example `1.6.0+acme`); it can never mask the released version.
 
 Athena OS is an open-source (Apache-2.0) toolkit for building reviewed datasets and models for industrial
-data, starting with image object detection. It is early: see [`ROADMAP.md`](ROADMAP.md) for what is done and
-what is not. This README only claims what the source tree and its tests demonstrate. The separate [vision-workflow tracker](docs/plans/2026-11-15-vision-workflows-task-list.md) records locally verified slices and remaining release gates; it is not a production-readiness claim.
+data, starting with image object detection and, since the 2026-11 multimodal foundation, two more
+teaching recipes: sound classification and handwriting reading. It is early: see [`ROADMAP.md`](ROADMAP.md) for
+what is done and what is not. This README only claims what the source tree and its tests demonstrate. The separate [vision-workflow tracker](docs/plans/2026-11-15-vision-workflows-task-list.md) records locally verified slices and remaining release gates; it is not a production-readiness claim.
 
 The public marketing site is a static React app on the [`landing`](https://github.com/DominicMathew240/Athena-OS/tree/landing) branch (no backend). It deploys to GitHub Pages. This `main` branch is the product source: contracts, SDK, CLI, and the Django console in `web/`.
 
@@ -81,10 +82,10 @@ The console follows **semantic versioning** starting at `1.0.0`. The version liv
 place (`RELEASE_VERSION` in [`web/athena_web/settings.py`](web/athena_web/settings.py)) and is read
 through [`athena_web/version.py`](web/athena_web/version.py):
 
-- `GET /api/version` → `{"name": "athena-console", "version": "1.5.0"}` (public; a bug report
+- `GET /api/version` → `{"name": "athena-console", "version": "1.6.0"}` (public; a bug report
   should not need an account)
 - `GET /healthz` → the version alongside the database/media readiness checks
-- the console sidebar footer → `Athena OS 1.5.0` on every page
+- the console sidebar footer → `Athena OS 1.6.0` on every page
 
 The SDK and CLI packages (`athena-sdk`, `athena-cli`) are versioned independently at `0.1.0` in
 their own `pyproject.toml` files; they will track the console's major version when their public
@@ -108,12 +109,26 @@ contracts stabilise.
 - **Operation drafts and release bundles (API only)**: private sites/sources/operations, recorded-video drafts with a counting
   line and reference marks, and the immutable component-version chain described above. Verified by
   tests and an end-to-end API walkthrough; no console UI, no runtime, nothing published.
+- **Sound and handwriting teaching (2026-11 multimodal foundation, synthetic-verified)**: a task-recipe
+  registry (`GET /api/recipes`) and modality plugins now carry two more teaching recipes beside vision
+  detection — **audio classification** (upload WAV clips, label each clip, freeze a dataset version,
+  train the `audio-wav-cnn` CPU backend; ONNX-or-torch artifact) and **handwriting OCR** (upload
+  pictures of handwriting, type the corrected text, train the `ocr-trocr` backend that fine-tunes
+  Microsoft's published TrOCR reader; character-error-rate evaluation). Both run through the same
+  project/snapshot/run/candidate/approve lifecycle as vision, with admin-gated, checksum-pinned weight
+  downloads for TrOCR (the D-FINE pattern). Honest limits: everything was verified on generated data
+  (sine tones, generated "handwriting" PNGs) in two test environments (1781 tests, ML tests skipping
+  cleanly without torch); model quality is unmeasured, no real recording or scan has been taught, the
+  OCR model can only be used through the API (the box-shaped check screens refuse it plainly), and
+  spreadsheet projects remain "coming soon" (that slice is in flight). See the 2026-11-19 note in
+  [`ROADMAP.md`](ROADMAP.md) M3.
 
 ## What does not exist yet
 
 Rights/evidence review, a real-operator trace of the correction-to-new-model path (the pieces exist as a prototype: see
 [`docs/guides/improve-loop.md`](docs/guides/improve-loop.md)), connectors for any real scanner (only reference connectors exist),
-any measured accuracy on real imagery for the trained detector or for auto-labelling, real-operator usability evidence, and any
+any measured accuracy on real imagery for the trained detector, auto-labelling, the audio classifier or the handwriting reader
+(all four are synthetic-verified only), real-operator usability evidence, and any
 runtime that executes an operation release bundle. Do not treat the console as a complete dataset manager.
 
 ## Licences

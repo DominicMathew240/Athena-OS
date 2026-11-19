@@ -19,3 +19,24 @@ transformers==5.17.0
 # also bundle libgfortran (GPL-3.0-or-later WITH GCC-exception-3.1) and libquadmath (LGPL-2.1-or-later): list it in
 # docs/LICENSE_AUDIT.md before shipping.
 scipy==1.18.1
+
+# Audio classification backend ("audio-wav-cnn", projects/training/audio_wav.py; added 2026-11-19). Needs nothing
+# beyond the four pins above (torch, numpy) except ONE OPTIONAL package: onnxruntime. With it installed the trained
+# clip classifier is exported to an ONNX graph and predictions run through onnxruntime's CPUExecutionProvider;
+# without it the backend saves a torch state-dict artifact and predicts through torch (the tests cover both paths;
+# the real separable-frequency training run used the venv that has it). Not needed: librosa (checked — the mel
+# spectrogram is computed with numpy directly), soundfile (WAV validation is stdlib `wave` in the web process).
+# Licence: MIT. Version shown is the one the ML venv that ran the audio tests had. Listed in docs/LICENSE_AUDIT.md
+# (addendum 2026-11-19; the binary wheel's bundled notices were not read there).
+onnxruntime==1.20.1
+
+# Handwriting OCR backend ("ocr-trocr", projects/training/ocr_trocr.py; added 2026-11-19). Runs on the pins above
+# (torch, transformers) plus Pillow from web/requirements.txt; needs NOTHING new: the fine-tuning loop is Athena's
+# own code over transformers' TrOCRProcessor / VisionEncoderDecoderModel. The base weights
+# (microsoft/trocr-small-handwritten, MIT on its model card, about 258 MB) are downloaded at runtime, not from pip:
+# admin-gated by the same "Ready-made model downloads" switch as every ready-made model, fetched from
+# huggingface.co/*.hf.co only, cached under <data home>/models/pretrained/trocr/. Nothing to add here.
+#
+# PENDING (do not add yet): the tabular-prediction slice (in flight, not on main) is expected to need
+# scikit-learn (BSD-3-Clause), pandas (BSD-3-Clause) and joblib (BSD-3-Clause). Nothing in this tree imports them
+# today (checked 2026-11-19); add pins here and rows in docs/LICENSE_AUDIT.md only when that slice lands.
