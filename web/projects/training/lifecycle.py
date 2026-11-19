@@ -836,7 +836,7 @@ def repoint_problem(app: InferenceApp, model: ModelVersion) -> str | None:
     except ValueError:
         return f"The backend {model.backend!r} this model needs is not installed. Install it, then try again."
     try:
-        schema.validate_config(schema.merged(app.config, {}), model.label_names)
+        schema.validate_config(schema.merged(app.config, {}), model.label_names, task=model.task)
     except schema.ConfigError as error:
         return str(error)
     return None

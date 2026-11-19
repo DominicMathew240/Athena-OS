@@ -66,14 +66,20 @@
     CS.clear(f.model);
     const list = approved();
     list.forEach((m) => {
-      const o = el("option", "", `Version ${m.version}: finds ${m.label_names.join(", ")}`);
+      const what = m.task === "handwriting-ocr"
+        ? `reads handwriting (${m.label_names.join(", ")})`
+        : `finds ${m.label_names.join(", ")}`;
+      const o = el("option", "", `Version ${m.version}: ${what}`);
       o.value = m.id; f.model.appendChild(o);
     });
     // A screen can still point at a model that is no longer approved; show it so it is not silently swapped.
     if (selectedId && !list.some((m) => m.id === selectedId)) {
       const old = modelById(selectedId);
       if (old) {
-        const o = el("option", "", `Version ${old.version}: finds ${old.label_names.join(", ")} (no longer approved)`);
+        const what = old.task === "handwriting-ocr"
+          ? `reads handwriting (${old.label_names.join(", ")})`
+          : `finds ${old.label_names.join(", ")}`;
+        const o = el("option", "", `Version ${old.version}: ${what} (no longer approved)`);
         o.value = old.id; f.model.appendChild(o);
       }
     }
@@ -87,6 +93,10 @@
     const m = modelById(f.model.value);
     return m ? m.label_names : [];
   }
+  const isTextModel = (id) => {
+    const m = modelById(id || f.model.value);
+    return Boolean(m && m.task === "handwriting-ocr");
+  };
 
   function updateThresholdText() {
     const t = Number(f.threshold.value) / 100;
@@ -223,7 +233,8 @@
       confidence_threshold: Number(f.threshold.value) / 100,
       status_texts: words,
       decision_controls: { options, required_note_on_override: f.noteRequired.checked },
-      human_review_required: f.human.checked
+      human_review_required: f.human.checked,
+      output: isTextModel(f.model.value) ? "text" : "boxes"
     };
     return { name, slug, config, model: f.model.value };
   }
@@ -282,15 +293,22 @@
     byId("cs-preview-source").textContent = `This is exactly what people will see on “${p.app.slug}”, read from the server for the saved screen.`;
     byId("cs-pv-title").textContent = p.title;
     byId("cs-pv-disclaimer").textContent = p.disclaimer;
-    byId("cs-pv-labels").textContent = p.displayed_labels.join(", ");
+    const isText = p.output === "text";
+    byId("cs-pv-labels").textContent = isText
+      ? "Reads the handwriting in each picture and writes out what it says"
+      : p.displayed_labels.join(", ");
     byId("cs-pv-types").textContent = CS.typeList(p.accepted_inputs);
-    byId("cs-pv-threshold").textContent = `${CS.percent(p.confidence_threshold)} sure or more`;
+    byId("cs-pv-threshold").textContent = isText
+      ? "Not used: a reading has no score to compare"
+      : `${CS.percent(p.confidence_threshold)} sure or more`;
     byId("cs-pv-model").textContent = `Version ${p.model.version}${p.model_in_use ? "" : ` (${p.model.stage_now}: no longer approved, so this screen will not run)`}`;
     byId("cs-pv-human").textContent = p.human_review_required ? "Yes, always" : "No";
     const wording = p.confidence_wording;
-    byId("cs-pv-wording").textContent = wording && wording.measured === true
-      ? `Each score is shown with how often that range was right in our check. ${CS.scoreNote(p)}`
-      : `Each score is shown as the computer’s own number, not checked. ${CS.scoreNote(p)}`;
+    byId("cs-pv-wording").textContent = isText
+      ? "No scores: the reading is shown as the computer’s own, and a person checks it against the picture."
+      : (wording && wording.measured === true
+        ? `Each score is shown with how often that range was right in our check. ${CS.scoreNote(p)}`
+        : `Each score is shown as the computer’s own number, not checked. ${CS.scoreNote(p)}`);
     drawSuggestion();
     const says = byId("cs-pv-says");
     CS.clear(says);
@@ -374,6 +392,16 @@
     holder.appendChild(stage.stage);
     const list = byId("cs-try-detections");
     CS.clear(list);
+    const isText = render.output === "text";
+    if (isText) {
+      const answer = result.text_answer;
+      const read = byId("cs-try-text");
+      read.hidden = false;
+      read.textContent = answer && typeof answer.text === "string" && answer.text.trim() ? answer.text : "The computer read no writing in this picture.";
+      byId("cs-try-note").textContent = "This try is saved as a record. The decision buttons are only on the real screen.";
+      return;
+    }
+    byId("cs-try-text").hidden = true;
     result.detections.forEach((det, i) => {
       stage.addDetection(det, i + 1);
       list.appendChild(CS.detectionRow(det, i + 1, render));
