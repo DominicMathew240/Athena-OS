@@ -1,4 +1,13 @@
-.recording-preview { display: block; max-width: 100%; max-height: 32rem; }
+/* Shared replay surface (T13): the overlay canvas sits exactly on the video, whatever its size. */
+.replay-surface { max-width: 48rem; }
+.replay-stage { position: relative; display: inline-block; max-width: 100%; background: #17202a; }
+.replay-video { display: block; max-width: 100%; max-height: 32rem; }
+.replay-overlay { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; }
+.replay-controls { display: flex; flex-wrap: wrap; align-items: center; gap: .75rem; margin-top: .75rem; }
+.replay-scrub { flex: 1 1 12rem; min-width: 8rem; }
+.replay-clock { margin: 0; font-variant-numeric: tabular-nums; }
+.replay-toggles { display: flex; flex-wrap: wrap; gap: 1rem; margin-top: .75rem; }
+.replay-toggle { display: inline-flex; align-items: center; gap: .45rem; font-size: 14px; color: var(--c-text-2); cursor: pointer; }
 .line-canvas { display: block; width: 100%; max-width: 48rem; height: auto; margin: 1rem 0; cursor: crosshair; background: #17202a; }
 .line-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .75rem; }
 .reference-event-editor { margin: 1rem 0; padding: 1rem; border: 1px solid var(--c-line-strong); border-radius: .75rem; }
