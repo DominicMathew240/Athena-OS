@@ -18,6 +18,7 @@ from django.shortcuts import get_object_or_404
 from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
+from . import credentials as credential_store
 from .models import (
     GeometryVersion,
     ModelVersion,
@@ -30,6 +31,7 @@ from .models import (
     PolicyVersion,
     RecipeVersion,
     Site,
+    SourceCredential,
     SourceViewVersion,
 )
 from .permissions import access
@@ -1118,3 +1120,73 @@ def _bundle_data(row):
         "created_at": row.created_at.isoformat(),
         "snapshot": row.snapshot,
     }
+
+
+def _credential_data(row):
+    """Owner-facing credential view: reference metadata only, never the secret or its ciphertext."""
+    return {
+        "source_id": str(row.source_id),
+        "set": True,
+        "hint": row.key_hint,
+        "set_by": f"u{row.set_by_id}",
+        "created_at": row.created_at.isoformat(),
+        "updated_at": row.updated_at.isoformat(),
+    }
+
+
+@access(PUT="label", DELETE="label")
+@require_http_methods(["GET", "PUT", "DELETE"])
+def source_credential(request, source_id):
+    """Set, inspect (reference only) or clear the stored credential of one owned source.
+
+    PUT replaces/rotates the secret. No path returns the secret; GET answers only
+    whether one is set plus a non-secret hint. Errors are deliberately generic
+    about content so nothing secret-shaped can travel through them.
+    """
+    source = get_object_or_404(OperationSource, id=source_id, site__created_by=request.user)
+
+    if request.method == "GET":
+        row = getattr(source, "credential", None)
+        if row is None:
+            return _no_store(JsonResponse({"credential": {"source_id": str(source.id), "set": False}}))
+        return _no_store(JsonResponse({"credential": _credential_data(row)}))
+
+    if request.method == "DELETE":
+        deleted, _ = SourceCredential.objects.filter(source=source).delete()
+        message = "Credential cleared." if deleted else "No credential was set."
+        return _no_store(JsonResponse({"ok": True, "cleared": bool(deleted), "message": message}))
+
+    # PUT: set or rotate.
+    try:
+        payload = _json_body(request)
+        if set(payload.keys()) != {"secret"} or not isinstance(payload["secret"], str):
+            raise ValueError("Provide the secret to store.")
+        secret = payload["secret"]
+        if not secret.strip():
+            raise ValueError("Provide the secret to store.")
+        ciphertext = credential_store.encrypt(secret)
+        if not ciphertext:
+            raise ValueError("The secret could not be stored; contact the site operator.")
+    except ValueError as error:
+        return _error(str(error))
+    row, _ = SourceCredential.objects.update_or_create(
+        source=source,
+        defaults={
+            "secret_encrypted": ciphertext,
+            "key_hint": credential_store.hint(secret),
+            "set_by": request.user,
+        },
+    )
+    return _no_store(JsonResponse({"credential": _credential_data(row)}, status=201))
+
+
+@access()
+@require_http_methods(["GET"])
+def approved_destinations(request):
+    """The approved outbound destination list, so clients can show what is allowed without guessing."""
+    from .destinations import _approved_hosts
+
+    entries = sorted(
+        f"{scheme}://{host}" for scheme, hosts in _approved_hosts().items() for host in hosts
+    )
+    return _no_store(JsonResponse({"approved_destinations": entries}))
