@@ -590,17 +590,13 @@ class LifecycleTests(TabularBase):
 
         missing_note = self.post(self.api(f"/models/{model.id}/approve"), {"note": "   "})
         self.assertEqual(missing_note.status_code, 400)
-        # The vision-shaped weak-results rule reads a table evaluation as "no boxes found", so
-        # approving needs the same explicit acknowledgement a weak vision model needs.
-        cautious = self.post(
-            self.api(f"/models/{model.id}/approve"),
-            {"note": "Read the report; good enough for the pilot."},
-        )
-        self.assertEqual(cautious.status_code, 409)
-        self.assertTrue(cautious.json()["needs_acknowledgement"])
+        # The weak-results rule is box-shaped and does not read a table evaluation, so a solid
+        # one (100% on the held-out rows here) approves with the note alone - the acknowledgement
+        # tick stays a vision rule (a weak table model is called out by its own evaluation's
+        # summary and limits, which the approver reads).
         approved = self.post(
             self.api(f"/models/{model.id}/approve"),
-            {"note": "Read the report; good enough for the pilot.", "acknowledge_weak_results": True},
+            {"note": "Read the report; good enough for the pilot."},
         )
         self.assertEqual(approved.status_code, 200, approved.content)
         body = approved.json()["model"]

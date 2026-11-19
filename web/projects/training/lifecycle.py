@@ -793,9 +793,11 @@ def stage_model(model: ModelVersion, user, note: str = "") -> ModelVersion:
                 f"Only a candidate can be staged; this model is {model.stage}. Nothing was changed.", 409
             )
         if not (model.evaluation or {}).get("available"):
+            plural = recipe_nouns(model.project)["plural"]
+            what = "test images" if plural == "pictures" else f"a {plural} test group"
             raise LifecycleError(
-                "This model has no held-out evaluation, so it cannot be staged. Create a dataset version with test "
-                "images, train again, and review the evaluation report.",
+                f"This model has no held-out evaluation, so it cannot be staged. Create a dataset version with "
+                f"{what}, train again, and review the evaluation report.",
                 422,
             )
         model.stage = ModelVersion.STAGED
@@ -813,16 +815,23 @@ def weak_results_reason(evaluation: dict[str, Any] | None) -> str | None:
     """Why a model's held-out results are too weak to approve without a deliberate acknowledgement.
 
     ``None`` means the results do not trigger the rule. It fires when nothing was evaluated, when none of the test
-    boxes were found, when the plain-results verdict (``report.plain_results``) is ``not_ready`` or
-    ``cannot_tell``, and when the stored comparison with the model in use is readable, fair, and says ``worse``.
+    boxes were found, when the plain-results verdict (``report.plain_results``) is ``not_ready`` or ``cannot_tell``,
+    and when the stored comparison with the model in use is readable, fair, and says ``worse``.
     Otherwise a plain sentence (without the ``acknowledge_weak_results`` instruction) that is also
     written to the audit trail.
+
+    A non-vision evaluation (audio clips, tables, OCR text) has no ``overall`` recall block; the
+    box-shaped checks below cannot read it, so it does not trigger the rule on its own numbers
+    (each backend's own evaluation carries its plain ``summary``/``limits`` for the approver).
     """
     evaluation = evaluation or {}
     if not evaluation.get("available"):
         return "it has no results: nothing was held back to check it on, so nobody can say how well it works"
     overall = evaluation.get("overall") or {}
-    if not overall.get("recall"):  # 0.0 (or missing): none of the people-drawn boxes were found at IoU 0.5
+    if not isinstance(overall, dict) or "recall" not in overall:
+        # Not the box-detection shape (audio clips, tables, OCR text): no vision rule applies.
+        return None
+    if not overall.get("recall"):  # 0.0: none of the people-drawn boxes were found at IoU 0.5
         found = overall.get("true_positives", 0)
         total = (evaluation.get("data") or {}).get("boxes", found + overall.get("false_negatives", 0))
         return f"it found none of the test boxes ({found} of {total} at an overlap of 0.5)"

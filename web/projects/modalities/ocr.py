@@ -83,7 +83,9 @@ class OcrImagePlugin(ImageModalityPlugin):
 # registry entry (the "image" modality stays the builtin image plugin) and the recipe
 # placeholder is replaced by the available recipe. Deliberately last, after the class.
 from ..tasks import HANDWRITING_OCR, register_recipe  # noqa: E402
-from .registry import register_plugin as _register_plugin  # noqa: E402
+from .registry import register_annotation_plugin as _register_annotation_plugin  # noqa: E402
 
-_register_plugin(OcrImagePlugin)
+# By kind only: the "image" *modality* stays the builtin image plugin (OCR pictures upload
+# exactly like vision pictures); this registration is what the recipe dispatch finds.
+_register_annotation_plugin(OcrImagePlugin)
 register_recipe(HANDWRITING_OCR, replace=True)
