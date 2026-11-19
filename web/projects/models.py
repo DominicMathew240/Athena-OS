@@ -1198,6 +1198,56 @@ class OperationSourceRecording(models.Model):
         ordering = ("-created_at", "-id")
 
 
+class OperationExecution(models.Model):
+    """One durable request to execute one release bundle against one source recording (T19).
+
+    The web process only queues this row; worker processes claim it through a lease
+    (``lease_owner`` plus ``lease_expires_at``) and run it outside any HTTP request. Every
+    state change is a committed database write, so the row survives web exits, worker
+    restarts and database restarts. Provenance columns freeze what will be executed: the
+    bundle's own snapshot digest and the recording digest are copied at enqueue, so later
+    edits cannot change what a queued execution references.
+    """
+
+    QUEUED, RUNNING, SUCCEEDED, FAILED, CANCELLED = "queued", "running", "succeeded", "failed", "cancelled"
+    STATUS_CHOICES = [
+        (QUEUED, "Queued"),
+        (RUNNING, "Running"),
+        (SUCCEEDED, "Succeeded"),
+        (FAILED, "Failed"),
+        (CANCELLED, "Cancelled"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    bundle = models.ForeignKey(OperationReleaseBundle, on_delete=models.PROTECT, related_name="executions")
+    recording = models.ForeignKey(
+        OperationSourceRecording, on_delete=models.PROTECT, related_name="executions"
+    )
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    # Provenance frozen at enqueue: the bundle's own snapshot digest and the recording's digest.
+    bundle_sha256 = models.CharField(max_length=64)
+    recording_sha256 = models.CharField(max_length=64)
+    pins = models.JSONField(default=dict)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=QUEUED)
+    cancel_requested = models.BooleanField(default=False)
+    result = models.JSONField(default=dict, blank=True)
+    error = models.TextField(blank=True)
+    # The lease: which worker holds this execution, and until when. Null when queued or finished.
+    lease_owner = models.CharField(max_length=120, blank=True, default="")
+    lease_expires_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+    started_at = models.DateTimeField(null=True, blank=True)
+    heartbeat_at = models.DateTimeField(null=True, blank=True)
+    finished_at = models.DateTimeField(null=True, blank=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        indexes = (models.Index(fields=("status", "created_at")),)
+
+    def __str__(self) -> str:
+        return f"{self.bundle_id}:{self.status}"
+
+
 class OperationRecording(models.Model):
     """One private test recording attached to an unpublished draft."""
 
