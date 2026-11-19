@@ -63,13 +63,18 @@ HANDWRITING_OCR = TaskRecipe(
 )
 TABULAR_PREDICTION = TaskRecipe(
     key="tabular-prediction",
-    title="Predict from spreadsheets",
+    title="Predict from a spreadsheet",
     modality="table",
-    summary="Teach Athena to predict an outcome from rows in an Excel or CSV file.",
+    summary=(
+        "Upload one Excel or CSV file, choose the column to predict, and Athena learns to "
+        "guess that column from the others. It is tested on rows it has never seen."
+    ),
     annotation_kind="table_target",
-    labels_help="One label per outcome, e.g. pass, fail, needs_service.",
-    available=False,
-    unavailable_reason="Spreadsheet projects are coming soon. You can save the project name and labels today.",
+    labels_help=(
+        "For a table, the labels are the file's columns. Pick the one Athena should predict - "
+        "the others are used as clues. Choose it after you upload the file."
+    ),
+    available=True,
 )
 
 BUILTIN_RECIPES = (VISION_DETECTION, AUDIO_CLASSIFICATION, HANDWRITING_OCR, TABULAR_PREDICTION)

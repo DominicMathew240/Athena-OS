@@ -24,7 +24,10 @@ from .base import Availability, BackendUnavailable, BoxPrediction, TrainingBacke
 logger = logging.getLogger(__name__)
 
 ENTRY_POINT_GROUP = "athena.training_backends"
-BUILTIN_BACKENDS = ("projects.training.torchvision_frcnn:TorchvisionFasterRCNN",)
+BUILTIN_BACKENDS = (
+    "projects.training.torchvision_frcnn:TorchvisionFasterRCNN",
+    "projects.training.tabular_sklearn:TabularSklearnBackend",
+)
 DEFAULT_BACKEND = "torchvision-fasterrcnn"
 NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,78}$")
 

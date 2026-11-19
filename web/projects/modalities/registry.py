@@ -14,10 +14,14 @@ from django.conf import settings
 
 from .base import ModalityPlugin, UnsupportedModalityError
 from .image import ImageModalityPlugin
+from .table import TableModalityPlugin
 
 logger = logging.getLogger(__name__)
 
-BUILTIN_PLUGINS = ("projects.modalities.image:ImageModalityPlugin",)
+BUILTIN_PLUGINS = (
+    "projects.modalities.image:ImageModalityPlugin",
+    "projects.modalities.table:TableModalityPlugin",
+)
 
 _registry: dict[str, type[ModalityPlugin]] = {}
 _instances: dict[str, ModalityPlugin] = {}

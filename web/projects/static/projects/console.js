@@ -1524,10 +1524,10 @@ const PROJECT_RECIPES = {
   spreadsheets: {
     modality: "table",
     task: "Predict an outcome from spreadsheet rows",
-    labelsPlaceholder: "e.g. pass, fail, needs_service",
-    note: "Coming soon (Wave 1) · Data needed: Excel or CSV rows + target column · Quality check: errors on unseen rows. Saving now keeps your project name and labels.",
+    labelsPlaceholder: "Filled in from your file's columns after you upload it",
+    note: "Available today · Data needed: one Excel (.xlsx) or CSV file with at least 2 columns and 3 rows · You choose which column to predict and Athena is tested on rows it has not seen.",
     recipeKey: "tabular-prediction",
-    available: false
+    available: true
   }
 };
 

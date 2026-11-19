@@ -388,7 +388,10 @@ def run_training(run: TrainingRun, backend: TrainingBackend | None = None) -> Tr
         log.flush(force=True)
         boxes_per_label = {label: 0 for label in labels}
         for item in items:
-            for label, *_ in item.boxes:
+            # Vision items carry their ground truth as .boxes; a non-vision backend's items
+            # may not (a table row has none), and the per-label counts are only used when the
+            # evaluation cannot run, so they are skipped rather than guessed.
+            for label, *_ in getattr(item, "boxes", ()):
                 boxes_per_label[label] = boxes_per_label.get(label, 0) + 1
         if items:
             evaluation = backend.evaluate(
@@ -410,7 +413,9 @@ def run_training(run: TrainingRun, backend: TrainingBackend | None = None) -> Tr
         points = work_out_operating_points(
             backend, Path(result.artifact_path), val_items(run.dataset_version.manifest, dataset_dir), items,
             labels, log, check=check_limits,
-        )
+        ) if "images" in (run.dataset_version.manifest or {}) else None
+        # A generic (non-image) version's manifest has "entries", not "images": there are no
+        # vision validation pictures to work thresholds from, so there are no operating points.
         if points is not None:
             evaluation["operating_points"] = points
         compared = work_out_comparison(
