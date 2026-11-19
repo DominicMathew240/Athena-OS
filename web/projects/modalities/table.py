@@ -23,14 +23,13 @@ Only stdlib ``csv`` / ``zipfile`` are imported here. pandas lives in
 from __future__ import annotations
 
 import csv
-import hashlib
 import io
 import zipfile
 from typing import Any
 
 from django.core.exceptions import ValidationError
 
-from .base import ModalityPlugin
+from .base import ModalityPlugin, check_not_empty, digest_upload
 
 MAX_TABLE_BYTES = 50 * 1024 * 1024
 MIN_COLUMNS = 2
@@ -142,17 +141,12 @@ class TableModalityPlugin(ModalityPlugin):
     annotation_kind = "table_target"
 
     def validate_upload(self, upload) -> dict[str, Any]:
-        if upload.size <= 0:
-            raise ValidationError("Table files cannot be empty.")
+        check_not_empty(upload, "Table files")
         if upload.size > MAX_TABLE_BYTES:
             raise ValidationError("Each table must be 50 MB or smaller.")
 
-        digest = hashlib.sha256()
-        size_bytes = 0
-        for chunk in upload.chunks():
-            size_bytes += len(chunk)
-            digest.update(chunk)
-        upload.seek(0)
+        sha256, size_bytes = digest_upload(upload, max_bytes=MAX_TABLE_BYTES,
+                                           limit_message="Each table must be 50 MB or smaller.")
 
         name = (upload.name or "").lower()
         if name.endswith(".csv"):
@@ -174,7 +168,7 @@ class TableModalityPlugin(ModalityPlugin):
 
         metadata: dict[str, Any] = {
             "filename": safe_filename(upload.name),
-            "sha256": digest.hexdigest(),
+            "sha256": sha256,
             "size_bytes": size_bytes,
             "extension": extension,
             "content_type": content_type,

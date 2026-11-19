@@ -416,7 +416,12 @@ def run_training(run: TrainingRun, backend: TrainingBackend | None = None) -> Tr
         work.mkdir(parents=True, exist_ok=True)
         dataset_dir = work / "dataset"
         items, labels = build_dataset(run, backend, dataset_dir)
-        log.add(f"Dataset ready: {run.dataset_version.image_count} images, {len(items)} held-out test items")
+        # A generic (non-image) version freezes files in manifest["entries"] and always reports
+        # image_count 0, so the log names what the version actually holds for both kinds.
+        held = run.dataset_version.manifest.get("counts", {}).get("entry_count")
+        files = held if held is not None else run.dataset_version.image_count
+        what = "files" if held is not None else "images"
+        log.add(f"Dataset ready: {files} {what}, {len(items)} held-out test items")
 
         def check_limits() -> None:
             if _cancelled(run):
@@ -435,7 +440,13 @@ def run_training(run: TrainingRun, backend: TrainingBackend | None = None) -> Tr
         if _cancelled(run):
             raise TrainingCancelled("Training was cancelled.")
         log.progress = 0.9
-        log.add("Training finished; evaluating on held-out test images")
+        # The generic path names files, not images: an audio/table/OCR run is scored on its own
+        # kind of held-out data (the empty-split refusals below already say which).
+        log.add(
+            "Training finished; evaluating on held-out test files"
+            if run.annotation_kind and run.annotation_kind != "boxes" else
+            "Training finished; evaluating on held-out test images"
+        )
         log.flush(force=True)
         boxes_per_label = {label: 0 for label in labels}
         for item in items:

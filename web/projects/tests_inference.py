@@ -212,7 +212,11 @@ class AppConfigTests(InferenceBase):
         self.assertEqual(self.create_app(slug="Bad Slug!").status_code, 400)
         self.assertEqual(self.create_app(bonus=1).status_code, 400)
         self.assertEqual(self.create_app(config="x").status_code, 400)
-        self.assertEqual(self.post(self.apps_url(), {"name": "x", "model_version_id": str(uuid.uuid4())}).status_code, 404)
+        # An unknown model id is the API's JSON 404, not Django's HTML error page.
+        missing = self.post(self.apps_url(), {"name": "x", "model_version_id": str(uuid.uuid4())})
+        self.assertEqual(missing.status_code, 404)
+        self.assertEqual(missing["Content-Type"], "application/json")
+        self.assertIn("error", missing.json())
 
     def test_slug_is_unique_and_generated_names_do_not_collide(self) -> None:
         self.make_app(slug="same")

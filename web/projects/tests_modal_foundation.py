@@ -307,8 +307,12 @@ class UnsupportedModalityRefusalsTests(DatasetBase):
         self.assertTrue(body.get("task_unavailable"))
 
     def test_backend_list_stays_image_only(self) -> None:
-        # The backend listing is the image one (unchanged); other modalities get a plain 404.
-        self.assertEqual(self.client.get(f"/api/projects/{self.speech.id}/training/backends").status_code, 404)
+        # The backend listing is the image one (unchanged); other modalities get the API's JSON 404,
+        # not Django's HTML error page.
+        response = self.client.get(f"/api/projects/{self.speech.id}/training/backends")
+        self.assertEqual(response.status_code, 404)
+        self.assertEqual(response["Content-Type"], "application/json")
+        self.assertIn("error", response.json())
 
 
 class AssetAnnotationCrudTests(ModalFoundationBase):

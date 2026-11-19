@@ -487,6 +487,12 @@ class BackendRulesTests(OcrBase):
         self.assertIn("downloading is switched off", message)
         self.assertIn("ATHENA_TRAINING_ALLOW_DOWNLOAD=1", message)
         self.assertIn("licence", message)
+        # The blocker names this backend's own files and host, never the vision helper's
+        # torchvision checkpoints (mobilenet_v3...pth, download.pytorch.org).
+        self.assertIn("config.json, preprocessor_config.json and pytorch_model.bin", message)
+        self.assertIn("huggingface.co", message)
+        self.assertNotIn("mobilenet", message)
+        self.assertNotIn("download.pytorch.org", message)
 
     def test_start_options_follow_the_console_switch(self) -> None:
         from .console_settings import OFF, ON, TRAINING_DOWNLOADS

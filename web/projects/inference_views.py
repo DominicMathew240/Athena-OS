@@ -56,7 +56,12 @@ def _model(project, value) -> ModelVersion:
         model_id = uuid.UUID(str(value))
     except ValueError:
         raise HttpError("model_version_id is not valid.") from None
-    return get_object_or_404(ModelVersion, id=model_id, project=project)
+    # The API's own JSON 404 (an Http404 here would be Django's HTML error page); both callers
+    # sit behind @json_errors.
+    model = ModelVersion.objects.filter(id=model_id, project=project).first()
+    if model is None:
+        raise HttpError("No model version with that id belongs to this project.", 404)
+    return model
 
 
 @access(POST="train")

@@ -10,10 +10,10 @@ from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_http_methods
 
 from . import training
-from .api_common import HttpError, image_project, json_errors, json_payload, no_store, reject_unknown
+from .api_common import HttpError, json_errors, json_payload, no_store, reject_unknown
 from .annotations import image_project_uses_boxes
 from .datasets.manifest import opaque_user
-from .models import DatasetVersion, InferenceApp, ModelVersion, Project, TrainingRun
+from .models import DatasetVersion, ModelVersion, Project, TrainingRun
 from .training import lifecycle, report, runner
 from .permissions import access
 
@@ -73,10 +73,6 @@ def teachable_project(project_id) -> Project:
     if recipe is not None and recipe.available:
         return project
     raise Http404("This project's task has no teaching tools yet.")
-
-
-#: Historical alias for the generalized gate above (the routes all use one rule now).
-trainable_project = teachable_project
 
 
 def run_data(run: TrainingRun, *, detail: bool = False) -> dict[str, Any]:
@@ -239,8 +235,13 @@ def _app_refs(apps) -> list[dict[str, str]]:
 
 @access()
 @require_http_methods(["GET"])
+@json_errors
 def training_backends(request: HttpRequest, project_id) -> JsonResponse:
-    image_project(project_id)  # the backend list is the image one; other modalities 404 like before
+    # The backend list is the image one; other modalities 404 like before, but in the API's own
+    # JSON error shape (an Http404 here would be Django's HTML page).
+    project = get_object_or_404(Project, id=project_id)
+    if project.modality != "image":
+        raise HttpError("The backend list is only available for picture projects.", 404)
     worker = lifecycle.worker_status()
     for_options = {"online": worker["online"], "downloads_allowed": worker["downloads_allowed"]}
     backends = []

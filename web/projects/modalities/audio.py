@@ -12,14 +12,13 @@ that suffix.
 
 from __future__ import annotations
 
-import hashlib
 import io
 import wave
 from typing import Any
 
 from django.core.exceptions import ValidationError
 
-from .base import ModalityPlugin
+from .base import ModalityPlugin, check_not_empty, digest_upload
 
 MAX_AUDIO_BYTES = 20 * 1024 * 1024
 #: Sample rates the backend's feature step is tuned for. Below 8 kHz the mel bands cannot tell
@@ -52,8 +51,7 @@ class AudioModalityPlugin(ModalityPlugin):
     annotation_kind = "clip_labels"
 
     def validate_upload(self, upload) -> dict[str, Any]:
-        if upload.size <= 0:
-            raise ValidationError("Sound clips cannot be empty.")
+        check_not_empty(upload, "Sound clips")
         if upload.size > MAX_AUDIO_BYTES:
             raise ValidationError("Each sound clip must be 20 MB or smaller.")
 
@@ -62,14 +60,8 @@ class AudioModalityPlugin(ModalityPlugin):
         if f".{suffix}" not in AUDIO_EXTENSIONS:
             raise ValidationError("Only WAV sound clips are supported.")
 
-        digest = hashlib.sha256()
-        size_bytes = 0
-        for chunk in upload.chunks():
-            size_bytes += len(chunk)
-            if size_bytes > MAX_AUDIO_BYTES:
-                raise ValidationError("Each sound clip must be 20 MB or smaller.")
-            digest.update(chunk)
-        upload.seek(0)
+        sha256, size_bytes = digest_upload(upload, max_bytes=MAX_AUDIO_BYTES,
+                                           limit_message="Each sound clip must be 20 MB or smaller.")
 
         try:
             with wave.open(io.BytesIO(upload.read()), "rb") as clip:
@@ -105,7 +97,7 @@ class AudioModalityPlugin(ModalityPlugin):
 
         return {
             "filename": safe_filename(upload.name),
-            "sha256": digest.hexdigest(),
+            "sha256": sha256,
             "size_bytes": size_bytes,
             "extension": "wav",
             "content_type": AUDIO_CONTENT_TYPE,

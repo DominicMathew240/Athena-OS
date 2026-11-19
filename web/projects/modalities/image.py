@@ -7,14 +7,13 @@ messages and limits are pinned by the console's tests; do not reword them casual
 
 from __future__ import annotations
 
-import hashlib
 import warnings
 from typing import Any
 
 from django.core.exceptions import ValidationError
 from PIL import Image, UnidentifiedImageError
 
-from .base import ModalityPlugin
+from .base import ModalityPlugin, check_not_empty, digest_upload
 
 MAX_IMAGE_BYTES = 20 * 1024 * 1024
 MAX_IMAGE_PIXELS = 25_000_000
@@ -40,19 +39,12 @@ class ImageModalityPlugin(ModalityPlugin):
     annotation_kind = "boxes"
 
     def validate_upload(self, upload) -> dict[str, Any]:
-        if upload.size <= 0:
-            raise ValidationError("Image files cannot be empty.")
+        check_not_empty(upload, "Image files")
         if upload.size > MAX_IMAGE_BYTES:
             raise ValidationError("Each image must be 20 MB or smaller.")
 
-        digest = hashlib.sha256()
-        size_bytes = 0
-        for chunk in upload.chunks():
-            size_bytes += len(chunk)
-            if size_bytes > MAX_IMAGE_BYTES:
-                raise ValidationError("Each image must be 20 MB or smaller.")
-            digest.update(chunk)
-        upload.seek(0)
+        sha256, size_bytes = digest_upload(upload, max_bytes=MAX_IMAGE_BYTES,
+                                           limit_message="Each image must be 20 MB or smaller.")
 
         try:
             with warnings.catch_warnings():
@@ -73,7 +65,7 @@ class ImageModalityPlugin(ModalityPlugin):
         extension, content_type = IMAGE_FORMATS[image_format]
         return {
             "filename": safe_filename(upload.name),
-            "sha256": digest.hexdigest(),
+            "sha256": sha256,
             "size_bytes": size_bytes,
             "width": width,
             "height": height,

@@ -13,10 +13,36 @@ torchvision backend pattern).
 
 from __future__ import annotations
 
+import hashlib
 from abc import ABC, abstractmethod
 from typing import Any
 
 from django.core.exceptions import ValidationError
+
+
+def check_not_empty(upload, what: str) -> None:
+    """Refuse an empty upload in the plugin's own words (``what`` plural, e.g. "Image files")."""
+    if upload.size <= 0:
+        raise ValidationError(f"{what} cannot be empty.")
+
+
+def digest_upload(upload, *, max_bytes: int, limit_message: str) -> tuple[str, int]:
+    """Stream one upload through SHA-256: returns ``(hex digest, size in bytes)``.
+
+    Every plugin that stores files hashes them the same way - chunk by chunk, so a huge upload
+    never sits whole in memory, with the size limit enforced again mid-stream (the client's
+    ``Content-Length`` is not trusted). ``limit_message`` is the plugin's own plain sentence for
+    a file past its limit. The upload is rewound to its start, ready for the format check that
+    follows."""
+    digest = hashlib.sha256()
+    size_bytes = 0
+    for chunk in upload.chunks():
+        size_bytes += len(chunk)
+        if size_bytes > max_bytes:
+            raise ValidationError(limit_message)
+        digest.update(chunk)
+    upload.seek(0)
+    return digest.hexdigest(), size_bytes
 
 
 class ModalityPlugin(ABC):

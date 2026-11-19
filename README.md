@@ -3,9 +3,12 @@
 **Current release: 1.6.0** — the version is declared once in [`web/athena_web/settings.py`](web/athena_web/settings.py) (`RELEASE_VERSION`) and shown in the console sidebar footer, the public [`GET /api/version`](web/projects/views.py) endpoint, and the `/healthz` probe. A deployment may set `ATHENA_VERSION` only to *add* a packaging suffix (for example `1.6.0+acme`); it can never mask the released version.
 
 Athena OS is an open-source (Apache-2.0) toolkit for building reviewed datasets and models for industrial
-data, starting with image object detection and, since the 2026-11 multimodal foundation, two more
-teaching recipes: sound classification and handwriting reading. It is early: see [`ROADMAP.md`](ROADMAP.md) for
-what is done and what is not. This README only claims what the source tree and its tests demonstrate. The separate [vision-workflow tracker](docs/plans/2026-11-15-vision-workflows-task-list.md) records locally verified slices and remaining release gates; it is not a production-readiness claim.
+data. It teaches through four recipes: **vision detection** (draw boxes on pictures), **sound
+classification** (label WAV clips), **handwriting OCR** (type what the handwriting says), and
+**tabular prediction** (pick a column in a CSV/XLSX file to predict from the others). It is early: see
+[`ROADMAP.md`](ROADMAP.md) for what is done and what is not. This README only claims what the source
+tree and its tests demonstrate. The separate [vision-workflow tracker](docs/plans/2026-11-15-vision-workflows-task-list.md)
+records locally verified slices and remaining release gates; it is not a production-readiness claim.
 
 The public marketing site is a static React app on the [`landing`](https://github.com/DominicMathew240/Athena-OS/tree/landing) branch (no backend). It deploys to GitHub Pages. This `main` branch is the product source: contracts, SDK, CLI, and the Django console in `web/`.
 
@@ -14,32 +17,43 @@ The public marketing site is a static React app on the [`landing`](https://githu
 The console walks a nontechnical operator through six plain-language steps. Each step only becomes
 usable when the ones before it have real content, and nothing is ever approved or published automatically.
 
-```
- ┌──────────────────────────────────────────────────────────────────────────────┐
- │ 1. CREATE      2. ADD           3. LABEL          4. FREEZE                  │
- │  a project     pictures         boxes:            a dataset version          │
- │  (goal,        (JPEG/PNG/       drawn by hand     (immutable, numbered,      │
- │  labels)       WebP, checked    or suggested      hashed manifest,           │
- │                and hashed)      by SAM+CLIP,      COCO/YOLO export)          │
- │                                 always reviewed                             │
- │                                                                              │
- │ 5. TEACH       a model          6. CHECK & IMPROVE                            │
- │  a detector    (CPU training    a check screen runs new pictures              │
- │  from the      worker; the      through the approved model; operators         │
- │  snapshot)     web process      mark results right or wrong; corrections     │
- │                never loads      return as Needs-review pictures for the       │
- │                torch)           next teaching round                           │
- └──────────────────────────────────────────────────────────────────────────────┘
-```
+1. **Create a project** — a goal and the labels for the things you want found.
+2. **Add pictures** — JPEG/PNG/WebP, checked and hashed (or WAV clips, or a CSV/XLSX file, depending on the recipe).
+3. **Label** — boxes drawn by hand or suggested by SAM+CLIP, always reviewed.
+4. **Freeze a training set** — an immutable, numbered, hashed snapshot.
+5. **Teach a model** — a CPU training worker; the web process never loads torch.
+6. **Check & improve** — a check screen runs new pictures through the approved model; operators mark
+   results right or wrong; corrections return as Needs-review pictures for the next teaching round.
+
+![The projects console: every project lists its files, purpose, labels and where the work stands.](docs/dogfood/screenshots/ff-desktop-02-console.png)
+*The projects console (a real capture from a dogfood run, Firefox 158). Every step shows its own state; nothing is hidden behind jargon.*
+
+![Drawing a box: a SAM+CLIP suggestion arrives as "Needs your review" until a person accepts or rejects it.](docs/dogfood/screenshots/07-13-annotation-with-suggestion.png)
+*Step 3, labelling. Auto-suggested boxes always arrive as **Needs review** — nothing becomes ground truth until a person accepts it.*
+
+![The teach panel: a finished run files only a Candidate model; a person must read the results, move it to trial, and approve it before anything can use it.](docs/dogfood/screenshots/xb-chromium-desktop-10-train-panel.png)
+*Steps 5 and 6. A finished teaching run only ever files a *candidate* model; the approve gate records the approver and the reason.*
+
+![A check screen: a new picture runs through the approved model; a person marks each finding right or wrong before anything is decided.](docs/dogfood/screenshots/35-final-13-operator-result.png)
+*The check screen (step 6). "Not a final decision. This is the computer's opinion. A person decides." Feedback is saved as evidence; it never changes the model by itself.*
 
 **What a first run looks like.** Install, run first-run setup (the first account becomes the
 administrator), and the console opens on a plain-language checklist: create a project, add pictures,
 draw boxes around the things you want found, save a training set, teach the computer, check the
-results. Auto-suggested boxes always arrive as **Needs review** — nothing becomes ground truth until
-a person accepts it. A finished teaching run only ever files a *candidate* model; a person must move
-it to trial, read its results card, and approve it before anything can use it. Check-screen
-corrections are kept as evidence and can be pulled back into the project for the next round — the
-live model is never changed by feedback alone.
+results. Check-screen corrections are kept as evidence and can be pulled back into the project for
+the next round — the live model is never changed by feedback alone.
+
+### The four teaching recipes
+
+Every recipe runs the same guided project → snapshot → teach → candidate → approve lifecycle; only
+what you upload and how you label it changes. The screenshots above are from the vision recipe; the
+three newer recipes (audio, OCR, tabular) use the same guided steps, and no real capture of them is
+published yet.
+
+- **Recognize objects in pictures** (`vision-detection`, the default): upload JPEG/PNG/WebP pictures → draw a box around each thing and give it a label → train the `torchvision-fasterrcnn` CPU detector.
+- **Recognize sounds or equipment faults** (`audio-classification`): upload WAV clips → give each clip one label (e.g. healthy_motor, bearing_fault) → train the `audio-wav-cnn` CPU backend (ONNX-or-torch artifact).
+- **Read handwriting** (`handwriting-ocr`): upload pictures of handwriting → type the corrected text for each picture → fine-tune the `ocr-trocr` reader (Microsoft TrOCR); checked by character and word errors.
+- **Predict from a spreadsheet** (`tabular-prediction`): upload one CSV or XLSX file → choose the column to predict (the other columns are the clues) → train the `tabular-sklearn` ensemble (random forest + gradient boosting), scored on held-out rows it has never seen.
 
 **Operations (people counting, private, in progress).** A second workflow is being built for
 recorded-video operations: private sites and sources, an operation draft with a counting line and
@@ -53,7 +67,13 @@ The console walks an operator through this as a guided, resumable stepper, and a
 preflight (`GET /api/operation-preflight`) says up front whether the server can actually run an
 operation — video checking, private storage, the teaching and check-screen helpers, and the
 picture-reading model — with the person responsible and one recovery step for each missing part.
-Today a draft cannot count people, and the console says so.
+Durable execution workers are here (T19, [`docs/plans/2026-11-19-t19-durable-workers.md`](docs/plans/2026-11-19-t19-durable-workers.md)):
+an API call files an `OperationExecution` job, and `manage.py operation_worker` claims it through a
+database lease — multiple workers are safe, a crashed worker's job is reclaimed by lease expiry, and
+a finished execution can never run twice. The execution step itself is deliberately minimal today
+(it byte-verifies the pinned recording and replays the recorded human reference events — a
+verified-replay placeholder); T10 (live camera) builds the real capture loop on it. Today a draft
+cannot count people, and publication/runtime of release bundles is still not built.
 
 ### Try it locally
 
@@ -71,7 +91,8 @@ Docker, S3): [`web/DEPLOYMENT.md`](web/DEPLOYMENT.md). To try the SDK and synthe
 
 | Piece | What it does |
 |---|---|
-| **Console** (`web/`) | The product: sign-in, projects, labelling, review, dataset versions, teaching, check screens, four access roles (Viewer, Labeler, Trainer, Approver) enforced server-side on every write. |
+| **Console** (`web/`) | The product: sign-in, projects in four recipes (vision detection, sound classification, handwriting OCR, tabular prediction), labelling, review, dataset versions, teaching, check screens, four access roles (Viewer, Labeler, Trainer, Approver) enforced server-side on every write. |
+| **Durable workers** (`web/`) | Training, inference, auto-label and (since T19) operation-execution workers that run outside the web process, claim jobs atomically, and recover from crashes. See [`web/DEPLOYMENT.md`](web/DEPLOYMENT.md). |
 | **Contracts and SDK** (`sdk/python`, `contracts/`) | Versioned Pydantic contracts for observations, assets, models, findings, evidence, policies and actions; generated JSON Schema checked in. Needs Pydantic 2.11+. |
 | **CLI and examples** (`cli/`, `examples/`) | Contract validation and synthetic image/audio pipelines. The YOLO example adapter needs `ultralytics` (**AGPL-3.0**) — read the warning in [`docs/getting-started.md`](docs/getting-started.md) first. |
 | **Reference connectors** | Folder-drop and HTTP-push connectors with retries, backpressure and an idempotency ledger: [`docs/guides/writing-a-connector.md`](docs/guides/writing-a-connector.md). |
@@ -101,7 +122,8 @@ contracts stabilise.
   accepted boxes, deterministic train/val/test splits, a hashed manifest, and COCO or YOLO zip export.
   See [`docs/guides/data-export.md`](docs/guides/data-export.md).
 - **Teaching, models and check screens (prototype)**: a one-button "Teach the computer" part that trains a CPU detector from a
-  ready-made starting model, a picture check, plain-language results, model stages with an approval note, check screens that run an
+  ready-made starting model (`torchvision-fasterrcnn` by default; a `dfine-coco` backend is opt-in), a picture check,
+  plain-language results, model stages with an approval note, check screens that run an
   image through the approved model, and four access roles. Operator corrections from check screens can be pulled back into a project as pictures with
   **Needs review** boxes and a new model compared with the one in use ([`docs/guides/improve-loop.md`](docs/guides/improve-loop.md)); nothing changes a model by
   itself. Tested on synthetic data and a toy model only; a usability session with
@@ -109,27 +131,39 @@ contracts stabilise.
 - **Operation drafts and release bundles (API only)**: private sites/sources/operations, recorded-video drafts with a counting
   line and reference marks, and the immutable component-version chain described above. Verified by
   tests and an end-to-end API walkthrough; no console UI, no runtime, nothing published.
-- **Sound and handwriting teaching (2026-11 multimodal foundation, synthetic-verified)**: a task-recipe
-  registry (`GET /api/recipes`) and modality plugins now carry two more teaching recipes beside vision
-  detection — **audio classification** (upload WAV clips, label each clip, freeze a dataset version,
-  train the `audio-wav-cnn` CPU backend; ONNX-or-torch artifact) and **handwriting OCR** (upload
-  pictures of handwriting, type the corrected text, train the `ocr-trocr` backend that fine-tunes
-  Microsoft's published TrOCR reader; character-error-rate evaluation). Both run through the same
-  project/snapshot/run/candidate/approve lifecycle as vision, with admin-gated, checksum-pinned weight
-  downloads for TrOCR (the D-FINE pattern). Honest limits: everything was verified on generated data
-  (sine tones, generated "handwriting" PNGs) in two test environments (1781 tests, ML tests skipping
-  cleanly without torch); model quality is unmeasured, no real recording or scan has been taught, the
-  OCR model can only be used through the API (the box-shaped check screens refuse it plainly), and
-  spreadsheet projects remain "coming soon" (that slice is in flight). See the 2026-11-19 note in
+- **Multimodal teaching (2026-11 foundation, synthetic-verified)**: a task-recipe
+  registry (`GET /api/recipes`) and modality plugins carry four teaching recipes — **vision
+  detection** (the original), **audio classification** (upload WAV clips, label each clip, freeze a
+  dataset version, train the `audio-wav-cnn` CPU backend; ONNX-or-torch artifact), **handwriting
+  OCR** (upload pictures of handwriting, type the corrected text, train the `ocr-trocr` backend that
+  fine-tunes Microsoft's published TrOCR reader with admin-gated, checksum-pinned downloads; the
+  ~258 MB starting model must be downloaded by an administrator; character-error-rate evaluation),
+  and **tabular prediction** (upload one CSV or XLSX file, choose the target column — the labels are
+  the file's columns — train the `tabular-sklearn` random-forest + gradient-boosting ensemble, and
+  score it on held-out rows it has never seen). All four run through the same
+  project/snapshot/run/candidate/approve lifecycle as vision. The audio and tabular recipes have
+  also been walked end-to-end with live `curl` against a real server to approved models. Honest
+  limits: all four recipes are verified on generated data only (sine tones, generated "handwriting"
+  PNGs, synthetic tables); model quality is unmeasured, no real recording, scan or business
+  spreadsheet has been taught, and no real-operator usability session has been run. See the 2026-11-19 note in
   [`ROADMAP.md`](ROADMAP.md) M3.
+- **Durable operation-execution workers (T19)**: the `OperationExecution` job table (migration 0027),
+  `POST /api/operation-release-bundles/<id>/executions`, and `manage.py operation_worker` /
+  `operation_supervisor` — lease-based claiming that is safe with multiple workers, expiry-based
+  recovery, and a finish-once guard. The execution step is a verified-replay placeholder (see the
+  operations paragraph above); T10 (live camera) builds on it next. Design record:
+  [`docs/plans/2026-11-19-t19-durable-workers.md`](docs/plans/2026-11-19-t19-durable-workers.md).
 
 ## What does not exist yet
 
 Rights/evidence review, a real-operator trace of the correction-to-new-model path (the pieces exist as a prototype: see
 [`docs/guides/improve-loop.md`](docs/guides/improve-loop.md)), connectors for any real scanner (only reference connectors exist),
-any measured accuracy on real imagery for the trained detector, auto-labelling, the audio classifier or the handwriting reader
-(all four are synthetic-verified only), real-operator usability evidence, and any
-runtime that executes an operation release bundle. Do not treat the console as a complete dataset manager.
+any measured accuracy on real imagery for the trained detector, auto-labelling, the audio classifier, the handwriting reader or
+the spreadsheet predictor (all four recipes are synthetic-verified only; model quality is unmeasured), a real-operator usability
+session, check-screen serving for audio and table models (check screens serve image models today — including text answers for the
+OCR reader — but an audio or table model cannot be put behind a check screen yet), and any runtime that executes an operation
+release bundle (the T19 worker replays recorded reference events; it does not run live video). Do not treat the console as a
+complete dataset manager.
 
 ## Licences
 

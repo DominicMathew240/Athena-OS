@@ -242,18 +242,17 @@ def cached_base_model_ok() -> bool:
 
 
 def _blocked_message() -> str:
-    """Why nothing could be fetched, and how to change it - the same rule as D-FINE's."""
-    try:
-        source = tv._download_source()
-    except Exception:  # noqa: BLE001 - the wording must never be the reason a run fails differently
-        source = "default"
-    how = tv.download_blocked_message(source)
+    """Why nothing could be fetched, and how to change it - the same rule as D-FINE's, but in this
+    backend's own words: it names the TrOCR checkpoint files and huggingface.co, not the vision
+    helper's torchvision checkpoints."""
+    how = tv.download_blocked_message(tv.steps_source("environment"))
+    files = _join(sorted(BASE_FILES))
     return (
         f"This run needs the ready-made handwriting reader ({BASE_MODEL_WHAT}, about {APPROX_MB} MB), but "
-        f"downloading is switched off on this computer. {how} Then run it again - the files are fetched once from "
-        f"{DOWNLOAD_HOSTS} at a pinned version, checked against pinned checksums, and kept in your Athena data "
-        "folder under models/pretrained/trocr. Starting from nothing is not offered for this tool. Read the licence "
-        "note first: the ready-made reader comes with its own terms."
+        f"downloading is switched off on this computer. {how} Then run it again - the {files} files are fetched once "
+        f"from {DOWNLOAD_HOSTS} at the pinned revision, checked against pinned checksums, and kept in your Athena "
+        "data folder under models/pretrained/trocr. Starting from nothing is not offered for this tool. Read the "
+        "licence note first: the ready-made reader comes with its own terms."
     )
 
 
