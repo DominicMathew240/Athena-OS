@@ -619,8 +619,9 @@ class LifecycleTests(TabularBase):
 
     def test_models_are_scoped_to_the_project_and_runs_route_only_with_a_plugin(self) -> None:
         model = self.train_candidate()
-        # A project whose data type has no plugin keeps the old 404s on these routes.
-        pluginless = Project.objects.create(name="Raw", modality="audio", task="x", labels=["a"])
+        # A project whose data type has no plugin and no available recipe keeps the old 404s
+        # here (speech has neither, unlike audio/table which Wave 1 gave real plugins).
+        pluginless = Project.objects.create(name="Raw", modality="speech", task="x", labels=["a"])
         self.assertEqual(self.client.get(self.api("/models", pluginless)).status_code, 404)
         self.assertEqual(self.client.get(self.api("/training/runs", pluginless)).status_code, 404)
         # A table project's models are reachable and scoped: only its own are listed.

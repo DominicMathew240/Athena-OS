@@ -14,7 +14,7 @@ from django.core.exceptions import ValidationError
 from django.test import TestCase, override_settings
 
 from . import tasks
-from .modalities import register_plugin, unregister_plugin
+from .modalities import get_plugin, register_plugin, unregister_plugin
 from .modalities.base import ModalityPlugin
 from .models import Asset, AssetAnnotation, ModelVersion, Project, TrainingRun
 from .tasks import DEFAULT_RECIPE_KEY, TaskRecipe, get_recipe, recipes, register_recipe, reload_recipes
@@ -70,8 +70,14 @@ class ModalFoundationBase(DatasetBase):
 
     def setUp(self) -> None:
         super().setUp()
+        # Replace the real table plugin for this test, but restore it afterwards: unregistering
+        # the modality outright would hide table support from every later test module.
+        original = get_plugin("table")
         register_plugin(FakeTablePlugin, replace=True)
-        self.addCleanup(unregister_plugin, "table")
+        if original is not None:
+            self.addCleanup(register_plugin, type(original), replace=True)
+        else:
+            self.addCleanup(unregister_plugin, "table")
 
     def make_table_project(self) -> Project:
         return Project.objects.create(
@@ -112,15 +118,11 @@ class RecipeRegistryTests(SignedInMixin, TestCase):
         found = recipes()
         self.assertIn("vision-detection", found)
         self.assertTrue(found["vision-detection"].available)
-        # Wave 1 landed both: the audio recipe (OS-AUD-001) and the handwriting-ocr recipe
-        # (OS-OCR-001) are available; only tabular-prediction stays a placeholder.
-        self.assertTrue(found["audio-classification"].available)
-        self.assertIn("handwriting-ocr", found)
-        self.assertTrue(found["handwriting-ocr"].available)
-        for key in ("tabular-prediction",):
+        # All four Wave 0/1 recipes are available: vision (the original), audio (OS-AUD-001),
+        # handwriting OCR (OS-OCR-001) and tabular prediction (OS-TAB-001).
+        for key in ("audio-classification", "handwriting-ocr", "tabular-prediction"):
             self.assertIn(key, found)
-            self.assertFalse(found[key].available)
-            self.assertTrue(found[key].unavailable_reason)
+            self.assertTrue(found[key].available, key)
 
     def test_get_recipe_returns_none_for_unknown_keys(self) -> None:
         self.assertIsNone(get_recipe("no-such-recipe"))

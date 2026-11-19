@@ -165,10 +165,10 @@ class RecipeTests(SignedInMixin, TestCase):
 
     def test_the_remaining_placeholder_stays_unavailable(self) -> None:
         found = recipes()
-        # audio-classification landed too (Wave 1, OS-AUD-001); only tabular-prediction is left.
-        self.assertTrue(found["audio-classification"].available)
-        self.assertFalse(found["tabular-prediction"].available)
-        self.assertTrue(found["vision-detection"].available)
+        # All four Wave 0/1 recipes have landed (vision, audio, OCR, tabular): no builtin
+        # recipe is a placeholder any more.
+        for key in ("audio-classification", "tabular-prediction", "vision-detection"):
+            self.assertTrue(found[key].available, key)
 
 
 # -- transcript annotations ----------------------------------------------------------------------------
