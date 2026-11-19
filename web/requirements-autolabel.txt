@@ -37,6 +37,16 @@ onnxruntime==1.20.1
 # admin-gated by the same "Ready-made model downloads" switch as every ready-made model, fetched from
 # huggingface.co/*.hf.co only, cached under <data home>/models/pretrained/trocr/. Nothing to add here.
 #
+# Excel-reading half of the tabular-prediction backend ("tabular-sklearn", projects/training/tabular_sklearn.py;
+# added 2026-11-19). pandas reads .csv tables on its own; reading an .xlsx workbook (pd.read_excel) needs openpyxl
+# as the engine, and NOTHING else in this tree imports it (checked 2026-11-19): CSV table training, the other four
+# backends and the web process all run without it. Without openpyxl an .xlsx run fails in plain words at the read
+# step, telling the operator to install it or upload a CSV. Licence: MIT (read from the installed
+# openpyxl-3.1.5.dist-info METADATA, which says `License: MIT` and carries the MIT classifier; the dist-info also
+# ships LICENCE.rst, the same text). Its one transitive, et-xmlfile (MIT), comes with it. Listed in
+# THIRD_PARTY_NOTICES.md and docs/LICENSE_AUDIT.md (addendum 2026-11-19).
+openpyxl==3.1.5
+
 # PENDING (do not add yet): the tabular-prediction slice (in flight, not on main) is expected to need
 # scikit-learn (BSD-3-Clause), pandas (BSD-3-Clause) and joblib (BSD-3-Clause). Nothing in this tree imports them
 # today (checked 2026-11-19); add pins here and rows in docs/LICENSE_AUDIT.md only when that slice lands.

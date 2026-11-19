@@ -76,9 +76,48 @@ def _available_report(evaluation: dict[str, Any]) -> dict[str, Any]:
     }
 
 
+OCR_EVALUATION_SCHEMA = "athena.ocr-evaluation/1"
+"""The handwriting reader's stored evaluation shape (``training/ocr_trocr.py``): CER and word accuracy
+per held-out picture, not boxes. ``summary`` reads it in its own words when a model carries it."""
+
+
+def _ocr_summary(evaluation: dict[str, Any]) -> dict[str, Any] | None:
+    """The few numbers shown next to a handwriting reader in lists, from its CER-shaped evaluation.
+
+    ``None`` when the evaluation does not carry the OCR schema (the caller falls back to the box
+    reader); ``available: False`` with a reason when it carries it but cannot be read."""
+    if evaluation.get("schema") != OCR_EVALUATION_SCHEMA:
+        return None
+    if not evaluation.get("available"):
+        return {"available": False, "reason": evaluation.get("reason", "No held-out evaluation exists.")}
+    try:
+        cer = float(evaluation["cer"])
+        words = evaluation.get("word_accuracy")
+        pictures = int(evaluation["counts"]["test_pictures"])
+    except (KeyError, TypeError, ValueError):
+        return {"available": False, "reason": _UNREADABLE_EVALUATION_REASON}
+    from .ocr_trocr import plain_language_from_cer
+
+    wrong = max(0.0, min(100.0, round(cer * 100)))
+    return {
+        "available": True,
+        "task": "handwriting-ocr",
+        "test_pictures": pictures,
+        "cer": round(cer, 4),
+        "word_accuracy": round(float(words), 4) if isinstance(words, (int, float)) else None,
+        # The measured sentence, in the style of operating_points.odds_label ("right about 3 in 4
+        # times in our check"): the check screen shows this string as the summary, not jargon.
+        "plain_language": plain_language_from_cer(cer, words if isinstance(words, (int, float)) else None),
+        "measured": f"In our check, about {wrong:.0f} in 100 characters were wrong.",
+    }
+
+
 def summary(evaluation: dict[str, Any] | None) -> dict[str, Any]:
     """The few numbers shown next to a model in lists; the full report has the rest."""
     evaluation = evaluation if isinstance(evaluation, dict) else {}
+    if evaluation.get("schema") == OCR_EVALUATION_SCHEMA:
+        # A handwriting reader: CER-shaped, not box-shaped; read it in its own words.
+        return _ocr_summary(evaluation) or {"available": False, "reason": _UNREADABLE_EVALUATION_REASON}
     if not evaluation.get("available"):
         return {"available": False, "reason": evaluation.get("reason", "No held-out evaluation exists.")}
     try:

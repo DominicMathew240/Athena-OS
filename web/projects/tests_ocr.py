@@ -511,20 +511,128 @@ class BackendRulesTests(OcrBase):
         os.environ.pop(tv.DOWNLOAD_ENV, None)
         self.assertTrue(self.backend.start_options(WORKER_OFF)[0]["available"])
 
+    def _fake_pins(self, content: bytes = b"fake-bytes"):
+        """Patch the pinned table so that ``content`` + the file's name is each file's 'published' content."""
+        from .training import ocr_trocr
+
+        files = {
+            name: {"sha256": hashlib.sha256(content + name.encode()).hexdigest(), "bytes": len(content) + len(name)}
+            for name in ocr_trocr.BASE_FILES
+        }
+        payload = lambda name: content + name.encode()  # noqa: E731 - what the "publisher" serves
+        return mock.patch.object(ocr_trocr, "BASE_FILES", files), payload
+
     def test_a_cached_model_is_usable_with_downloads_off(self) -> None:
         from .training import ocr_trocr
 
+        patch, payload = self._fake_pins()
+        with patch:
+            folder = ocr_trocr.base_model_dir()
+            folder.mkdir(parents=True)
+            for name in ocr_trocr.BASE_FILES:
+                (folder / name).write_bytes(payload(name))
+            self.assertTrue(ocr_trocr.cached_base_model_ok())
+            with mock.patch.object(ocr_trocr, "_fetch_file", side_effect=AssertionError("network")):
+                provenance = ocr_trocr.ensure_base_model()  # no download, no refusal
+            self.assertEqual(provenance["from"], "cache")
+            self.assertEqual(provenance["revision"], ocr_trocr.REVISION)
+            [option] = self.backend.start_options(WORKER_OFF)
+            self.assertTrue(option["available"] and option["ready"])
+
+    def test_urls_are_pinned_to_the_commit_not_a_moving_branch(self) -> None:
+        from .training import ocr_trocr
+
+        self.assertEqual(set(ocr_trocr.BASE_FILES), {"config.json", "preprocessor_config.json", "pytorch_model.bin"})
+        for name in ocr_trocr.BASE_FILES:
+            with self.subTest(name=name):
+                self.assertEqual(
+                    ocr_trocr.file_url(name),
+                    f"https://huggingface.co/microsoft/trocr-small-handwritten/resolve/{ocr_trocr.REVISION}/{name}",
+                )
+        self.assertNotIn("/main/", ocr_trocr.file_url("config.json"))
+
+    def test_a_corrupt_or_wrong_size_cached_file_is_not_trusted(self) -> None:
+        from .training import ocr_trocr
+
+        patch, payload = self._fake_pins()
+        with patch:
+            folder = ocr_trocr.base_model_dir()
+            folder.mkdir(parents=True)
+            for name in ocr_trocr.BASE_FILES:
+                (folder / name).write_bytes(payload(name))
+            self.assertTrue(ocr_trocr.cached_base_model_ok())
+            weights = "pytorch_model.bin"
+            (folder / weights).write_bytes(b"y" * len(payload(weights)))
+            self.assertFalse(ocr_trocr.cached_base_model_ok())  # same size, other bytes: the SHA-256 catches it
+            (folder / "config.json").write_bytes(b"short")
+            self.assertFalse(ocr_trocr.cached_base_model_ok())  # wrong size is caught before any hashing
+
+    def test_downloads_on_fetch_each_pinned_file_once_then_use_the_cache(self) -> None:
+        from .training import ocr_trocr
+
+        patch, payload = self._fake_pins()
+
+        def fake_fetch(name, target):
+            target.parent.mkdir(parents=True, exist_ok=True)
+            target.write_bytes(payload(name))
+
+        with patch, mock.patch.object(ocr_trocr, "_fetch_file", side_effect=fake_fetch) as fetch:
+            os.environ["ATHENA_TRAINING_ALLOW_DOWNLOAD"] = "1"
+            first = ocr_trocr.ensure_base_model()
+            second = ocr_trocr.ensure_base_model()
+        self.assertEqual(fetch.call_count, 3)  # one per pinned file, only on the first call
+        self.assertEqual([call.args[0] for call in fetch.call_args_list], list(ocr_trocr.BASE_FILES))
+        self.assertEqual((first["from"], second["from"]), ("download", "cache"))
+        self.assertEqual(first["revision"], ocr_trocr.REVISION)
+        self.assertEqual(first["sha256"], hashlib.sha256(payload("pytorch_model.bin")).hexdigest())
+        self.assertEqual(first["bytes"], len(payload("pytorch_model.bin")))
+        self.assertEqual(set(first["files"]), set(ocr_trocr.BASE_FILES))
+
+    def test_a_file_that_does_not_match_its_pinned_checksum_is_discarded(self) -> None:
+        from .training import ocr_trocr
+
+        class Response:
+            def __init__(self, data: bytes) -> None:
+                self.data = data
+
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self, size=-1):
+                chunk, self.data = self.data[:max(0, size)], self.data[max(0, size):]
+                return chunk
+
+        patch, payload = self._fake_pins()
+        # The server serves the right number of bytes but the wrong ones for every file.
+        with patch, mock.patch("urllib.request.OpenerDirector.open", return_value=Response(b"z" * len(payload("config.json")))):
+            os.environ["ATHENA_TRAINING_ALLOW_DOWNLOAD"] = "1"
+            with self.assertRaises(ValueError) as caught:
+                ocr_trocr.ensure_base_model()
+        self.assertIn("did not match its pinned checksum", str(caught.exception))
         folder = ocr_trocr.base_model_dir()
-        folder.mkdir(parents=True)
-        for name in ("config.json", "preprocessor_config.json"):
-            (folder / name).write_text("{}")
-        (folder / "model.safetensors").write_bytes(b"x" * 2_000_000)  # above the plausibility floor
-        self.assertTrue(ocr_trocr.cached_base_model_ok())
-        with mock.patch.object(ocr_trocr, "_fetch_file", side_effect=AssertionError("network")):
-            provenance = ocr_trocr.ensure_base_model()  # no download, no refusal
-        self.assertEqual(provenance["from"], "cache")
-        [option] = self.backend.start_options(WORKER_OFF)
-        self.assertTrue(option["available"] and option["ready"])
+        self.assertEqual(list(folder.iterdir()), [])  # nothing survived
+
+    def test_a_download_larger_than_the_pinned_size_is_cut_off(self) -> None:
+        from .training import ocr_trocr
+
+        class Endless:
+            def __enter__(self):
+                return self
+
+            def __exit__(self, *args):
+                return False
+
+            def read(self, size=-1):
+                return b"x" * 1024  # keeps sending forever
+
+        with mock.patch("urllib.request.OpenerDirector.open", return_value=Endless()):
+            os.environ["ATHENA_TRAINING_ALLOW_DOWNLOAD"] = "1"
+            with self.assertRaises(ValueError) as caught:
+                ocr_trocr._fetch_file("config.json", ocr_trocr.base_model_dir() / "config.json")
+        self.assertIn("larger than expected", str(caught.exception))
 
 
 # -- a tiny run with a stubbed model (nothing is downloaded; the network is refused) --------------------
@@ -665,8 +773,9 @@ class TinyRunTests(OcrBase):
         self.patches = [
             mock.patch.object(ocr_trocr, "ensure_base_model", return_value={
                 "repo_id": "microsoft/trocr-small-handwritten", "what": "tiny test model",
-                "source_url": "https://example.invalid/model.safetensors", "sha256": "0" * 64,
-                "licence_declared": "mit (model card)", "from": "cache",
+                "revision": ocr_trocr.REVISION, "source_url": "https://example.invalid/pytorch_model.bin",
+                "sha256": "0" * 64, "bytes": 1, "files": {}, "licence_declared": "mit (model card)",
+                "from": "cache",
             }),
             mock.patch.object(ocr_trocr.OcrTrOCRBackend, "_load_base_model", staticmethod(tiny_model_and_processor)),
             mock.patch.object(ocr_trocr.OcrTrOCRBackend, "_rebuild", staticmethod(lambda checkpoint: tiny_model_and_processor())),
@@ -761,8 +870,9 @@ class RunnerIntegrationTests(OcrBase):
         for patch in (
             mock.patch.object(ocr_trocr, "ensure_base_model", return_value={
                 "repo_id": "microsoft/trocr-small-handwritten", "what": "tiny test model",
-                "source_url": "https://example.invalid/model.safetensors", "sha256": "0" * 64,
-                "licence_declared": "mit (model card)", "from": "cache",
+                "revision": ocr_trocr.REVISION, "source_url": "https://example.invalid/pytorch_model.bin",
+                "sha256": "0" * 64, "bytes": 1, "files": {}, "licence_declared": "mit (model card)",
+                "from": "cache",
             }),
             mock.patch.object(ocr_trocr.OcrTrOCRBackend, "_load_base_model", staticmethod(tiny_model_and_processor)),
             mock.patch.object(ocr_trocr.OcrTrOCRBackend, "_rebuild", staticmethod(lambda checkpoint: tiny_model_and_processor())),

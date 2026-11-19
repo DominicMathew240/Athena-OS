@@ -179,9 +179,68 @@ class OutputModeConfigTests(OcrInferenceBase):
         preview = self.client.get(self.ocr_url(app["id"], "/preview")).json()["preview"]
         self.assertEqual(preview["output"], "text")
         self.assertEqual(preview["model"]["id"], str(self.ocr_model.id))
-        # the summary block is the box-shaped one and says honestly it cannot read a CER report;
+        # the summary block is CER-aware: the reader's stored evaluation is read in its own words
+        self.assertEqual(preview["model"]["evaluation"]["available"], True)
+        self.assertIn("in 100 characters were wrong", preview["model"]["evaluation"]["measured"])
+
+    def test_the_check_screen_summary_is_cer_aware_not_box_shaped(self) -> None:
+        """An OCR model's evaluation (CER etc.) renders a plain-language summary, not box metrics."""
+        app = self.make_ocr_app()
+        preview = self.client.get(self.ocr_url(app["id"], "/preview")).json()["preview"]
+        evaluation = preview["model"]["evaluation"]
+        # the measured wording, in the check screen's "in our check" style (docs/guides/model-quality.md)
+        self.assertEqual(evaluation["measured"], "In our check, about 8 in 100 characters were wrong.")
+        self.assertEqual(
+            evaluation["plain_language"],
+            "Out of every 100 characters of real handwriting, about 8 came out wrong (about 92 right). "
+            "About 91 in 100 of the words were read correctly.",
+        )
+        self.assertEqual((evaluation["task"], evaluation["test_pictures"]), ("handwriting-ocr", 3))
+        self.assertEqual((evaluation["cer"], evaluation["word_accuracy"]), (0.08, 0.91))
+        # no box vocabulary leaks into a text model's summary
+        for box_key in ("test_boxes", "precision", "recall", "map50", "confidence_threshold"):
+            self.assertNotIn(box_key, evaluation)
         # the reading itself carries no score to summarize
+        observation_id = self.run_reading(app["id"])
+        result = self.reading_result(app["id"], observation_id)
+        self.assertEqual(result["model"]["evaluation"], evaluation)
+
+    def test_a_vision_model_s_summary_is_unchanged_by_the_cer_reader(self) -> None:
+        """The box summary keeps its exact shape; only the transcripts recipe is read in CER words."""
+        app = self.make_app()  # the vision model from InferenceBase
+        preview = self.client.get(self.apps_url(f"/{app['id']}/preview")).json()["preview"]
+        self.assertEqual(
+            preview["model"]["evaluation"],
+            {
+                "available": True,
+                "test_images": self.model.evaluation["data"]["images"],
+                "test_boxes": self.model.evaluation["data"]["boxes"],
+                "precision": self.model.evaluation["overall"]["precision"],
+                "recall": self.model.evaluation["overall"]["recall"],
+                "map50": self.model.evaluation["overall"]["map50"],
+                "confidence_threshold": self.model.evaluation["confidence_threshold"],
+            },
+        )
+
+    def test_a_reader_with_no_held_out_pictures_says_why_in_plain_words(self) -> None:
+        self.ocr_model = self.set_evaluation(self.ocr_model, {
+            "schema": "athena.ocr-evaluation/1", "available": False,
+            "reason": "The dataset version's test split has no pictures, so there is nothing held out to measure against.",
+        })
+        app = self.make_ocr_app()
+        preview = self.client.get(self.ocr_url(app["id"], "/preview")).json()["preview"]
         self.assertEqual(preview["model"]["evaluation"]["available"], False)
+        self.assertIn("nothing held out to measure against", preview["model"]["evaluation"]["reason"])
+
+    def test_a_damaged_ocr_evaluation_says_it_cannot_be_read(self) -> None:
+        self.ocr_model = self.set_evaluation(
+            self.ocr_model,
+            {"schema": "athena.ocr-evaluation/1", "available": True, "counts": None, "cer": None},
+        )
+        app = self.make_ocr_app()
+        preview = self.client.get(self.ocr_url(app["id"], "/preview")).json()["preview"]
+        self.assertEqual(preview["model"]["evaluation"]["available"], False)
+        self.assertIn("could not be read", preview["model"]["evaluation"]["reason"])
 
     def test_a_vision_model_is_served_in_boxes_mode(self) -> None:
         app = self.make_app()  # the vision model from InferenceBase

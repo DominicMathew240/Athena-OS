@@ -380,8 +380,9 @@ class OcrOneClickSnapshotTests(TeachGeneralBase):
         for patch in (
             mock.patch.object(ocr_trocr, "ensure_base_model", return_value={
                 "repo_id": "microsoft/trocr-small-handwritten", "what": "tiny test model",
-                "source_url": "https://example.invalid/model.safetensors", "sha256": "0" * 64,
-                "licence_declared": "mit (model card)", "from": "cache",
+                "revision": ocr_trocr.REVISION, "source_url": "https://example.invalid/pytorch_model.bin",
+                "sha256": "0" * 64, "bytes": 1, "files": {}, "licence_declared": "mit (model card)",
+                "from": "cache",
             }),
             mock.patch.object(ocr_trocr.OcrTrOCRBackend, "_load_base_model", staticmethod(tiny_model_and_processor)),
             mock.patch.object(ocr_trocr.OcrTrOCRBackend, "_rebuild", staticmethod(lambda checkpoint: tiny_model_and_processor())),

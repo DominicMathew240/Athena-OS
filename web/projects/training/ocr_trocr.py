@@ -17,9 +17,10 @@ small processor spec, so a run's model is one verifiable file, like the other ba
 Download gating: fine-tuning needs the pretrained TrOCR weights. They are fetched only when
 the same administrator switch that governs every ready-made model download is on (the console's
 "Ready-made model downloads", or ATHENA_TRAINING_ALLOW_DOWNLOAD=1 in the training helper's
-environment - see ``torchvision_frcnn.downloads_allowed``), from huggingface.co only, at a
-pinned revision, and cached under ``<data home>/models/pretrained/trocr/``. The Teach start
-option carries the licence note and needs the acknowledgement tick, exactly like D-FINE's.
+environment - see ``torchvision_frcnn.downloads_allowed``), from huggingface.co only, at a pinned
+revision (a commit SHA, never a moving branch), with every file checked against its pinned size
+and SHA-256, and cached under ``<data home>/models/pretrained/trocr/``. The Teach start option
+carries the licence note and needs the acknowledgement tick, exactly like D-FINE's.
 
 Module import is torch-free; torch and transformers are imported inside the worker's calls.
 """
@@ -49,8 +50,11 @@ from .base import (
 
 # -- the one model this backend fine-tunes ------------------------------------------------------------------
 DEFAULT_BASE_MODEL = "microsoft/trocr-small-handwritten"
+REVISION = "b4648cfa171985a6745f37ddd637e98c0da958ac"
+"""The exact commit of the repository the weights are fetched from (never a moving branch); the
+file hashes it pairs with live in ``BASE_FILES`` below."""
 APPROX_MB = 258
-"""config.json + preprocessor_config.json + tokenizer files + model.safetensors of the small
+"""config.json + preprocessor_config.json + the pytorch_model.bin weights of the small
 handwritten checkpoint add up to roughly this; shown before a download, so it leans high."""
 BASE_MODEL_WHAT = "TrOCR small (about 62 million parameters), Microsoft's published handwriting reader"
 MAX_TARGET_LENGTH = 64
@@ -80,11 +84,11 @@ LICENSE_NOTE = (
     "(this repository). Weights: the base model is microsoft/trocr-small-handwritten, whose model card "
     "(huggingface.co/microsoft/trocr-small-handwritten) declares `license: mit`; the fine-tuned model you get is "
     "derived from it and from your own pictures. It is fetched only when downloads are switched on "
-    "(ATHENA_TRAINING_ALLOW_DOWNLOAD=1 or the console's Ready-made model downloads switch), at a pinned revision, "
-    "and cached in your Athena data folder. The MIT declaration is the model repository's own licence statement, "
-    "quoted as the publisher wrote it; this is an engineering note, not legal advice and not a clearance for "
-    "commercial use. Models you train also derive from your own pictures; check you have the right to use those "
-    "pictures. " + LAWYER
+    "(ATHENA_TRAINING_ALLOW_DOWNLOAD=1 or the console's Ready-made model downloads switch), at the pinned revision "
+    f"{REVISION} with every file checked against a pinned SHA-256, and cached in your Athena data folder. The MIT "
+    "declaration is the model repository's own licence statement, quoted as the publisher wrote it; this is an "
+    "engineering note, not legal advice and not a clearance for commercial use. Models you train also derive from "
+    "your own pictures; check you have the right to use those pictures. " + LAWYER
 )
 START_TEXT = {
     "title": "Start from a ready-made handwriting reader (TrOCR)",
@@ -176,8 +180,22 @@ def plain_language_from_cer(cer: float, words_correct: float | None = None) -> s
 
 # -- the base model: pinned, verified, downloaded only when allowed -------------------------------------------
 PINNED_HOSTS = tv.AllowedHosts(("huggingface.co",), (".hf.co",), DOWNLOAD_HOSTS)
-_BASE_FILES = ("config.json", "preprocessor_config.json", "model.safetensors")
-_VERIFIED: dict[tuple[str, int, int], bool] = {}
+BASE_FILES: dict[str, dict[str, Any]] = {
+    "config.json": {"sha256": "1e12191191977ca7b70d39b8aa7ab10080c751d4", "bytes": 4211},
+    "preprocessor_config.json": {"sha256": "8acdb9d2d64bc6a881a04d3682f2a696bce75492", "bytes": 272},
+    "pytorch_model.bin": {
+        "sha256": "1b83102cbc1520dee1c3937ac334da83da18cf4683d46ebd1bd4e93ebe584dd7",
+        "bytes": 245_933_041,
+    },
+}
+"""Verified 2026-11-19 from https://huggingface.co/api/models/microsoft/trocr-small-handwritten (the
+``main`` revision's commit ``sha`` and file list) and its ``/tree/main`` listing: ``pytorch_model.bin``
+is an LFS file whose ``oid`` is its SHA-256 and whose ``size`` is 245,933,041; the repository has NO
+``model.safetensors`` (a ``/resolve/main/model.safetensors`` request returns 404). The JSON files'
+SHA-256 values are of the bytes served at the pinned revision (the resolve URLs' ETags quoted the
+same digests). These are the only files the backend downloads; ``from_pretrained`` on the cache
+folder reads them without further network access."""
+_VERIFIED: dict[tuple[str, int, int, str], bool] = {}
 
 
 def base_model_dir() -> Path:
@@ -185,39 +203,42 @@ def base_model_dir() -> Path:
 
 
 def file_url(name: str) -> str:
-    return f"{HF_HOST}/{DEFAULT_BASE_MODEL}/resolve/main/{name}"
+    return f"{HF_HOST}/{DEFAULT_BASE_MODEL}/resolve/{REVISION}/{name}"
 
 
 def _sha256(path: Path) -> str:
     return tv._sha256(path)  # noqa: SLF001 - the one hashing helper, shared on purpose
 
 
+def _file_ok(path: Path, expected: dict[str, Any]) -> bool:
+    try:
+        return path.is_file() and path.stat().st_size == expected["bytes"] and _sha256(path) == expected["sha256"]
+    except OSError:
+        return False
+
+
 def _files_ok(folder: Path) -> bool:
-    for name in _BASE_FILES:
-        path = folder / name
-        if not path.is_file():
+    for name, expected in BASE_FILES.items():
+        if not _file_ok(folder / name, expected):
             return False
     return True
 
 
 def cached_base_model_ok() -> bool:
-    """True when every file the ``from_pretrained`` call reads is in the cache.
-
-    Hugging Face checks each file's recorded size against the local copy, so presence plus a
-    successful fine-tune is the practical test; the safetensors file is additionally hashed
-    once per (size, mtime) so a swapped file is noticed."""
+    """True when every pinned file is in the cache and matches its pinned SHA-256 (memoised per stat)."""
     folder = base_model_dir()
-    if not _files_ok(folder):
-        return False
-    weights = folder / "model.safetensors"
-    try:
-        stat = weights.stat()
-    except OSError:
-        return False
-    key = (str(weights), stat.st_size, stat.st_mtime_ns)
-    if key not in _VERIFIED:
-        _VERIFIED[key] = weights.stat().st_size > 1_000_000  # the real checkpoint is ~250 MB
-    return _VERIFIED[key]
+    for name, expected in BASE_FILES.items():
+        path = folder / name
+        try:
+            stat = path.stat()
+        except OSError:
+            return False
+        key = (str(path), stat.st_size, stat.st_mtime_ns, expected["sha256"])
+        if key not in _VERIFIED:
+            _VERIFIED[key] = _file_ok(path, expected)
+        if not _VERIFIED[key]:
+            return False
+    return True
 
 
 def _blocked_message() -> str:
@@ -230,18 +251,22 @@ def _blocked_message() -> str:
     return (
         f"This run needs the ready-made handwriting reader ({BASE_MODEL_WHAT}, about {APPROX_MB} MB), but "
         f"downloading is switched off on this computer. {how} Then run it again - the files are fetched once from "
-        f"{DOWNLOAD_HOSTS}, checked against the sizes Hugging Face records for them, and kept in your Athena data "
+        f"{DOWNLOAD_HOSTS} at a pinned version, checked against pinned checksums, and kept in your Athena data "
         "folder under models/pretrained/trocr. Starting from nothing is not offered for this tool. Read the licence "
         "note first: the ready-made reader comes with its own terms."
     )
 
 
 def _fetch_file(name: str, destination: Path) -> None:
-    """Download one base-model file through the restricted opener; the size cap is generous
-    because only ``model.safetensors`` is large (the rest are tiny JSON/text files)."""
+    """Download one base-model file through the restricted opener and check its pinned SHA-256.
+
+    The D-FINE backend's fetch, with the same cut-off-one-byte-past-the-pinned-size rule and the
+    same fresh, never-followed ``.part`` file. Tests replace this."""
+    import hashlib
+    import os
     import urllib.error
 
-    limit = APPROX_MB * 1024 * 1024 + 1
+    expected = BASE_FILES[name]
     partial = destination.with_name(destination.name + ".part")
     try:
         try:
@@ -252,23 +277,33 @@ def _fetch_file(name: str, destination: Path) -> None:
                 "this computer's internet access and try again."
             ) from None
         with response:
-            destination.parent.mkdir(parents=True, exist_ok=True)
-            partial.unlink(missing_ok=True)
-            with open(partial, "wb") as out:
+            try:
+                destination.parent.mkdir(parents=True, exist_ok=True)
+                partial.unlink(missing_ok=True)  # never reuse or follow something that was already there
+                flags = os.O_WRONLY | os.O_CREAT | os.O_EXCL | getattr(os, "O_NOFOLLOW", 0) | getattr(os, "O_BINARY", 0)
+                out = os.fdopen(os.open(partial, flags, 0o644), "wb")
+            except OSError as error:
+                raise ValueError(
+                    f"Could not save the handwriting reader on this computer ({error.__class__.__name__})."
+                ) from None
+            with out:
+                digest = hashlib.sha256()
                 total = 0
                 while True:
-                    chunk = response.read(min(1 << 20, limit - total))
+                    chunk = response.read(min(1 << 20, expected["bytes"] + 1 - total))
                     if not chunk:
                         break
                     total += len(chunk)
-                    if total > limit:
+                    if total > expected["bytes"]:
                         raise ValueError(
-                            f"The download of {name} was larger than expected, so it was stopped and discarded."
+                            f"The download of {name} was larger than expected ({expected['bytes']:,} bytes), so it "
+                            "was stopped and discarded."
                         )
+                    digest.update(chunk)
                     out.write(chunk)
-        if name == "model.safetensors" and partial.stat().st_size < 1_000_000:
+        if digest.hexdigest() != expected["sha256"]:
             raise ValueError(
-                f"The downloaded {name} is far smaller than the published model, so it was discarded."
+                f"The downloaded {name} did not match its pinned checksum, so it was discarded."
             )
         partial.replace(destination)
     finally:
@@ -281,32 +316,37 @@ def _fetch_file(name: str, destination: Path) -> None:
 def ensure_base_model() -> dict[str, Any]:
     """Make sure the pinned TrOCR base model is cached; returns provenance for the run record.
 
-    Nothing is fetched unless downloads are switched on (the same switch as every backend).
-    ``from_pretrained`` verifies each file against the sizes and (for safetensors) the
-    checksums the repository records, which is what the fine-tune is trusted to."""
+    Nothing is fetched unless downloads are switched on (the same switch as every backend). Files
+    that are already cached and match their pinned SHA-256 are used without it. A stale or corrupt
+    file is replaced."""
     folder = base_model_dir()
     source = "cache"
-    if not cached_base_model_ok():
+    for name in BASE_FILES:
+        target = folder / name
+        if _file_ok(target, BASE_FILES[name]):
+            continue
         if not tv.downloads_allowed():
             raise ValueError(_blocked_message())
-        for name in _BASE_FILES:
-            target = folder / name
-            try:
-                if target.is_dir():
-                    raise ValueError(
-                        f"Athena cannot save the model file {name}: a folder with that name is in its place under "
-                        "models/pretrained/trocr in the Athena data folder. Remove or rename it and run it again."
-                    )
-                target.unlink(missing_ok=True)  # a stale or corrupt file must not survive
-            except OSError as error:
-                raise ValueError(f"Could not save the handwriting reader on this computer ({error.__class__.__name__}).") from None
-            _fetch_file(name, target)
+        try:
+            target.unlink(missing_ok=True)  # a stale or corrupt file must not survive
+        except OSError as error:
+            if target.is_dir() and not target.is_symlink():
+                raise ValueError(
+                    f"Athena cannot save the model file {name}: a folder with that name is in its place under "
+                    "models/pretrained/trocr in the Athena data folder. Remove or rename it and run it again."
+                ) from None
+            raise ValueError(f"Could not save the handwriting reader on this computer ({error.__class__.__name__}).") from None
+        _fetch_file(name, target)
         source = "download"
+    weights = BASE_FILES["pytorch_model.bin"]
     return {
         "repo_id": DEFAULT_BASE_MODEL,
+        "revision": REVISION,
         "what": BASE_MODEL_WHAT,
-        "source_url": file_url("model.safetensors"),
-        "sha256": _sha256(folder / "model.safetensors"),
+        "source_url": file_url("pytorch_model.bin"),
+        "sha256": weights["sha256"],
+        "bytes": weights["bytes"],
+        "files": {name: expected["sha256"] for name, expected in BASE_FILES.items()},
         "licence_declared": "mit (model card)",
         "from": source,
     }

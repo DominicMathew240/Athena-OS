@@ -2113,6 +2113,64 @@ await step("check screen: scores are worded from what was measured, or shown as 
   }
 });
 
+/* A text-answer screen (a handwriting reader): the same check-screen page with output "text". The seeded project's
+   screen finds boxes, so the preview is STUBBED into the text shape exactly as the server would send it (output
+   "text", the CER-aware model block, no score bands), and the reading is stubbed the way the box steps stub theirs. */
+await step("text screen: the reading, the banner and the decision buttons render (STUBBED preview and result)", async () => {
+  const appId = await appIdFor(opts.slug);
+  const preview = (await page.evaluate(async ([project, id]) => (await (await fetch(`/api/projects/${project}/inference/apps/${id}/preview`)).json()).preview, [opts.projectId, appId]));
+  const READING = "selamat pagi";
+  const textPreview = {
+    ...preview,
+    output: "text",
+    // the CER-aware evaluation the render model builds for a transcripts model (training/report.py)
+    model: { ...preview.model, evaluation: {
+      available: true, task: "handwriting-ocr", test_pictures: 3, cer: 0.08, word_accuracy: 0.91,
+      plain_language: "Out of every 100 characters of real handwriting, about 8 came out wrong (about 92 right). About 91 in 100 of the words were read correctly.",
+      measured: "In our check, about 8 in 100 characters were wrong." } },
+    // a reading carries no score, so the render model sends the unmeasured wording block
+    confidence_wording: UNMEASURED_WORDING,
+    suggested_threshold: { value: null, target_recall: null, basis: "not measured", enough_data: false, plain: "No cut-off is suggested: this model reads text and has no score to cut off." },
+  };
+  const OBS = "00000000-0000-4000-8000-0000000000c7";
+  let decision = null;
+  const render = () => ({ render: { ...textPreview, result: {
+    observation_id: OBS, status: "succeeded", state: "needs_review", status_text: "Please look closely", awaiting_human_decision: true, machine_state: null,
+    text_answer: { text: READING, confidence: null },
+    detections: [], hidden_below_threshold: 0, hidden_other_labels: 0, decision, result_rejected: false, feedback: [],
+    image: { sha256: "x", width: 1, height: 1, content_type: "image/png", filename: "p.png" }, created_at: new Date().toISOString(), created_by: "u1", error: "" } } });
+  const posts = [];
+  await page.route(`**/inference/apps/${appId}/preview`, (route) => route.fulfill({ json: { preview: textPreview } }));
+  await page.route("**/inference/apps/*/run", (route) => route.fulfill({ status: 202, json: { observation_id: OBS, worker_online: true } }));
+  await page.route(`**/inference/apps/*/observations/${OBS}`, (route) => route.fulfill({ json: render() }));
+  await page.route(`**/inference/apps/*/observations/${OBS}/image`, (route) => route.fulfill({ contentType: "image/png", body: TINY_PNG }));
+  await page.route(`**/inference/apps/*/observations/${OBS}/decision`, (route) => { const sent = JSON.parse(route.request().postData() || "{}"); posts.push(route.request().postData()); decision = { decision: sent.decision, at: new Date().toISOString(), note: sent.note || "" }; route.fulfill({ json: render() }); });
+  try {
+    await go(`${BASE}/check/${opts.slug}`);
+    await page.waitForFunction(() => (document.getElementById("cs-title")?.textContent || "").trim().length > 0, null, { timeout: 15000 });
+    const text = (selector) => page.evaluate((s) => document.querySelector(s).textContent, selector);
+    await page.setInputFiles("#cs-file", { name: "note.png", mimeType: "image/png", buffer: TINY_PNG });
+    await page.click("#cs-check");
+    await page.waitForSelector("#cs-text-answer:not([hidden])", { timeout: 15000 });
+    expect((await text("#cs-text-h")).trim() === "What the computer read", "the transcript block is headed “What the computer read”", `heading: ${await text("#cs-text-h")}`);
+    expect((await text("#cs-text-content")).trim() === READING, "the transcript itself is shown", `reading: ${await text("#cs-text-content")}`);
+    expect(await page.evaluate(() => document.getElementById("cs-text-empty").hidden), "the “read no writing” fallback stays hidden when there is text");
+    expect(/Not a final decision/.test(await page.evaluate(() => document.querySelector(".cs-not-final").textContent)), "the “not a final decision” banner stays", `banner: ${await page.evaluate(() => document.querySelector(".cs-not-final").textContent)}`);
+    const decisions = await page.evaluate(() => [...document.querySelectorAll("#cs-decision-buttons button")].map((button) => button.dataset.decision));
+    expect(decisions.length === 3 && decisions.includes("confirm") && decisions.includes("reject") && decisions.includes("needs_second_look"), "the three decision buttons render (confirm, reject, needs a second look)", `buttons: ${JSON.stringify(decisions)}`);
+    // a decision on the whole reading: confirm sends one request and the page records it
+    await page.locator('button[data-decision="confirm"]').click();
+    await page.waitForFunction(() => /Recorded: You confirmed this result/.test(document.getElementById("cs-recorded").textContent), null, { timeout: 10000 });
+    expect(posts.length === 1, "one decision request was sent", `posts: ${posts.length}`);
+    const banner = await page.evaluate(() => document.getElementById("cs-text-feedback-note").innerText);
+    expect(/About your decisions/.test(banner) && /not change the computer model/.test(banner), "the text-screen's own note at the bottom of the result", `banner: ${banner}`);
+    await audit("text screen with a reading");
+    await fieldSizesAtWidths("text screen with a reading");
+  } finally {
+    for (const pattern of [`**/inference/apps/${appId}/preview`, "**/inference/apps/*/run", `**/inference/apps/*/observations/${OBS}`, `**/inference/apps/*/observations/${OBS}/image`, `**/inference/apps/*/observations/${OBS}/decision`]) await page.unroute(pattern).catch(() => {});
+  }
+});
+
 await step("check-screen builder: a suggested setting is offered only when it is measured, and never applied by itself (STUBBED preview)", async () => {
   const appId = await appIdFor(opts.slug);
   let hint = { value: 0.235, target_recall: 0.8, basis: "validation split", enough_data: true, plain: "A cut-off of 0.235 found 80% of the 630 boxes on the Checking pictures. A person chooses the setting." };
