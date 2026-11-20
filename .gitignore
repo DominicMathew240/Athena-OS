@@ -45,3 +45,6 @@ credentials.json
 # Local notes and preview-platform files must never ship
 memory/
 .emergent/
+
+# local frontend build artifacts (no source in frontend/)
+frontend/
