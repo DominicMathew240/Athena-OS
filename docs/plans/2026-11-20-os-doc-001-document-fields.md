@@ -1,76 +1,117 @@
-# OS-DOC-001 (Wave 2, documents slice): Structured document-field extraction and table evaluation
+# OS-DOC-001 — Document fields: table/CSV extraction and table evaluation (Wave 2, slice 1)
 
-Date: 2026-11-20 · Branch: `wave2/doc-fields` (planned) · Roadmap: section 6, Wave 2
-(`docs/plans/2026-11-17-multimodal-platform-roadmap.md`)
+Date: 2026-11-20
+Branch: `wave2/documents`
+Roadmap: `docs/plans/2026-11-17-multimodal-platform-roadmap.md` (section 6, Wave 2, OS-DOC-001)
 
-Status: **scope-only plan. Nothing here is implemented; no code, tests or UI exist for this
-slice yet.** This note follows the OS-SIG-001 design-record convention
-(`docs/plans/2026-11-20-os-sig-001-signal-classification.md`) but is written before the work,
-not after it.
+## What this slice is
 
-## Goal
+The roadmap line is "Structured document-field extraction and table evaluation". This slice
+implements the **table-shaped half** of it, and nothing else:
 
-OS-DOC-001 reads "Structured document-field extraction and table evaluation". The slice's
-goal is: given document-like inputs (scanned or photographed forms, or PDFs/images of them),
-a person teaches which visual regions hold which field, and Athena learns to read those
-fields from new documents and to report **field-level accuracy** (per-field correctness,
-character/word errors where applicable) rather than one page-level score. The second half —
-table evaluation — means: when a document contains a table, extraction quality is measured
-cell-by-cell against a corrected reference table, not eyeballed.
+* A `document-fields` recipe (available today) on the `text` modality. The console's project
+  picker has a "Check fields in document tables" button for it.
+* A document modality plugin (`projects/modalities/document.py`) that validates one
+  document-shaped table file per project: **CSV strictly** (UTF-8, a header row of unique
+  column names, at least one data row, ragged rows refused); **XLSX only when openpyxl is
+  importable in the web process** (the ML venv has it, the lean web venv does not — where it
+  is missing the upload is refused in plain words telling the operator to save as CSV, never
+  stored unread).
+* A **field-type system**: the project's label list is its field definitions, one label per
+  field, spelled `name:type` with the type one of `text`, `number`, `date`. A label without a
+  type is a text field. Validation and normalization are rule-based (`normalize_cell`): text
+  strips; numbers accept thousand separators and normalize to plain decimal text; dates parse
+  from a **fixed format set** (ISO, `19 November 2026`, `Nov 19, 2026` and siblings) to ISO.
+  An ambiguous date (`03/04/05`, `19/11/2026`) is **invalid, never guessed**. `cell_problems`
+  lists the cells that fail their field's type (row, field, value, plain message), capped at
+  20.
+* **Table evaluation** (`projects/training/document_eval.py`): comparing two dataset versions
+  of the same document project, cell by cell, under the field types. This is the slice's
+  "extraction accuracy": the reference version's values are treated as correct, the
+  candidate's are scored against them — per-field accuracy (matches over comparable cells), a
+  capped mismatch list (50 rows, counts always exact), and **unclear** as a third verdict for
+  pairs that cannot be judged honestly (an ambiguous date or non-number on either side; a
+  field with no column). Unclear cells never help and never hurt accuracy; they are counted.
+  Numbers compare with a one-part-in-ten-thousand tolerance. Rows pair by position; differing
+  row counts compare the shared rows and note the rest. `plain_comparison` is the checked
+  reading side: a stored sentence is never trusted, it is rebuilt from the counts.
 
-The deliverable mirrors the merged Wave 1/2 slices (OCR OS-OCR-001, text OS-NLP-001,
-signals OS-SIG-001): one modality plugin, one recipe, one training backend, one end-to-end
-test suite, no new core branches.
+The snapshot path is the unchanged Wave 0 generic pipeline (the text/audio/signals slices'
+pattern): one asset + one accepted `document_fields` annotation freezes one `DatasetEntry`.
+The annotation is the whole-dataset field confirmation (`{"label": "<field label>"}`).
 
-## Proposed approach (not yet agreed or built)
+## What is deliberately NOT in this slice (honest limits)
 
-* A `documents` recipe (key and modality naming to be decided — see open questions),
-  extending the existing image modality (a document is a picture) rather than adding a new
-  modality plugin, the same way `handwriting-ocr` is an image project with a different
-  annotation kind.
-* A new annotation kind for field regions: a bounding box plus a field name and the
-  corrected text, reusing the existing box-annotation plumbing for the geometry and the
-  transcript pattern from `handwriting-ocr` for the text.
-* A `doc-fields` training backend following the OCR slice's shape: crops each labelled
-  field region, fine-tunes or prompts a text-reading model, and emits per-field predictions
-  with a per-field evaluation report (field found / text exact-match / CER-WER) following
-  the shared evaluation contract. Frozen dataset versions, splits and the job/worker model
-  come unchanged from the Wave 0 pipeline.
-* Table evaluation as a structured-annotation comparison: a reference table annotation is
-  compared cell-wise (exact match, normalized numeric/text match to be defined) and the
-  evaluation reports per-column and per-cell error rates.
-* Console: one recipe-picker entry with honest "what data you need / how it is checked"
-  wording, mirroring the text and signals entries.
+* **No PDF, no OCR, no layout analysis.** PDF/table detection does not exist in this codebase
+  yet. Reading a scanned page is future work (it needs detection over page images, a Wave 2+
+  item of its own). This slice's documents are tables whose text is already data: CSV, or
+  XLSX where openpyxl can read it.
+* **No model training.** Extraction here is rule-based validation and normalization, not
+  prediction. There is no `document` training backend, on purpose: registering a fake
+  `document-rules` backend whose `train()` refuses would add a backend that can never run —
+  instead the recipe is listed in `NON_TRAINING_RECIPES` (`training_views.py`), so a document
+  project's Teach panel gets the honest "there is no model to teach; compare two saved
+  versions instead" refusal (`_task_unavailable_readiness`), and its `/models` and
+  `/training/runs` endpoints answer 404 like every not-yet-teachable project. This is NOT the
+  tabular-prediction slice: that recipe (CSV upload → target choice → trained classifier)
+  already exists and owns table prediction; this slice owns field checking and version
+  comparison.
+* **No API route for running a comparison.** The comparison module is a library
+  (`compare_versions`, `plain_comparison`) with full test coverage; wiring it into the console
+  UI (a "compare versions" panel) is the natural next slice. No new URL routes were added
+  (the roles test's DECLARED table is unchanged, on purpose).
+* **No upload-time field validation of cells.** The upload validates the table's shape
+  (header, rows, encoding); `cell_problems` exists as a pure function (tested) for callers,
+  but the upload endpoint does not yet run it against the project's fields — a re-upload with
+  bad cells is accepted as a table and the problems surface in the comparison, not the
+  upload. This keeps upload independent of label edits (fields change after upload in the
+  normal flow). A follow-up can wire it in.
 
-## Out of scope (future work)
+## The field-type system, precisely
 
-* Full free-form document layout understanding (reading order, headings, multi-page
-  structure) — this slice learns named fields only.
-* Named-entity extraction from plain text (that is OS-NLP-001's NER half, separate work).
-* Table *structure* detection (finding table borders/columns without a taught example).
-* Signature, stamp or handwriting-vs-print classification beyond the text reading itself.
-* Inference/check-screen serving for document projects (same gap as the tabular, text and
-  signal slices; the backend `predict` path story is undecided — see open questions).
-* Real-data validation and any model-quality claim; acceptance is synthetic-data plumbing
-  only, exactly like the merged slices.
+| Type | Accepts | Normalizes to | Ambiguity rule |
+|---|---|---|---|
+| `text` | anything | stripped text | — |
+| `number` | plain numbers; `,`/space/nbsp thousand separators | plain decimal text (`1,234.5` → `1234.5`) | a non-number is invalid, never coerced |
+| `date` | the fixed format set only | ISO `YYYY-MM-DD` | an ambiguous date is invalid, never guessed |
 
-## Open questions
+Empty cells are valid and normalize to `""` (a missing value is data, not an error). The
+comparison treats two blanks as a match and a blank against a value as a mismatch.
 
-* **Recipe/modality naming:** does a document project stay an `image` project with a
-  `doc_fields` annotation kind (like OCR), or become its own modality? Leaning image +
-  annotation kind, but the table-evaluation half may push toward structured annotations
-  that do not fit the image plugin's single-file model.
-* **Table input shape:** how does a person correct a *table* on a scanned page? Per-cell
-  box annotations would explode the annotation count; a grid-structured annotation format
-  needs design before the annotation contract can be frozen.
-* **Backend choice:** fine-tune the existing TrOCR path (inherits OS-OCR-001's unresolved
-  base-weight licence question), or pair a detector with a lighter text head? Depends on
-  whether field *localization* is taught (boxes) or only field *reading* (given a crop).
-* **Evaluation contract:** what counts as a "correct" field — exact string, trimmed string,
-  or normalized (case/punctuation/number format)? Must be decided before tests are written
-  so the evaluation is not retrofitted.
-* **Split unit:** pages per document vs fields per page — avoiding leakage when one
-  physical document spans several images, mirroring the T35 recording-grouping rule in the
-  vision domain.
-* Whether this slice is one merge (like OS-SIG-001) or two (fields, then tables), given the
-  table-evaluation design is the least settled part.
+## Evaluation semantics, precisely
+
+* `compare_versions(reference, candidate, project)` — raises `ValueError` with a plain
+  message for non-comparable inputs (different projects, same version, different headers,
+  a non-CSV (xlsx) file, a missing file, a version that is not exactly one table).
+* Verdicts per cell: `match` / `mismatch` / `unclear`. Accuracy per field and overall =
+  matches ÷ (matches + mismatches), rounded DOWN to a whole percent (never overstates).
+* Numbers: equal as decimals, or within 1/10000 relative tolerance.
+* The mismatch list is capped at 50; `mismatch_count` and `mismatches_truncated` are exact.
+* `plain_comparison(block)` re-validates a stored block (shape, counts, caps) and rebuilds
+  the summary sentence from the counts; anything malformed reads as "not available".
+
+## Where things live
+
+* `web/projects/modalities/document.py` — plugin, field types, `normalize_cell`,
+  `cell_problems`, the openpyxl gate. Registered **by annotation kind**
+  (`document_fields`) like the OCR plugin, so the `text` modality slot keeps the
+  text-classification plugin. `project_assets` now dispatches uploads through
+  `annotation_plugin(project)` first (a recipe may ask the same modality for a different
+  file shape).
+* `web/projects/training/document_eval.py` — the comparison module (pure Python: csv,
+  decimal, fractions; the lean web process can run it without pandas/openpyxl).
+* `web/projects/tasks/__init__.py` — the `document-fields` recipe.
+* `web/projects/training_views.py` — `NON_TRAINING_RECIPES` and the honest readiness
+  sentence for document projects.
+* `web/projects/tests_document.py` — 47 tests: recipe/dispatch, field types, upload
+  validation matrix (CSV + XLSX both paths), annotation, snapshot freeze + export,
+  the comparison matrix (matches, tolerance, ambiguous dates, caps, extra rows, reading
+  side), and the no-training API state. XLSX tests skip cleanly without openpyxl; the
+  no-openpyxl refusal is exercised everywhere via a mocked import.
+
+## Test results (2026-11-20)
+
+* Lean web venv (no torch/sklearn/pandas/openpyxl): **2098 tests, OK, 88 skipped** (the
+  document suite: 47 tests, 2 skipped — the two real-openpyxl uploads).
+* ML venv (sklearn/pandas/openpyxl): **2098 tests, OK, 2 skipped** (the document suite: 47
+  tests, 0 skipped — XLSX uploads run for real).
