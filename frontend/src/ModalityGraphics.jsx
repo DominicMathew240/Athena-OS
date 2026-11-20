@@ -1,15 +1,13 @@
 import pipeImg from "./assets/landing/pipe-corrosion.jpg";
 
 /**
- * Real PCM audio oscillogram layout:
- * - Left amplitude axis (+1.0 / 0 / -1.0), horizontal ±0.5 guide lines, DC zero line, and time ruler
- * - Dual-layer acoustic envelope computed from realistic motor/fault/slip physics:
- *   outer peak min/max polygon + inner RMS energy polygon + crisp 1px peak contour
+ * Real PCM audio oscillogram: amplitude axis, +/-0.5 guide lines, DC zero line, time ruler,
+ * and dual-layer peak min/max + inner RMS energy envelope polygons.
  */
 export function RealAudioWaveform({ variant = "fault", compact = false }) {
   const w = compact ? 280 : 480;
   const h = compact ? 42 : 104;
-  const padL = compact ? 4 : 34;
+  const padL = compact ? 4 : 30;
   const padR = 4;
   const padT = compact ? 4 : 8;
   const padB = compact ? 4 : 18;
@@ -17,7 +15,7 @@ export function RealAudioWaveform({ variant = "fault", compact = false }) {
   const plotH = h - padT - padB;
   const midY = padT + plotH / 2;
   const halfH = plotH / 2 - 1;
-  const steps = compact ? 120 : 220;
+  const steps = compact ? 140 : 240;
 
   const upperPeak = [];
   const lowerPeak = [];
@@ -28,7 +26,6 @@ export function RealAudioWaveform({ variant = "fault", compact = false }) {
     const t = i / (steps - 1);
     const x = padL + t * plotW;
 
-    // Deterministic acoustic pseudo-noise + harmonic carrier + physical transient envelope
     const noiseA = Math.sin(i * 12.9898 + 1.3) * 43758.5453;
     const randA = noiseA - Math.floor(noiseA);
     const noiseB = Math.sin(i * 78.233 + 4.7) * 24634.6345;
@@ -39,7 +36,6 @@ export function RealAudioWaveform({ variant = "fault", compact = false }) {
     let rms = 0.07 + 0.03 * Math.sin(t * Math.PI * 12);
 
     if (variant === "fault") {
-      // Periodic bearing raceway impact impulses every ~0.14 normalized time with exponential decay
       const cycle = (t * 7.2) % 1;
       const impact = Math.exp(-cycle * 8.5);
       const secondary = Math.exp(-(((t * 7.2 + 0.48) % 1) * 11));
@@ -48,7 +44,6 @@ export function RealAudioWaveform({ variant = "fault", compact = false }) {
       negAmp = Math.min(0.95, negAmp + impact * 0.68 * (0.7 + 0.3 * randB) + secondary * 0.28 * ring);
       rms = Math.min(0.55, 0.14 + impact * 0.28 + secondary * 0.1);
     } else if (variant === "slip") {
-      // High-frequency belt friction squeal burst with amplitude modulation
       const gate1 = Math.exp(-Math.pow((t - 0.34) / 0.09, 2));
       const gate2 = Math.exp(-Math.pow((t - 0.68) / 0.12, 2));
       const env = gate1 * 0.85 + gate2 * 0.95;
@@ -78,22 +73,22 @@ export function RealAudioWaveform({ variant = "fault", compact = false }) {
       className="lp-pcm-svg"
       viewBox={`0 0 ${w} ${h}`}
       role="img"
-      aria-label={`PCM audio waveform showing ${variant === "fault" ? "periodic bearing impact spikes" : variant === "slip" ? "intermittent friction squeal bursts" : "steady low-amplitude baseline"}`}
+      aria-label={`Sound wave showing ${variant === "fault" ? "repeated clicking impacts" : variant === "slip" ? "belt squeal bursts" : "steady normal hum"}`}
     >
       {!compact && (
         <g className="lp-pcm-axes">
-          <text x="2" y={padT + 8}>+1.0</text>
-          <text x="8" y={midY + 3}>0.0</text>
-          <text x="2" y={padT + plotH - 1}>-1.0</text>
+          <text x="4" y={padT + 8}>+</text>
+          <text x="4" y={midY + 3}>0</text>
+          <text x="4" y={padT + plotH - 1}>-</text>
           <line x1={padL} y1={padT + plotH * 0.25} x2={w - padR} y2={padT + plotH * 0.25} className="lp-pcm-guide" />
           <line x1={padL} y1={padT + plotH * 0.75} x2={w - padR} y2={padT + plotH * 0.75} className="lp-pcm-guide" />
           {[0, 0.25, 0.5, 0.75, 1].map((r, idx) => {
             const tx = padL + r * plotW;
-            const labels = ["0.0s", "1.0s", "2.1s", "3.1s", "4.2s"];
+            const labels = ["0s", "1s", "2s", "3s", "4.2s"];
             return (
               <g key={r}>
                 <line x1={tx} y1={padT + plotH} x2={tx} y2={padT + plotH + 3} className="lp-pcm-tick" />
-                <text x={idx === 4 ? tx - 22 : idx === 0 ? tx : tx - 10} y={h - 3}>{labels[idx]}</text>
+                <text x={idx === 4 ? tx - 22 : idx === 0 ? tx : tx - 6} y={h - 3}>{labels[idx]}</text>
               </g>
             );
           })}
@@ -107,40 +102,36 @@ export function RealAudioWaveform({ variant = "fault", compact = false }) {
 }
 
 /**
- * Deterministic log-mel spectrogram grid + PCM waveform SVG for Acoustic AI.
- * Avoids generic rainbow/neon blocks; uses clinical instrument blue/amber/coral intensity tiers.
+ * Sound frequency heatmap (0 to 8 kHz over 4.2 seconds).
  */
 export function SpectrogramGraphic({ variant = "fault", compact = false }) {
-  const cols = compact ? 22 : 34;
+  const cols = compact ? 24 : 36;
   const rows = compact ? 6 : 8;
   const w = compact ? 280 : 480;
-  const h = compact ? 74 : 116;
+  const h = compact ? 52 : 112;
   const padL = compact ? 4 : 34;
   const padR = 4;
-  const padT = 6;
+  const padT = 5;
   const padB = compact ? 4 : 18;
   const cw = (w - padL - padR) / cols;
   const ch = (h - padT - padB) / rows;
 
   const cells = [];
   for (let r = 0; r < rows; r += 1) {
-    const freqNorm = 1 - r / (rows - 1); // 1 = top (8 kHz), 0 = bottom (60 Hz)
+    const freqNorm = 1 - r / (rows - 1);
     for (let c = 0; c < cols; c += 1) {
       const t = c / (cols - 1);
       let energy = 0.14 + 0.1 * Math.sin(c * 0.55 + r * 0.7);
-      if (r === rows - 1) energy += 0.28; // 60 Hz hum baseline
+      if (r === rows - 1) energy += 0.28;
       if (variant === "fault") {
-        // Periodic 3.4 kHz bearing impact harmonics around mid-upper band
         const band = Math.exp(-Math.pow((freqNorm - 0.52) / 0.18, 2));
         const pulse = 0.55 + 0.45 * Math.sin(t * Math.PI * 6);
         energy += band * pulse * 0.72;
       } else if (variant === "slip") {
-        // Transient high-frequency squeal in middle window
         const inBurst = t >= 0.36 && t <= 0.78;
         const hiBand = Math.exp(-Math.pow((freqNorm - 0.78) / 0.2, 2));
         if (inBurst) energy += hiBand * 0.76;
       } else {
-        // Healthy baseline: steady low-frequency hum only
         energy += Math.exp(-Math.pow(freqNorm / 0.22, 2)) * 0.34;
       }
       energy = Math.max(0.08, Math.min(1, energy));
@@ -162,16 +153,16 @@ export function SpectrogramGraphic({ variant = "fault", compact = false }) {
       className="lp-spec-svg"
       viewBox={`0 0 ${w} ${h}`}
       role="img"
-      aria-label={`Log-mel spectrogram showing ${variant === "fault" ? "3.4 kHz bearing harmonic peaks" : variant === "slip" ? "transient 6.8 kHz burst" : "steady 60 Hz motor baseline"}`}
+      aria-label={`Sound pitch map showing ${variant === "fault" ? "high-pitched clicking" : variant === "slip" ? "brief belt squeal" : "steady low hum"}`}
     >
       {!compact && (
         <g className="lp-spec-axes">
-          <text x="2" y="14">8 kHz</text>
-          <text x="2" y="56">3.4 k</text>
-          <text x="2" y="96">60 Hz</text>
-          <text x={padL} y={h - 4}>0.0s</text>
-          <text x={w / 2} y={h - 4}>2.1s</text>
-          <text x={w - 28} y={h - 4}>4.2s</text>
+          <text x="2" y="14">High</text>
+          <text x="2" y="54">Mid</text>
+          <text x="2" y="92">Low</text>
+          <text x={padL} y={h - 4}>0s</text>
+          <text x={w / 2} y={h - 4}>2s</text>
+          <text x={w - 26} y={h - 4}>4.2s</text>
         </g>
       )}
       {cells.map((cell) => (
@@ -201,23 +192,20 @@ export function SpectrogramGraphic({ variant = "fault", compact = false }) {
 }
 
 /**
- * Authentic cursive/printed handwriting strokes on ruled form paper (not math sine waves).
+ * Handwritten line crop on ruled maintenance logbook paper.
  */
 export function HandwritingInkGraphic({ variant = 0, compact = false }) {
   const strokes = [
-    // "Valve 12B — 2.4" stylized continuous pen strokes
     "M 18 38 C 22 48, 25 48, 30 22 M 34 36 C 36 30, 42 30, 42 37 C 42 40, 45 40, 47 34 M 50 20 L 49 38 C 52 38, 55 34, 57 31 C 59 38, 63 38, 66 32 C 69 32, 71 38, 76 34 M 92 22 L 92 38 M 99 26 C 106 20, 111 28, 99 38 L 111 38 M 118 22 L 118 38 C 127 38, 127 30, 119 30 C 126 29, 126 22, 118 22 M 138 31 L 154 31 M 166 24 C 174 20, 177 29, 165 38 L 176 38 M 183 37 L 184 37 M 196 22 L 191 33 L 203 33 M 199 22 L 199 39",
-    // "Seal worn" stylized pen strokes
     "M 28 24 C 18 22, 18 30, 27 32 C 33 34, 31 40, 20 38 M 36 34 C 42 34, 44 30, 39 30 C 35 30, 35 38, 44 37 M 48 34 C 53 31, 56 38, 50 38 C 46 38, 52 31, 57 37 M 62 20 L 61 38 M 74 30 L 78 38 L 82 31 L 86 38 L 91 30 M 96 34 C 96 29, 104 29, 104 34 C 104 39, 96 39, 96 34 M 110 38 L 110 31 C 113 29, 117 30, 118 32 M 123 38 L 123 31 C 126 29, 131 30, 131 38 M 144 38 L 142 42 M 156 31 L 160 38 L 164 31 L 168 38 L 173 31 M 179 34 C 185 34, 187 30, 182 30 C 178 30, 178 38, 187 37",
-    // "2.4 bar · OK" stylized pen strokes
     "M 20 26 C 28 20, 32 28, 20 38 L 32 38 M 39 37 L 40 37 M 52 22 L 46 33 L 58 33 M 54 22 L 54 39 M 74 20 L 74 38 C 82 38, 82 30, 74 30 M 89 34 C 94 31, 97 38, 91 38 C 87 38, 93 31, 98 37 M 104 38 L 104 31 C 107 29, 111 30, 112 32 M 126 30 L 127 30 M 144 23 C 138 23, 138 38, 145 38 C 152 38, 152 23, 144 23 M 158 22 L 158 38 M 168 23 L 159 31 L 169 38",
   ];
   const d = strokes[variant % strokes.length];
   const w = compact ? 240 : 260;
-  const h = compact ? 58 : 54;
+  const h = compact ? 56 : 54;
 
   return (
-    <svg className="lp-ink-svg" viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Scanned handwritten line crop">
+    <svg className="lp-ink-svg" viewBox={`0 0 ${w} ${h}`} role="img" aria-label="Scanned handwritten line from maintenance logbook">
       <line x1="8" y1="42" x2={w - 8} y2="42" className="lp-ink-rule" />
       <line x1="8" y1="16" x2={w - 8} y2="16" className="lp-ink-rule lp-ink-rule--top" />
       <rect x="12" y="12" width={w - 24} height="34" rx="3" className="lp-ink-crop" />
@@ -227,58 +215,94 @@ export function HandwritingInkGraphic({ variant = 0, compact = false }) {
 }
 
 /**
- * Dual-channel telemetry trace + sliding window bracket for Signal Windows (OS-SIG-001).
+ * Real high-resolution (150-point) continuous sensor telemetry plot with Safe Limit threshold.
+ * Eliminates the fake 12-point zigzag and cartoon dots.
  */
-export function SignalMultiTrace({ points = [], sev = "high", compact = false }) {
-  const maxX = compact ? 280 : 460;
-  const maxY = compact ? 92 : 142;
-  const padX = compact ? 10 : 18;
-  const padT = compact ? 12 : 16;
-  const padB = compact ? 12 : 22;
+export function SignalMultiTrace({ mode = "imbalance", sev = "high", compact = false }) {
+  const maxX = compact ? 280 : 480;
+  const maxY = compact ? 76 : 148;
+  const padL = compact ? 6 : 38;
+  const padR = 8;
+  const padT = compact ? 8 : 16;
+  const padB = compact ? 8 : 24;
+  const plotW = maxX - padL - padR;
   const plotH = maxY - padT - padB;
-  const pts = points.length ? points : [28, 44, 22, 68, 18, 76, 20, 82, 16, 74, 24, 66];
+  const steps = compact ? 96 : 150;
+  const thresholdNorm = 0.56; // Safe limit line (~6.5 mm/s)
+  const thresholdY = Math.round(padT + plotH * (1 - thresholdNorm));
 
-  const ch1 = pts.map((val, idx) => {
-    const x = padX + (idx / (pts.length - 1)) * (maxX - padX * 2);
-    const y = padT + plotH - (val / 100) * plotH;
-    return [Math.round(x), Math.round(y)];
-  });
-  const ch2 = pts.map((val, idx) => {
-    const x = padX + (idx / (pts.length - 1)) * (maxX - padX * 2);
-    const smoothed = 32 + val * 0.32 + Math.sin(idx * 0.7) * 6;
-    const y = padT + plotH - (smoothed / 100) * plotH;
-    return [Math.round(x), Math.round(y)];
-  });
+  const ch1 = [];
+  const ch2 = [];
+
+  for (let i = 0; i < steps; i += 1) {
+    const t = i / (steps - 1);
+    const x = padL + t * plotW;
+
+    const n1 = Math.sin(i * 19.13 + 0.7) * 43758.5453;
+    const micro = (n1 - Math.floor(n1) - 0.5) * 0.08;
+    const ripple = 0.05 * Math.sin(t * Math.PI * 26) + 0.03 * Math.cos(t * Math.PI * 41);
+
+    let vib = 0.22 + ripple + micro;
+    let temp = 0.3 + 0.03 * Math.sin(t * Math.PI * 2) + t * 0.04;
+
+    if (mode === "imbalance") {
+      // Gradual load climb crossing safe threshold with sustained high-frequency shaft oscillation
+      const ramp = 0.16 + 0.42 * (1 / (1 + Math.exp(-(t - 0.32) * 8)));
+      const shaft = 0.14 * Math.sin(t * Math.PI * 22) + 0.06 * Math.sin(t * Math.PI * 44);
+      vib = Math.max(0.08, Math.min(0.94, ramp + shaft + micro));
+      temp = Math.min(0.76, 0.34 + t * 0.32 + 0.015 * Math.sin(t * Math.PI * 5));
+    } else if (mode === "cavitation") {
+      // Intermittent pressure-collapse spikes crossing safe limit briefly
+      const b1 = Math.exp(-Math.pow((t - 0.28) / 0.045, 2)) * 0.55;
+      const b2 = Math.exp(-Math.pow((t - 0.64) / 0.05, 2)) * 0.62;
+      vib = Math.max(0.08, Math.min(0.95, 0.22 + b1 + b2 + ripple * 1.4 + micro));
+      temp = 0.36 + t * 0.12;
+    } else {
+      // Normal steady operation well below Safe Limit
+      vib = Math.max(0.08, Math.min(0.4, 0.21 + 0.035 * Math.sin(t * Math.PI * 16) + micro * 0.6));
+      temp = 0.28 + 0.015 * Math.sin(t * Math.PI * 3);
+    }
+
+    const y1 = padT + plotH * (1 - vib);
+    const y2 = padT + plotH * (1 - temp);
+    ch1.push([x.toFixed(1), y1.toFixed(1)]);
+    ch2.push([x.toFixed(1), y2.toFixed(1)]);
+  }
 
   const line1 = ch1.map(([x, y]) => `${x},${y}`).join(" ");
-  const area1 = `${padX},${padT + plotH} ${line1} ${ch1[ch1.length - 1][0]},${padT + plotH}`;
+  const area1 = `${padL},${(padT + plotH).toFixed(1)} ${line1} ${(padL + plotW).toFixed(1)},${(padT + plotH).toFixed(1)}`;
   const line2 = ch2.map(([x, y]) => `${x},${y}`).join(" ");
 
   return (
-    <svg className="lp-sig-svg" viewBox={`0 0 ${maxX} ${maxY}`} role="img" aria-label="Dual-channel vibration and temperature signal windows">
+    <svg
+      className="lp-sig-svg"
+      viewBox={`0 0 ${maxX} ${maxY}`}
+      role="img"
+      aria-label={`Machine sensor chart showing ${mode === "imbalance" ? "vibration rising past safe limit" : mode === "cavitation" ? "brief vibration spikes" : "steady readings within safe limit"}`}
+    >
       {[0.25, 0.5, 0.75].map((r) => (
-        <line key={r} x1={padX} y1={padT + plotH * r} x2={maxX - padX} y2={padT + plotH * r} className="lp-sig-grid" />
+        <line key={r} x1={padL} y1={padT + plotH * r} x2={maxX - padR} y2={padT + plotH * r} className="lp-sig-grid" />
       ))}
-      <rect
-        x={padX + (maxX - padX * 2) * 0.27}
-        y={padT - 2}
-        width={(maxX - padX * 2) * 0.46}
-        height={plotH + 4}
-        rx="4"
-        className="lp-sig-window"
-      />
+      <line x1={padL} y1={thresholdY} x2={maxX - padR} y2={thresholdY} className="lp-sig-limit" />
       <polygon points={area1} className="lp-sig-area" data-sev={sev} />
       <polyline points={line2} fill="none" className="lp-sig-line-sec" />
       <polyline points={line1} fill="none" className="lp-sig-line" data-sev={sev} />
-      {!compact &&
-        ch1.map(([cx, cy], idx) => (
-          <circle key={idx} cx={cx} cy={cy} r="3" className="lp-sig-dot" data-sev={sev} />
-        ))}
+      {!compact && (
+        <g>
+          <rect x={padL + 6} y={thresholdY - 14} width="68" height="14" rx="3" fill="#0b1018" stroke="#f59e0b" strokeOpacity="0.45" strokeWidth="1" />
+          <text x={padL + 11} y={thresholdY - 4} className="lp-sig-limit-txt">
+            Safe limit
+          </text>
+        </g>
+      )}
       {!compact && (
         <g className="lp-sig-legend">
-          <text x={padX} y={maxY - 5}>CH1 Vibration (mm/s)</text>
-          <text x={padX + 165} y={maxY - 5}>CH2 Housing (°C)</text>
-          <text x={maxX - 98} y={maxY - 5}>Window [16..48]</text>
+          <text x="4" y={padT + 8}>12</text>
+          <text x="8" y={thresholdY + 3}>6</text>
+          <text x="8" y={padT + plotH}>0</text>
+          <text x={padL} y={maxY - 5}>Vibration sensor</text>
+          <text x={padL + 148} y={maxY - 5}>Temperature trend</text>
+          <text x={maxX - 42} y={maxY - 5}>60 sec</text>
         </g>
       )}
     </svg>
@@ -286,15 +310,15 @@ export function SignalMultiTrace({ points = [], sev = "high", compact = false })
 }
 
 /**
- * Crisp visual thumbnail for each of the 6 modality recipe cards in the Multimodal Gallery.
+ * Visual thumbnails for all 6 data types in the Studio Gallery — plain, real-world output previews.
  */
 export function ModalityThumb({ modality }) {
   if (modality === "vision") {
     return (
       <div className="lp-thumb lp-thumb--photo" aria-hidden="true">
         <img src={pipeImg} alt="" loading="lazy" width={320} height={180} />
-        <span className="lp-thumb-box lp-thumb-box--ok" style={{ left: "34%", top: "24%", width: "54%", height: "38%" }}>1</span>
-        <span className="lp-thumb-box lp-thumb-box--draft" style={{ left: "22%", top: "54%", width: "28%", height: "36%" }}>2?</span>
+        <span className="lp-thumb-box lp-thumb-box--ok" style={{ left: "34%", top: "24%", width: "54%", height: "38%" }}>Rust</span>
+        <span className="lp-thumb-box lp-thumb-box--draft" style={{ left: "22%", top: "54%", width: "28%", height: "36%" }}>Check</span>
       </div>
     );
   }
@@ -302,8 +326,8 @@ export function ModalityThumb({ modality }) {
   if (modality === "audio") {
     return (
       <div className="lp-thumb lp-thumb--audio" aria-hidden="true">
-        <SpectrogramGraphic variant="fault" compact />
         <RealAudioWaveform variant="fault" compact />
+        <SpectrogramGraphic variant="fault" compact />
       </div>
     );
   }
@@ -313,7 +337,7 @@ export function ModalityThumb({ modality }) {
       <div className="lp-thumb lp-thumb--ocr" aria-hidden="true">
         <HandwritingInkGraphic variant={0} compact />
         <div className="lp-thumb-ocr-meta">
-          <span>TrOCR</span>
+          <span>Read as</span>
           <code>Valve 12B — 2.4 bar</code>
         </div>
       </div>
@@ -325,14 +349,14 @@ export function ModalityThumb({ modality }) {
       <div className="lp-thumb lp-thumb--svg" aria-hidden="true">
         <svg className="lp-thumb-svg" viewBox="0 0 280 96">
           <rect x="8" y="8" width="264" height="20" rx="3" className="lp-th-head" />
-          <text x="16" y="21" className="lp-th-txt">ROW</text>
+          <text x="16" y="21" className="lp-th-txt">UNIT</text>
           <text x="72" y="21" className="lp-th-txt">TEMP</text>
-          <text x="128" y="21" className="lp-th-txt">VIB</text>
-          <text x="184" y="21" className="lp-th-txt-accent">TARGET</text>
+          <text x="128" y="21" className="lp-th-txt">SHAKE</text>
+          <text x="184" y="21" className="lp-th-txt-accent">RISK</text>
           {[
-            ["#1042", "86.4°", "8.4", "High 0.91", "high", 32],
-            ["#1043", "63.1°", "4.9", "Watch .54", "med", 52],
-            ["#1044", "52.0°", "1.8", "Norm .97", "ok", 72],
+            ["#1042", "86°C", "8.4", "Inspect", "high", 32],
+            ["#1043", "63°C", "4.9", "Watch", "med", 52],
+            ["#1044", "52°C", "1.8", "Normal", "ok", 72],
           ].map(([id, t, v, pred, sev, y]) => (
             <g key={id}>
               <rect x="8" y={y} width="264" height="17" rx="2" className={`lp-th-row lp-th-row--${sev}`} />
@@ -352,17 +376,17 @@ export function ModalityThumb({ modality }) {
       <div className="lp-thumb lp-thumb--svg" aria-hidden="true">
         <svg className="lp-thumb-svg" viewBox="0 0 280 96">
           <rect x="8" y="8" width="264" height="80" rx="5" className="lp-th-head" />
-          <rect x="16" y="16" width="104" height="16" rx="3" className="lp-th-pill-accent" />
-          <text x="23" y="27" className="lp-th-txt-accent">rotating_equip</text>
-          <text x="218" y="27" className="lp-th-txt">F1 0.92</text>
-          <rect x="16" y="40" width="96" height="15" rx="3" className="lp-th-row lp-th-row--high" />
-          <text x="22" y="51" className="lp-th-cell">seal weep</text>
-          <rect x="118" y="40" width="56" height="15" rx="3" className="lp-th-row lp-th-row--med" />
-          <text x="124" y="51" className="lp-th-cell">78 °C</text>
-          <rect x="180" y="40" width="82" height="15" rx="3" className="lp-th-row lp-th-row--ok" />
-          <text x="186" y="51" className="lp-th-cell">P-104B</text>
-          <rect x="16" y="64" width="214" height="7" rx="3" className="lp-th-bar-bg" />
-          <rect x="16" y="64" width="164" height="7" rx="3" className="lp-th-bar-fill" />
+          <text x="16" y="24" className="lp-th-txt">INCOMING SHIFT NOTES</text>
+          {[
+            ["Pump P-104B weeping", "Mechanical", "high", 32],
+            ["Breaker tripped startup", "Electrical", "med", 56],
+          ].map(([note, dept, sev, y]) => (
+            <g key={note}>
+              <rect x="14" y={y} width="252" height="20" rx="3" className={`lp-th-row lp-th-row--${sev}`} />
+              <text x="20" y={y + 13} className="lp-th-cell">{note}</text>
+              <text x="258" y={y + 13} textAnchor="end" className={`lp-th-pred lp-th-pred--${sev}`}>{dept}</text>
+            </g>
+          ))}
         </svg>
       </div>
     );
@@ -370,7 +394,7 @@ export function ModalityThumb({ modality }) {
 
   return (
     <div className="lp-thumb lp-thumb--svg" aria-hidden="true">
-      <SignalMultiTrace sev="high" compact />
+      <SignalMultiTrace mode="imbalance" sev="high" compact />
     </div>
   );
 }

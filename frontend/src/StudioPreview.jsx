@@ -13,7 +13,7 @@ export function StudioPreview({ outcome, stage, sampleIdx, onSelectSample, data 
       <div className="lp-studio-stage">
         <div className="lp-stage-head">
           <span className="lp-stage-file" id="lp-vis-filename">{data.filename}</span>
-          <div className="lp-vis-samples" id="lp-vis-samples" role="group" aria-label="Inspect training examples and annotations">
+          <div className="lp-vis-samples" id="lp-vis-samples" role="group" aria-label="Inspect examples">
             {samples.map((s, idx) => (
               <button
                 key={s.label}
@@ -31,7 +31,7 @@ export function StudioPreview({ outcome, stage, sampleIdx, onSelectSample, data 
 
         {outcome === "vision" && (
           <div className="lp-stage-media lp-stage-media--photo">
-            <img src={pipeImg} alt="Corroded pipes showing accepted and suggested detection boxes" width={1400} height={933} />
+            <img src={pipeImg} alt="Corroded pipes showing confirmed and suggested boxes" width={1400} height={933} />
             {stage !== "raw" ? (
               samples.map((s, idx) => {
                 const [x, y, w, h] = s.rect;
@@ -49,13 +49,13 @@ export function StudioPreview({ outcome, stage, sampleIdx, onSelectSample, data 
                     aria-label={`Inspect ${s.title}`}
                   >
                     <span>
-                      {idx + 1} · {s.boxState === "suggested" ? "Needs review" : "Accepted"}
+                      {idx + 1} · {s.boxState === "suggested" ? "Check this" : "Confirmed"}
                     </span>
                   </button>
                 );
               })
             ) : (
-              <span className="lp-raw-pill">RAW PHOTO · SHA-256 VERIFIED · 0 BOXES</span>
+              <span className="lp-raw-pill">ORIGINAL PHOTO · SAVED SAFELY</span>
             )}
           </div>
         )}
@@ -63,14 +63,14 @@ export function StudioPreview({ outcome, stage, sampleIdx, onSelectSample, data 
         {outcome === "audio" && (
           <div className="lp-stage-media lp-stage-media--panel">
             <div className="lp-clip-head">
-              <span className="lp-clip-spec">CH1 MONO · 16-BIT PCM WAV · 48 kHz</span>
+              <span className="lp-clip-spec">SOUND WAVE &amp; PITCH MAP · 4.2 SEC RECORDING</span>
               <span className="lp-clip-tag" data-sev={stage === "raw" ? "info" : active.sev}>
-                {stage === "raw" ? "Unlabeled clip" : `${active.label} · ${active.peakHz}`}
+                {stage === "raw" ? "Not labeled yet" : `${active.label} · ${active.peakHz}`}
               </span>
             </div>
             <RealAudioWaveform variant={audioVariant} />
             <SpectrogramGraphic variant={audioVariant} />
-            <div className="lp-clip-list" role="group" aria-label="WAV clips in dataset">
+            <div className="lp-clip-list" role="group" aria-label="Sample sound clips">
               {samples.map((s, idx) => (
                 <button
                   key={s.label}
@@ -82,7 +82,7 @@ export function StudioPreview({ outcome, stage, sampleIdx, onSelectSample, data 
                   <span className="lp-clip-name">{s.label}</span>
                   <span className="lp-clip-meta">{s.peakHz} · {s.rmsDb}</span>
                   <span className="lp-clip-pill" data-sev={stage === "raw" ? "info" : s.sev}>
-                    {stage === "raw" ? "Pending" : "Clip label"}
+                    {stage === "raw" ? "Waiting" : "Labeled"}
                   </span>
                 </button>
               ))}
@@ -93,9 +93,9 @@ export function StudioPreview({ outcome, stage, sampleIdx, onSelectSample, data 
         {outcome === "ocr" && (
           <div className="lp-stage-media lp-stage-media--panel">
             <div className="lp-clip-head">
-              <span className="lp-clip-spec">SCANNED LINE CROPS · TrOCR TRANSCRIPT REVIEW</span>
+              <span className="lp-clip-spec">SCANNED LOGBOOK LINES · HUMAN CORRECTIONS</span>
               <span className="lp-clip-tag" data-sev={stage === "raw" ? "medium" : "ok"}>
-                {stage === "raw" ? "Base OCR output" : "Human transcript verified"}
+                {stage === "raw" ? "First computer read" : "Corrected by person"}
               </span>
             </div>
             <div className="lp-ocr-rows">
@@ -115,7 +115,7 @@ export function StudioPreview({ outcome, stage, sampleIdx, onSelectSample, data 
                     </div>
                     <div className="lp-ocr-diff">
                       <span className="lp-ocr-tag">
-                        {stage === "raw" ? "Base TrOCR (uncorrected)" : "Clerk transcript"}
+                        {stage === "raw" ? "Before correction" : "Corrected text"}
                       </span>
                       <code>{stage === "raw" ? s.rawRead : s.corrected}</code>
                     </div>
@@ -129,14 +129,14 @@ export function StudioPreview({ outcome, stage, sampleIdx, onSelectSample, data 
         {outcome === "spreadsheets" && (
           <div className="lp-stage-media lp-stage-media--panel">
             <div className="lp-stage-media--table">
-              <table className="lp-mini-table" aria-label="Sample spreadsheet rows and target predictions">
+              <table className="lp-mini-table" aria-label="Sample spreadsheet rows and risk predictions">
                 <thead>
                   <tr>
-                    <th scope="col">Row</th>
+                    <th scope="col">Unit</th>
                     <th scope="col">Temp</th>
-                    <th scope="col">Vib RMS</th>
+                    <th scope="col">Shake</th>
                     <th scope="col">Pressure</th>
-                    <th scope="col">Target: Failure_48h</th>
+                    <th scope="col">Predicted: Needs Repair</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -164,7 +164,7 @@ export function StudioPreview({ outcome, stage, sampleIdx, onSelectSample, data 
                       <td>{s.bar}</td>
                       <td>
                         <span className="lp-table-pred" data-sev={stage === "raw" ? "info" : s.sev}>
-                          {stage === "raw" ? "Target col" : s.pred}
+                          {stage === "raw" ? "Column to guess" : s.pred}
                         </span>
                       </td>
                     </tr>
@@ -172,16 +172,16 @@ export function StudioPreview({ outcome, stage, sampleIdx, onSelectSample, data 
                 </tbody>
               </table>
             </div>
-            <div className="lp-tab-drivers" aria-label="Top feature clues driving prediction">
-              <span className="lp-clip-spec">TOP FEATURE DRIVERS · TABULAR-SKLEARN</span>
+            <div className="lp-tab-drivers" aria-label="Biggest clues from your spreadsheet">
+              <span className="lp-clip-spec">BIGGEST CLUES IN THIS SPREADSHEET</span>
               <div className="lp-driver-bars">
                 {[
-                  ["rms_vib", 44, "high"],
-                  ["housing_temp", 33, "medium"],
-                  ["pressure_drop", 16, "info"],
+                  ["Vibration", 44, "high"],
+                  ["Temperature", 33, "medium"],
+                  ["Pressure drop", 16, "info"],
                 ].map(([col, pct, sev]) => (
                   <div key={col} className="lp-driver-row">
-                    <code>{col}</code>
+                    <span>{col}</span>
                     <span className="lp-driver-track"><i style={{ width: `${pct * 1.9}%` }} data-sev={sev} /></span>
                     <b>{pct}%</b>
                   </div>
@@ -194,9 +194,9 @@ export function StudioPreview({ outcome, stage, sampleIdx, onSelectSample, data 
         {outcome === "documents" && (
           <div className="lp-stage-media lp-stage-media--panel">
             <div className="lp-clip-head">
-              <span className="lp-clip-spec">CSV {`{text, label}`} · TF-IDF EVIDENCE TOKENS</span>
+              <span className="lp-clip-spec">WORK ORDERS &amp; SHIFT LOGS · AUTOMATIC ROUTING</span>
               <span className="lp-clip-tag" data-sev={stage === "raw" ? "info" : active.sev}>
-                {stage === "raw" ? "Raw shift logs" : `${active.predClass} (${active.conf})`}
+                {stage === "raw" ? "Unsorted notes" : `${active.predClass} (${active.conf})`}
               </span>
             </div>
             <div className="lp-doc-list">
@@ -211,20 +211,20 @@ export function StudioPreview({ outcome, stage, sampleIdx, onSelectSample, data 
                   <div className="lp-doc-top">
                     <code>{s.docId}</code>
                     <span className="lp-doc-class" data-sev={stage === "raw" ? "info" : s.sev}>
-                      {stage === "raw" ? "Unclassified" : `${s.predClass} (${s.conf})`}
+                      {stage === "raw" ? "Needs team" : `${s.predClass} (${s.conf})`}
                     </span>
                   </div>
                   <p>{s.text}</p>
                 </button>
               ))}
             </div>
-            <div className="lp-token-strip" aria-label="Top weighted n-gram tokens">
-              <span className="lp-clip-spec">WEIGHTED TERMS</span>
+            <div className="lp-token-strip" aria-label="Words that helped Athena sort this note">
+              <span className="lp-clip-spec">KEY WORDS ATHENA NOTICED</span>
               <div className="lp-token-chips">
-                <span data-w="high">seal weep (+0.68)</span>
-                <span data-w="high">pump p-104b (+0.52)</span>
-                <span data-w="med">breaker tripped (+0.49)</span>
-                <span data-w="ok">nominal (+0.41)</span>
+                <span data-w="high">seal weeping</span>
+                <span data-w="high">pump P-104B</span>
+                <span data-w="med">breaker tripped</span>
+                <span data-w="ok">pressure normal</span>
               </div>
             </div>
           </div>
@@ -233,16 +233,16 @@ export function StudioPreview({ outcome, stage, sampleIdx, onSelectSample, data 
         {outcome === "signals" && (
           <div className="lp-stage-media lp-stage-media--panel">
             <div className="lp-clip-head">
-              <span className="lp-clip-spec">{active.seriesId} · DUAL-CHANNEL WINDOW (16 STATS)</span>
+              <span className="lp-clip-spec">{active.seriesId} · 60-SECOND MACHINE LOG</span>
               <span className="lp-clip-tag" data-sev={stage === "raw" ? "info" : active.sev}>
-                {stage === "raw" ? "Wide CSV series" : active.pred}
+                {stage === "raw" ? "Raw sensor log" : active.pred}
               </span>
             </div>
-            <SignalMultiTrace points={active.points || []} sev={stage === "raw" ? "info" : active.sev} />
+            <SignalMultiTrace mode={active.mode || "imbalance"} sev={stage === "raw" ? "info" : active.sev} />
             <div className="lp-sig-stats">
-              <div><span>RMS</span><b>{active.rms}</b></div>
-              <div><span>Peak-to-peak</span><b>{active.peak}</b></div>
-              <div><span>Trend slope</span><b>{active.slope}</b></div>
+              <div><span>Average shake</span><b>{active.rms}</b></div>
+              <div><span>Highest spike</span><b>{active.peak}</b></div>
+              <div><span>Direction</span><b>{active.slope}</b></div>
             </div>
           </div>
         )}
@@ -250,7 +250,7 @@ export function StudioPreview({ outcome, stage, sampleIdx, onSelectSample, data 
 
       <aside className="lp-studio-inspector" id="lp-vis-inspector" aria-live="polite" data-testid="landing-vis-inspector">
         <div className="lp-insp-head">
-          <span className="lp-insp-eyebrow">Console inspector · {data.recipeKey}</span>
+          <span className="lp-insp-eyebrow">{data.badge}</span>
           <span className="lp-insp-backend">{data.backend}</span>
         </div>
 

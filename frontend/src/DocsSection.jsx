@@ -1,41 +1,19 @@
 import { useState } from "react";
 
 const DOC_TABS = [
-  { id: "overview", label: "Platform Overview" },
-  { id: "recipes", label: "Merged Recipes (6)" },
-  { id: "capabilities", label: "Capabilities (P0-P3)" },
-  { id: "waves", label: "Waves & Vision (18/65)" },
-  { id: "ecosystem", label: "Design & Honesty" },
+  { id: "overview", label: "What works today" },
+  { id: "datatypes", label: "All 6 data types" },
+  { id: "privacy", label: "Privacy & control" },
+  { id: "limits", label: "Honest limits" },
 ];
 
-const MERGED_RECIPES = [
-  { key: "vision-detection", modality: "image", backend: "torchvision-fasterrcnn / dfine-coco", status: "Merged end to end (synthetic-verified)" },
-  { key: "audio-classification", modality: "audio", backend: "audio-wav-cnn (ONNX / torch)", status: "Merged in console (synthetic-verified)" },
-  { key: "handwriting-ocr", modality: "image", backend: "ocr-trocr", status: "Merged in console (serving backend-level; weight licence open)" },
-  { key: "tabular-prediction", modality: "table", backend: "tabular-sklearn", status: "Merged in console (synthetic-verified)" },
-  { key: "text-classification", modality: "text", backend: "text-sklearn (TF-IDF + linear)", status: "Merged in console (NER/fields OS-DOC-001 upcoming)" },
-  { key: "signal-classification", modality: "time_series", backend: "signal-sklearn (16 window stats)", status: "Merged in console (forecast/anomaly open)" },
-];
-
-const CAPABILITY_ROWS = [
-  { modality: "Computer Vision", prio: "P0 · Merged", train: "Detection boxes, SAM+CLIP review, COCO/YOLO export & check screens", quality: "Recall, precision, mAP50, missed defect crops" },
-  { modality: "Acoustic AI", prio: "P0 · Merged (clips)", train: "WAV clip classification (ONNX/torch); event windows in Wave 2", quality: "Macro F1, per-class precision/recall, confusion matrix" },
-  { modality: "OCR & Handwriting", prio: "P0 · Merged (train)", train: "Handwriting transcript fine-tuning (TrOCR); backend serving", quality: "CER, WER & exact transcript match" },
-  { modality: "Tabular AI", prio: "P0 · Merged", train: "Classification & prediction from Excel/CSV spreadsheets", quality: "Held-out F1, accuracy & leakage checks" },
-  { modality: "Text & Documents", prio: "P1 · Half merged", train: "CSV text classification merged; NER spans & fields in progress", quality: "Class F1, confusion pairs & schema validation" },
-  { modality: "Signal AI", prio: "P1 · Half merged", train: "Windowed series classification merged; forecasting & anomaly open", quality: "Series F1 & unseen-window evaluation" },
-  { modality: "Speech AI", prio: "P1 · Planned", train: "Transcription, commands & dialect adaptation (Sarawak Malay ASR)", quality: "Word Error Rate (WER) & keyword recall" },
-  { modality: "Pose & Hand Tracking", prio: "P2 · Wave 3", train: "17-pt body skeleton, 21-pt hand landmarks, actions & gestures", quality: "OKS / PCK keypoint accuracy & occlusion misses" },
-  { modality: "Video AI & Face AI (gated)", prio: "P2 · Wave 3", train: "Operations replay (18/65 verified) & consent-gated biometrics", quality: "Temporal F1; Face AI gated by strict consent policy" },
-  { modality: "Multimodal Fusion", prio: "P3 · Wave 4", train: "Joint models combining audio, video, thermal, text & telemetry", quality: "Single-stream vs fused ablation & fallback tests" },
-];
-
-const WAVE_ROWS = [
-  { wave: "Wave 0 · Complete", ids: "OS-CORE-001 to OS-CORE-006", scope: "Shared TaskRecipe & ModalityPlugin registries, generic Annotations, universal DatasetVersion snapshots & TrainingBackend contract." },
-  { wave: "Wave 1 · 4/4 Merged (gate open)", ids: "OS-VIS-001 · OS-AUD-001 · OS-OCR-001 · OS-TAB-001", scope: "Vision detection, Acoustic WAV classification, Handwriting OCR (TrOCR), and Tabular CSV/XLSX — all synthetic-verified." },
-  { wave: "Wave 2 · Text & Signals Merged", ids: "OS-NLP-001 · OS-SIG-001 (merged) · OS-ASR · OS-DOC · OS-AUD-002 (open)", scope: "Text classification and windowed Signal classification merged; Speech ASR, Document NER/fields & acoustic anomaly open." },
-  { wave: "Wave 3 · Proposed", ids: "OS-POS-001 · OS-HND-001 · OS-VID-001 · OS-FAC-001", scope: "Pose & hand gestures, reusable industry Domain Packs, video crossing events & compliance-gated Face AI." },
-  { wave: "Wave 4 · Contracts & Roadmap", ids: "OS-FUS-001 · OS-NOD-001", scope: "Cross-modal late/feature fusion, missing-modality fallback, edge bundles & optional Athena Nodes compute." },
+const DATA_TYPE_ROWS = [
+  { kind: "Photos & short clips", status: "Ready today", what: "Spot rust, safety gear, empty parking bays, or weld defects", check: "Shows what it found vs missed on unseen photos" },
+  { kind: "Sound clips (WAV)", status: "Ready today", what: "Tell normal motor hum apart from bearing wear or belt squeal", check: "Shows per-sound accuracy on unseen clips" },
+  { kind: "Handwriting & forms", status: "Training ready", what: "Fix misread words on scanned logbooks so Athena learns your writing", check: "Check screen for operators is being finished" },
+  { kind: "Spreadsheets (CSV/XLSX)", status: "Ready today", what: "Pick one column to predict (such as Needs Repair) from the other columns", check: "Tests on new rows and lists the biggest clues" },
+  { kind: "Shift notes & tickets", status: "Sorting ready", what: "Sort incoming incident notes to the right team automatically", check: "Pulling out individual equipment names comes next" },
+  { kind: "Machine sensors", status: "Sorting ready", what: "Compare vibration and temperature windows against normal limits", check: "Forecasting hours ahead comes next" },
 ];
 
 export function DocsSection() {
@@ -43,14 +21,8 @@ export function DocsSection() {
   const [query, setQuery] = useState("");
   const q = query.trim().toLowerCase();
 
-  const filteredRecipes = MERGED_RECIPES.filter(
-    (r) => !q || `${r.key} ${r.modality} ${r.backend} ${r.status}`.toLowerCase().includes(q),
-  );
-  const filteredCaps = CAPABILITY_ROWS.filter(
-    (r) => !q || `${r.modality} ${r.prio} ${r.train} ${r.quality}`.toLowerCase().includes(q),
-  );
-  const filteredWaves = WAVE_ROWS.filter(
-    (w) => !q || `${w.wave} ${w.ids} ${w.scope}`.toLowerCase().includes(q),
+  const filteredTypes = DATA_TYPE_ROWS.filter(
+    (r) => !q || `${r.kind} ${r.status} ${r.what} ${r.check}`.toLowerCase().includes(q),
   );
 
   return (
@@ -59,17 +31,17 @@ export function DocsSection() {
         <div className="lp-head lp-head--split lp-reveal">
           <div>
             <p className="lp-eyebrow">
-              <b>06</b> Docs &amp; current development
+              <b>06</b> Quick guide
             </p>
             <h2 className="lp-h2" id="docs-title">
-              Verified main state &amp; <em>reference docs.</em>
+              Plain-English guide &amp; <em>honest status.</em>
             </h2>
           </div>
-          <p className="lp-sub">Updated 20 November 2026: Wave 0 complete, Wave 1 merged, Text &amp; Signal classification merged, and Vision workflows at 18 of 65.</p>
+          <p className="lp-sub">Everything you need to know about what works right now, how your data stays private, and where people stay in charge.</p>
         </div>
 
         <div className="lp-docs-bar">
-          <div className="lp-docs-tabs" role="group" aria-label="Documentation sections">
+          <div className="lp-docs-tabs" role="group" aria-label="Guide sections">
             {DOC_TABS.map((t) => (
               <button
                 key={t.id}
@@ -87,8 +59,8 @@ export function DocsSection() {
             className="lp-docs-search"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Filter docs (e.g. TrOCR, Wave 2, signal)..."
-            aria-label="Filter documentation tables"
+            placeholder="Search guide (e.g. audio, Excel, privacy)..."
+            aria-label="Search quick guide"
           />
         </div>
 
@@ -96,59 +68,34 @@ export function DocsSection() {
           {(tab === "overview" || q) && (
             <div className="lp-docs-grid">
               <div className="lp-docs-card">
-                <strong>Registry-Driven Shared Lifecycle</strong>
-                <p>Every project picks a <code>TaskRecipe</code> and runs through one lifecycle: Project -&gt; Task -&gt; Observation -&gt; Annotation -&gt; DatasetVersion -&gt; TrainingRun -&gt; ModelVersion -&gt; Evaluation -&gt; Deployment -&gt; Feedback. Views dispatch via plugin registries without modality branches.</p>
+                <strong>No coding or data-science team required</strong>
+                <p>Ask questions about photos today in plain English, or walk through a simple 6-step checklist to train your own model on photos, sounds, handwriting, spreadsheets, shift notes, or sensor logs.</p>
               </div>
               <div className="lp-docs-card">
-                <strong>Verified Baseline on Main (20 Nov 2026)</strong>
-                <p>Wave 0 complete; all 4 Wave 1 slices merged (vision, audio, TrOCR, tabular); Text &amp; Signal halves of Wave 2 merged; Vision workflows at 18 of 65 tasks (T01–T14, T19–T22) including T06 setup, T12 view health, T13 replay, T14 line direction &amp; encrypted credentials.</p>
+                <strong>One simple workspace for every job</strong>
+                <p>Instead of learning six different tools, every project follows the exact same steps: add your data, check the labels, freeze a test set, train, check real mistakes, and approve before anyone uses it.</p>
               </div>
             </div>
           )}
 
-          {(tab === "recipes" || q) && (
+          {(tab === "datatypes" || q) && (
             <div className="lp-docs-table-wrap">
               <table className="lp-docs-table">
                 <thead>
                   <tr>
-                    <th scope="col">Recipe Key</th>
-                    <th scope="col">Modality</th>
-                    <th scope="col">Training Backend</th>
-                    <th scope="col">Verified State</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredRecipes.map((row) => (
-                    <tr key={row.key}>
-                      <td><code>{row.key}</code></td>
-                      <td><code>{row.modality}</code></td>
-                      <td><code>{row.backend}</code></td>
-                      <td>{row.status}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {(tab === "capabilities" || q) && (
-            <div className="lp-docs-table-wrap">
-              <table className="lp-docs-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Modality</th>
+                    <th scope="col">Data type</th>
                     <th scope="col">Status</th>
-                    <th scope="col">What Users Train</th>
-                    <th scope="col">Quality Gate</th>
+                    <th scope="col">What you can do</th>
+                    <th scope="col">Notes</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {filteredCaps.map((row) => (
-                    <tr key={row.modality}>
-                      <td>{row.modality}</td>
-                      <td><code>{row.prio}</code></td>
-                      <td>{row.train}</td>
-                      <td>{row.quality}</td>
+                  {filteredTypes.map((row) => (
+                    <tr key={row.kind}>
+                      <td>{row.kind}</td>
+                      <td><code>{row.status}</code></td>
+                      <td>{row.what}</td>
+                      <td>{row.check}</td>
                     </tr>
                   ))}
                 </tbody>
@@ -156,38 +103,28 @@ export function DocsSection() {
             </div>
           )}
 
-          {(tab === "waves" || q) && (
-            <div className="lp-docs-table-wrap">
-              <table className="lp-docs-table">
-                <thead>
-                  <tr>
-                    <th scope="col">Wave</th>
-                    <th scope="col">Workstream IDs</th>
-                    <th scope="col">Scope &amp; Deliverables</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredWaves.map((w) => (
-                    <tr key={w.wave}>
-                      <td>{w.wave}</td>
-                      <td><code>{w.ids}</code></td>
-                      <td>{w.scope}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {(tab === "ecosystem" || q) && (
+          {(tab === "privacy" || q) && (
             <div className="lp-docs-grid">
               <div className="lp-docs-card">
-                <strong>Console Design &amp; Honesty Rules</strong>
-                <p>Token-only Light &amp; Dark themes (<code>tokens.css</code>), strict CSP with zero external origins, progressive enhancement, readable state (<code>Ready</code> / <code>Blocked</code> with one next action), and explicit limits: synthetic-only verification, backend-level OCR serving, and open TrOCR weight licence decision.</p>
+                <strong>Your files never have to leave your building</strong>
+                <p>Run Athena on your own office server, plant computer, or local laptop. Connect local AI models and your photos, sound clips, and spreadsheets stay completely inside your own network.</p>
               </div>
               <div className="lp-docs-card">
-                <strong>System Boundaries (OS · Forge · Lab · Nodes)</strong>
-                <p>Athena OS stays Apache-2.0 self-hostable. Athena Forge contributes specialized trainers via versioned contracts; Athena Lab runs benchmarking &amp; release qualification; Athena Nodes offers optional distributed GPU compute.</p>
+                <strong>Nothing changes without human sign-off</strong>
+                <p>A new model never goes live automatically. A supervisor reviews its test results first, approves it, and can roll back to the previous version in one click at any time.</p>
+              </div>
+            </div>
+          )}
+
+          {(tab === "limits" || q) && (
+            <div className="lp-docs-grid">
+              <div className="lp-docs-card">
+                <strong>What is ready vs still being tested</strong>
+                <p>Instant photo checks and all six training workflows run today and have been verified on test examples. Multi-sensor fusion and live camera people-counting are in active development and not yet ready for live production use on real plant data.</p>
+              </div>
+              <div className="lp-docs-card">
+                <strong>Video clip &amp; handwriting notes</strong>
+                <p>Uploaded videos are checked as six evenly spaced still frames — so they show a snapshot rather than a live crossing count. Handwriting training works today while its operator upload screen is being finalized.</p>
               </div>
             </div>
           )}

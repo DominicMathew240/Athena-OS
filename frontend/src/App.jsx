@@ -15,16 +15,16 @@ import welding from "./assets/landing/welding.jpg";
 const PORTFOLIO = site.founder.url;
 const STORAGE_KEY = "color-scheme";
 const TICKER = [
-  "Corrosion & defect checks",
-  "Motor fault acoustics",
-  "Handwritten maintenance logs",
-  "Spreadsheet predictions",
+  "Rust & damage checks",
+  "Motor fault sounds",
+  "Handwritten logs",
+  "Spreadsheet forecasts",
   "Work-order sorting",
-  "Sensor signal monitoring",
-  "Multi-signal fusion",
-  "Offline edge deployment",
-  "Human approval gates",
-  "Self-hosted Qwen or BYO AI",
+  "Machine sensor alerts",
+  "Combined site checks",
+  "Runs offline on site",
+  "People stay in charge",
+  "No coding required",
 ];
 
 function getSystemScheme() {
@@ -168,18 +168,18 @@ function Demo() {
   }
 
   const labels = {
-    corrosion: "Corrosion",
+    corrosion: "Rust check",
     parking: "Parking",
     footfall: "Entrance",
-    audio: "Audio WAV",
-    ocr: "OCR Form",
+    audio: "Motor sound",
+    ocr: "Handwriting",
   };
 
   return (
     <div className="lp-demo" data-testid="landing-hero-demo">
       <div className="lp-demo-bar">
-        <span className="lp-demo-badge">MULTIMODAL</span>
-        <div className="lp-demo-tabs" role="tablist" aria-label="Example checks across modalities">
+        <span className="lp-demo-badge">LIVE EXAMPLE</span>
+        <div className="lp-demo-tabs" role="tablist" aria-label="Example checks across data types">
           {SCENE_ORDER.map((key, idx) => (
             <button
               key={key}
@@ -204,8 +204,8 @@ function Demo() {
           {shown.kind === "audio" ? (
             <div className="lp-hero-modality">
               <div className="lp-hero-mod-head">
-                <span>pump-bearing-line4.wav · 16-bit PCM · 48 kHz</span>
-                <code>audio-wav-cnn</code>
+                <span>pump-bearing-line4.wav · 4.2s recording</span>
+                <code>Pump 04</code>
               </div>
               <RealAudioWaveform variant={shown.variants?.[activeFinding] || "fault"} />
               <SpectrogramGraphic variant={shown.variants?.[activeFinding] || "fault"} />
@@ -213,8 +213,8 @@ function Demo() {
           ) : shown.kind === "ocr" ? (
             <div className="lp-hero-modality lp-hero-modality--ocr">
               <div className="lp-hero-mod-head">
-                <span>maintenance-log-408B.png · line crops</span>
-                <code>ocr-trocr</code>
+                <span>maintenance-log-408B.png · Scanned lines</span>
+                <code>Logbook</code>
               </div>
               <div className="lp-hero-ocr-stack">
                 {[0, 1, 2].map((idx) => (
@@ -439,20 +439,20 @@ export default function App() {
             </button>
             <ul className="lp-links" id="lp-links" ref={navLinksRef}>
               <li><a href="#use-cases" data-testid="landing-nav-use-cases" onClick={closeMenu}>Use cases</a></li>
-              <li><a href="#how" data-testid="landing-nav-how" onClick={closeMenu}>Workflow</a></li>
+              <li><a href="#how" data-testid="landing-nav-how" onClick={closeMenu}>How it works</a></li>
               <li><a href="#teach-workflow" data-testid="landing-nav-teach" onClick={closeMenu}>Studio</a></li>
-              <li><a href="#roadmap" data-testid="landing-nav-roadmap" onClick={closeMenu}>Fusion &amp; Edge</a></li>
-              <li><a href="#docs" data-testid="landing-nav-docs" onClick={closeMenu}>Docs</a></li>
+              <li><a href="#roadmap" data-testid="landing-nav-roadmap" onClick={closeMenu}>Site &amp; Edge</a></li>
+              <li><a href="#docs" data-testid="landing-nav-docs" onClick={closeMenu}>Guide</a></li>
               <li><a href="#founder" onClick={closeMenu}>Founder</a></li>
               <li><a href="#faq" onClick={closeMenu}>FAQ</a></li>
               <li className="lp-links-cta">
-                <a className="lp-btn lp-btn--outline lp-btn--sm" href="#docs" onClick={closeMenu}>Docs &amp; Roadmap</a>
+                <a className="lp-btn lp-btn--outline lp-btn--sm" href="#docs" onClick={closeMenu}>Quick Guide</a>
               </li>
             </ul>
           </nav>
           <div className="lp-nav-cta">
             <ThemeToggle />
-            <a className="lp-btn lp-btn--outline" href="#docs" data-testid="landing-docs-button">Docs</a>
+            <a className="lp-btn lp-btn--outline" href="#docs" data-testid="landing-docs-button">Guide</a>
             <PortfolioButton className="lp-btn lp-btn--primary" testId="landing-nav-cta-button">
               Visit portfolio
               <Icon name="arrow" size={16} />
@@ -466,31 +466,31 @@ export default function App() {
           <div className="lp-container lp-hero-grid">
             <div className="lp-hero-copy">
               <p className="lp-kicker" data-testid="landing-positioning-kicker">
-                Athena OS · Teach AI what matters to your world. No coding required.
+                Athena OS · No coding or technical background required.
               </p>
               <h1 className="lp-h1" id="hero-title" data-testid="landing-hero-title">
                 Train AI on <em>all</em> your data.
               </h1>
               <p className="lp-lead">
-                Build, review, test, and approve models across photos, audio clips, handwriting, spreadsheets, text, and signals — no coding required.
+                Show Athena photos, sound recordings, handwritten logs, Excel spreadsheets, shift notes, or sensor readings — and get clear, everyday answers your whole team can use.
               </p>
               <p className="lp-lead-note">
-                Inspect photos or 6-frame clips today (not a complete crossing count or live monitor), and train custom models across six data types on your own hardware.
+                Check photos or short 6-frame video clips today (not a live people counter). Everything can run right on your own computer, and a person always makes the final call.
               </p>
               <div className="lp-cta-row">
                 <a className="lp-btn lp-btn--primary lp-btn--lg" href="#teach-workflow" data-testid="landing-hero-cta-button">
-                  Explore the studio
+                  See how it works
                   <Icon name="arrow" size={18} />
                 </a>
                 <a className="lp-btn lp-btn--line lp-btn--lg" href="#roadmap" data-testid="landing-hero-secondary-button">
-                  See fusion &amp; edge
+                  Combined site checks
                   <Icon name="arrow" size={16} />
                 </a>
               </div>
               <ul className="lp-proof" aria-label="At a glance">
-                <li><Icon name="layers" size={16} /><strong>6 data types</strong> ready to train</li>
-                <li><Icon name="cpu" size={16} /><strong>Qwen</strong> or your own AI</li>
-                <li><Icon name="server" size={16} />Offline edge · Apache-2.0</li>
+                <li><Icon name="layers" size={16} /><strong>6 data types</strong> in one simple tool</li>
+                <li><Icon name="cpu" size={16} />Works offline on your PC or server</li>
+                <li><Icon name="server" size={16} />Free &amp; open source</li>
               </ul>
             </div>
             <Demo />
@@ -512,32 +512,32 @@ export default function App() {
             </div>
             <div className="lp-compare">
               <article className="lp-compare-card lp-reveal" data-testid="landing-compare-detector">
-                <p className="lp-compare-tag">Standard detector (CNN)</p>
+                <p className="lp-compare-tag">Typical AI tool</p>
                 <div className="lp-compare-img lp-compare-img--plain">
-                  <img src={pipe} alt="Pipes with raw confidence-only boxes" loading="lazy" width={1400} height={933} />
+                  <img src={pipe} alt="Pipes with raw score-only boxes" loading="lazy" width={1400} height={933} />
                   <span className="lp-cbox" data-b="1"><i>rust 0.82</i></span>
                   <span className="lp-cbox" data-b="2"><i>rust 0.77</i></span>
                   <span className="lp-cbox" data-b="3"><i>rust 0.61</i></span>
                 </div>
                 <ul className="lp-list lp-list--muted">
-                  <li>Raw boxes and class confidence scores only.</li>
-                  <li>No guidance on severity or next maintenance action.</li>
-                  <li>Separate tooling per data type.</li>
+                  <li>Only draws boxes with confusing decimal scores.</li>
+                  <li>Doesn't tell your crew how serious the damage is.</li>
+                  <li>Needs a separate tool for sounds, forms, and spreadsheets.</li>
                 </ul>
               </article>
               <article className="lp-compare-card lp-compare-card--athena lp-reveal" data-testid="landing-compare-athena">
-                <p className="lp-compare-tag"><span className="lp-live" aria-hidden="true" />Athena inspection + human sign-off</p>
+                <p className="lp-compare-tag"><span className="lp-live" aria-hidden="true" />Athena plain-English check</p>
                 <div className="lp-compare-img">
-                  <img src={pipe} alt="Pipes with numbered severity boxes and review state" loading="lazy" width={1400} height={933} />
+                  <img src={pipe} alt="Pipes with numbered boxes and review tags" loading="lazy" width={1400} height={933} />
                   <span className="lp-abox" data-b="1" data-sev="high"><i>1</i></span>
-                  <span className="lp-abox" data-b="2" data-sev="medium"><i>2 · review</i></span>
+                  <span className="lp-abox" data-b="2" data-sev="medium"><i>2 · check</i></span>
                   <span className="lp-abox" data-b="3" data-sev="low"><i>3</i></span>
                 </div>
-                <p className="lp-quote">“<strong>Severe clamp scaling (1)</strong> and coating breakdown on both pipes (2, 3) — wire-brush, recoat, and check wall thickness.”</p>
+                <p className="lp-quote">“<strong>Severe clamp rust (1)</strong> and peeling paint on both pipes (2, 3) — wire-brush, recoat, and check pipe thickness.”</p>
                 <ul className="lp-list">
-                  <li>Plain-language severity and repair actions with human review gates.</li>
-                  <li>Suggested boxes stay marked Needs review until accepted.</li>
-                  <li>One console across instant VLM checks and trained models.</li>
+                  <li>Clear repair advice in everyday language.</li>
+                  <li>AI guesses stay marked “Check” until a person confirms.</li>
+                  <li>One easy tool across photos, audio, forms, and Excel files.</li>
                 </ul>
               </article>
             </div>
@@ -638,22 +638,22 @@ export default function App() {
             <div className="lp-reveal">
               <p className="lp-eyebrow"><b>07</b> Your AI, your rules</p>
               <h2 className="lp-h2" id="ai-title">Run AI where you choose.</h2>
-              <p className="lp-sub">Connect self-hosted Qwen, Ollama, or vLLM for picture reading, and run training workers locally on your own CPU/GPU with encrypted credentials.</p>
-              <ul className="lp-pills" aria-label="Works with">
-                <li>Qwen-VL</li><li>OpenAI</li><li>Google Gemini</li><li>OpenRouter</li><li>vLLM</li><li>Ollama</li><li>LM Studio</li><li>Alibaba Cloud</li>
+              <p className="lp-sub">Keep everything private on your own office computer using built-in open-source AI, or connect an online AI service you already use — with encrypted keys and zero vendor lock-in.</p>
+              <ul className="lp-pills" aria-label="Compatible AI services">
+                <li>Built-in Qwen (Local)</li><li>OpenAI</li><li>Google Gemini</li><li>Local Server</li><li>Ollama</li><li>LM Studio</li>
               </ul>
             </div>
             <div className="lp-ai-cards lp-reveal" aria-hidden="true">
               <div className="lp-ai-card lp-ai-card--on">
-                <div className="lp-ai-top"><strong>Built-in Qwen</strong><span className="lp-ai-badge">Default</span></div>
-                <p>qwen2.5vl:7b · local or self-hosted</p>
-                <span className="lp-ai-status"><i />Connected example</span>
+                <div className="lp-ai-top"><strong>Built-in Local AI</strong><span className="lp-ai-badge">Default</span></div>
+                <p>Runs right on your own computer — nothing leaves your site</p>
+                <span className="lp-ai-status"><i />Ready offline</span>
               </div>
               <div className="lp-ai-card">
-                <div className="lp-ai-top"><strong>Your own AI</strong><span className="lp-ai-badge lp-ai-badge--line">Optional</span></div>
-                <div className="lp-ai-field"><span>Address</span><code>https://api.openai.com/v1</code></div>
-                <div className="lp-ai-field"><span>Model</span><code>gpt-4o-mini</code></div>
-                <div className="lp-ai-field"><span>API key</span><code>encrypted · 3f9a</code></div>
+                <div className="lp-ai-top"><strong>Connect your own AI</strong><span className="lp-ai-badge lp-ai-badge--line">Optional</span></div>
+                <div className="lp-ai-field"><span>Service</span><code>Cloud or local server address</code></div>
+                <div className="lp-ai-field"><span>Model</span><code>Pick any compatible model</code></div>
+                <div className="lp-ai-field"><span>Password</span><code>Stored encrypted · never shown</code></div>
               </div>
             </div>
           </div>
@@ -663,13 +663,13 @@ export default function App() {
           <div className="lp-container">
             <div className="lp-head lp-reveal">
               <p className="lp-eyebrow"><b>08</b> Built to be trusted</p>
-              <h2 className="lp-h2" id="open-title">Open source. Self-hosted. Human-approved.</h2>
+              <h2 className="lp-h2" id="open-title">Open source. Private. Person-approved.</h2>
             </div>
             <div className="lp-trust">
-              <div className="lp-trust-item lp-reveal"><span><Icon name="code" size={22} /></span><h3>Open source</h3><p>Apache-2.0 with zero required cloud service.</p></div>
-              <div className="lp-trust-item lp-reveal"><span><Icon name="server" size={22} /></span><h3>Self-hosted</h3><p>One server; images, audio, and tables stay on your network.</p></div>
-              <div className="lp-trust-item lp-reveal"><span><Icon name="shield" size={22} /></span><h3>Human sign-off</h3><p>No auto-promotion — review evidence and roll back anytime.</p></div>
-              <div className="lp-trust-item lp-reveal"><span><Icon name="detector" size={22} /></span><h3>Real quality gates</h3><p>Task metrics like missed faults, WER, CER, F1, and mAP.</p></div>
+              <div className="lp-trust-item lp-reveal"><span><Icon name="code" size={22} /></span><h3>Free &amp; open source</h3><p>Apache-2.0 licence with zero mandatory cloud fees.</p></div>
+              <div className="lp-trust-item lp-reveal"><span><Icon name="server" size={22} /></span><h3>Stays on your network</h3><p>Photos, audio, and spreadsheets stay on your own machine.</p></div>
+              <div className="lp-trust-item lp-reveal"><span><Icon name="shield" size={22} /></span><h3>Human sign-off</h3><p>Nothing goes live without approval — undo in one click anytime.</p></div>
+              <div className="lp-trust-item lp-reveal"><span><Icon name="detector" size={22} /></span><h3>Honest error checks</h3><p>Shows missed items and mistakes clearly before you rely on it.</p></div>
             </div>
             <section className="lp-advisory" aria-labelledby="security-update-title">
               <div>

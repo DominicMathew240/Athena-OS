@@ -5,10 +5,10 @@
   "definition": "Athena OS is an open-source, self-hosted no-code AI training and visual inspection platform across photos, video, audio, handwriting, documents, signals, and spreadsheets. Apache-2.0.",
   "description": "Train AI on all your data: photos, audio, handwriting, documents, signals, and spreadsheets. Self-hosted, no-code, Apache-2.0.",
   "features": [
-    "No-code multimodal training recipes across Vision, Audio, Handwriting OCR, Spreadsheets, Text, and Signals",
+    "No-code AI setup across Photos, Sounds, Handwriting, Spreadsheets, Text notes, and Sensors",
     "Ask plain-language questions on photos or 6-frame video clips with counts and marked regions",
-    "Consistent Project to Feedback lifecycle with modality-specific quality gates",
-    "Open-source Qwen by default or any OpenAI-compatible AI, self-hosted under Apache-2.0"
+    "Step-by-step guided workflow from sample upload to accuracy check and real-world review",
+    "Built-in private Qwen AI by default, or connect your own cloud or local AI"
   ],
   "founder": {
     "name": "Ts. Dominic Mathew",
@@ -35,15 +35,15 @@
     },
     {
       "q": "Do I need to write code?",
-      "a": "No. Pick an intended outcome recipe or ready-made inspection check, label samples visually, and review quality in plain words — no ML boilerplate required."
+      "a": "No. Pick what you want Athena to do, point out a few examples visually, and read results in plain English — no coding or technical jargon needed."
     },
     {
       "q": "Where does it run?",
-      "a": "On your own server or local CPU/GPU (with optional Athena Nodes). Apache-2.0. Your media and training data stay on your network."
+      "a": "On your own office computer, server, or small site box right next to your cameras and machines. Open-source Apache-2.0 — your data stays in your building."
     },
     {
       "q": "Which AI does it use?",
-      "a": "It ships with open Qwen vision-language support and modular training recipes, or connects to any OpenAI-compatible endpoint including OpenAI, Gemini, OpenRouter, vLLM, Ollama, and LM Studio."
+      "a": "It includes built-in private Qwen AI for offline use, or you can connect OpenAI, Google Gemini, OpenRouter, or a local server like Ollama or LM Studio."
     },
     {
       "q": "Who built Athena OS?",

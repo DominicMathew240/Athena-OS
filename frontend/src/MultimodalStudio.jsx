@@ -197,22 +197,22 @@ export function MultimodalStudio({ portfolioUrl }) {
           <div className="lp-head lp-head--split lp-reveal">
             <div>
               <p className="lp-eyebrow">
-                <b>05</b> Multi-signal fusion &amp; edge
+                <b>05</b> Combined site checks &amp; offline edge
               </p>
               <h2 className="lp-h2" id="roadmap-title">
-                Combine sensors. Run <em>right on site.</em>
+                Combine everything. Run <em>right on site.</em>
               </h2>
             </div>
-            <p className="lp-sub">A single camera or sensor can cry wolf. Combining audio, thermal, vision, and machine telemetry at your local edge box cuts false alarms and keeps working offline.</p>
+            <p className="lp-sub">A single camera or sensor can give false alarms. Combining photos, sounds, heat maps, and machine gauges on your own local computer gives your team clear answers — even without internet.</p>
           </div>
 
           <div className="lp-fusion-showcase lp-reveal" id="lp-fusion-showcase" data-testid="landing-fusion-showcase">
             <div className="lp-fusion-head">
               <div>
-                <p className="lp-arch-label">How end-product fusion &amp; edge helps teams</p>
-                <h3 className="lp-fusion-title">Pick an industrial scenario</h3>
+                <p className="lp-arch-label">Example operator screen</p>
+                <h3 className="lp-fusion-title">Pick a real-world site check</h3>
               </div>
-              <div className="lp-fusion-tabs" id="lp-fusion-tabs" role="group" aria-label="Preview real-world fusion and edge scenarios">
+              <div className="lp-fusion-tabs" id="lp-fusion-tabs" role="group" aria-label="Preview real-world site checks">
                 {Object.values(FUSION_SCENARIOS).map((sc) => (
                   <button
                     key={sc.id}
@@ -241,10 +241,10 @@ export function MultimodalStudio({ portfolioUrl }) {
             ))}
           </div>
 
-          <div className="lp-arch lp-reveal" aria-label="Shared lifecycle from upload to field deployment">
+          <div className="lp-arch lp-reveal" aria-label="Simple lifecycle from upload to daily use">
             <div className="lp-arch-layer lp-arch-layer--engine">
-              <p className="lp-arch-label">One simple lifecycle across every data type</p>
-              <div className="lp-lifecycle-chips" aria-label="Shared training and deployment steps">
+              <p className="lp-arch-label">The same 8 plain-English steps for every project</p>
+              <div className="lp-lifecycle-chips" aria-label="Shared steps">
                 {LIFECYCLE_RESOURCES.map((res) => (
                   <span key={res}>{res}</span>
                 ))}
@@ -253,9 +253,9 @@ export function MultimodalStudio({ portfolioUrl }) {
           </div>
 
           <div className="lp-roadmap-foot">
-            <p className="lp-roadmap-note">Multi-sensor fusion &amp; edge node bundles are in active development on top of the merged single-modality models.</p>
+            <p className="lp-roadmap-note">Single-data-type training runs today; multi-sensor site monitors are currently being built on top of it.</p>
             <a className="lp-btn lp-btn--outline lp-btn--sm" href="#docs">
-              View technical docs
+              Read the quick guide
               <Icon name="arrow" size={15} />
             </a>
           </div>
