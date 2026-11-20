@@ -35,7 +35,13 @@ class DraftAttachTests(TestCase):
         self.user = get_user_model().objects.create_user("attacher")
         grant(self.user, "labeler")
         self.client.force_login(self.user)
-        self.line = {"start": [0.1, 0.5], "end": [0.9, 0.5], "name": "Front door line", "positive_label": "Entering", "negative_label": "Leaving"}
+        self.line = {
+            "start": [0.1, 0.5],
+            "end": [0.9, 0.5],
+            "name": "Front door line",
+            "positive_label": "Entering",
+            "negative_label": "Leaving",
+        }
         _, _, self.operation = make_scope(self.client)
 
     def put(self, path, payload, status=200):
@@ -227,3 +233,75 @@ class LineDirectionSurfaceTests(TestCase):
         self.assertContains(page, "not a detection and not a promise about counts")
         # Reversal stays a labeler-gated action like every other mutation on this page.
         self.assertContains(page, 'id="line-reverse" type="button" data-needs="label"')
+
+
+class LineAccessibilitySurfaceTests(TestCase):
+    """T15: the line step carries keyboard alternatives, a text summary, and undo/redo
+    surfaces in the server-rendered markup, so no essential geometry action needs a
+    mouse or colour recognition."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user("line-a11y-user")
+        grant(self.user, "labeler")
+        self.client.force_login(self.user)
+
+    def test_line_step_includes_keyboard_endpoint_nudging_surfaces(self):
+        page = self.client.get("/operations")
+        self.assertEqual(page.status_code, 200)
+        for needle in (
+            'id="line-nudge"',
+            'id="line-select-start"',
+            'id="line-select-end"',
+            'id="line-move-left"',
+            'id="line-move-right"',
+            'id="line-move-up"',
+            'id="line-move-down"',
+        ):
+            with self.subTest(needle=needle):
+                self.assertContains(page, needle)
+        # The chosen-endpoint buttons expose their state as text, never colour alone.
+        self.assertContains(page, 'id="line-select-start" type="button" aria-pressed="false"')
+        self.assertContains(page, 'id="line-select-end" type="button" aria-pressed="false"')
+        self.assertContains(page, 'role="group" aria-labelledby="line-nudge-point-label"')
+        self.assertContains(page, 'role="group" aria-labelledby="line-nudge-move-label"')
+        # The copy states the fine and coarse keyboard steps and that dragging is
+        # never required.
+        self.assertContains(page, "fine step of 0.001")
+        self.assertContains(page, "coarse step of 0.01")
+        self.assertContains(page, "Dragging an endpoint is never required")
+
+    def test_line_step_includes_undo_redo_and_summary_surfaces(self):
+        page = self.client.get("/operations")
+        self.assertEqual(page.status_code, 200)
+        for needle in (
+            'id="line-undo"',
+            'id="line-redo"',
+            'data-testid="line-undo"',
+            'data-testid="line-redo"',
+            'id="line-history"',
+            'id="line-summary"',
+            'id="line-summary-box"',
+            'data-testid="line-summary"',
+        ):
+            with self.subTest(needle=needle):
+                self.assertContains(page, needle)
+        # The summary is a live region: screen readers announce geometry changes,
+        # and the undo/redo copy is honest about the saved state boundary.
+        self.assertContains(page, 'id="line-summary" class="line-summary-text" role="status" aria-live="polite"')
+        self.assertContains(page, "undo never reaches past the last saved state")
+        # The numeric endpoint fields and the editing canvas are labelled.
+        self.assertContains(page, 'for="line-start-x">Start: left to right (%)')
+        self.assertContains(page, 'for="line-end-y">End: top to bottom (%)')
+        self.assertContains(
+            page, 'id="line-canvas" class="line-canvas" width="640" height="360" tabindex="0" role="img"'
+        )
+
+    def test_line_step_clear_and_nudge_controls_are_labeler_gated(self):
+        page = self.client.get("/operations")
+        for needle in (
+            'id="line-clear" type="button" data-needs="label"',
+            'id="line-undo" type="button" data-testid="line-undo"',
+            'id="line-move-left" type="button" data-testid="line-move-left"',
+        ):
+            with self.subTest(needle=needle):
+                self.assertContains(page, needle)

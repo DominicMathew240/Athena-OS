@@ -261,7 +261,20 @@
   markPositiveEvent.addEventListener("click", () => markReferenceEvent("negative_to_positive"));
   markNegativeEvent.addEventListener("click", () => markReferenceEvent("positive_to_negative"));
   document.getElementById("line-clear").addEventListener("click", () => {
-    if (!lineEditor.read() && referenceEvents.length) {
+    // The line editor itself confirms before discarding unsaved work (T15);
+    // this listener only handles the reference events that follow the line.
+    const hasUnsavedLine = (() => { try { return lineEditor.dirty(); } catch (_) { return false; } })();
+    const readsLine = (() => { try { return !!lineEditor.read(); } catch (_) { return false; } })();
+    if (!hasUnsavedLine && !readsLine && referenceEvents.length) {
+      referenceEvents = [];
+      renderReferenceEvents();
+      status.textContent = "Clearing the line also cleared its reference crossings. Save the draft to keep this change.";
+    }
+  });
+  // When an unsaved line was really discarded through the confirm, its reference
+  // events go too: they were marked against geometry that no longer exists here.
+  document.addEventListener("athena:line-cleared", () => {
+    if (referenceEvents.length) {
       referenceEvents = [];
       renderReferenceEvents();
       status.textContent = "Clearing the line also cleared its reference crossings. Save the draft to keep this change.";

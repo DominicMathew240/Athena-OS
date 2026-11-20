@@ -53,15 +53,43 @@
   <h2 class="a-h2" id="line-heading">Draw and name the counting line</h2>
   <p class="a-help">Pause the recording at a clear view, then choose two points on the picture. Name the line and label the two sides of it — your own names for the sides, like "Street" and "Shop"; Athena does not decide which side means what. The arrow points towards the side you name in "Movement towards the arrow". You can also enter point positions below using percentages from the top-left corner.</p>
   <button class="a-btn" id="line-frame" type="button">Use current video frame</button>
-  <canvas id="line-canvas" class="line-canvas" width="640" height="360" aria-label="Video frame for choosing two line endpoints; drag either endpoint to move it, or use the position fields below for keyboard entry"></canvas>
+  <canvas id="line-canvas" class="line-canvas" width="640" height="360" tabindex="0" role="img" aria-label="Video frame for choosing two line endpoints. Drag either endpoint to move it, focus this picture and use the arrow keys to move the chosen endpoint, or type positions into the fields below. The line's state is always written out in the text summary further down."></canvas>
   <div class="line-fields">
     <div class="a-field"><label class="a-label" for="line-name">Line name</label><input class="a-input" id="line-name" maxlength="80" data-needs="label" placeholder="e.g. Front door line"></div>
-    <div class="a-field"><label class="a-label" for="line-start-x">Start: left to right (%)</label><input class="a-input" type="number" id="line-start-x" min="0" max="100" step="any" data-needs="label"></div>
-    <div class="a-field"><label class="a-label" for="line-start-y">Start: top to bottom (%)</label><input class="a-input" type="number" id="line-start-y" min="0" max="100" step="any" data-needs="label"></div>
-    <div class="a-field"><label class="a-label" for="line-end-x">End: left to right (%)</label><input class="a-input" type="number" id="line-end-x" min="0" max="100" step="any" data-needs="label"></div>
-    <div class="a-field"><label class="a-label" for="line-end-y">End: top to bottom (%)</label><input class="a-input" type="number" id="line-end-y" min="0" max="100" step="any" data-needs="label"></div>
+    <div class="a-field"><label class="a-label" for="line-start-x">Start: left to right (%)</label><input class="a-input" type="number" id="line-start-x" min="0" max="100" step="any" data-needs="label" aria-describedby="line-summary"></div>
+    <div class="a-field"><label class="a-label" for="line-start-y">Start: top to bottom (%)</label><input class="a-input" type="number" id="line-start-y" min="0" max="100" step="any" data-needs="label" aria-describedby="line-summary"></div>
+    <div class="a-field"><label class="a-label" for="line-end-x">End: left to right (%)</label><input class="a-input" type="number" id="line-end-x" min="0" max="100" step="any" data-needs="label" aria-describedby="line-summary"></div>
+    <div class="a-field"><label class="a-label" for="line-end-y">End: top to bottom (%)</label><input class="a-input" type="number" id="line-end-y" min="0" max="100" step="any" data-needs="label" aria-describedby="line-summary"></div>
     <div class="a-field"><label class="a-label" for="line-positive">Movement towards the arrow</label><input class="a-input" id="line-positive" maxlength="40" data-needs="label" placeholder="e.g. Entering"></div>
     <div class="a-field"><label class="a-label" for="line-negative">Movement against the arrow</label><input class="a-input" id="line-negative" maxlength="40" data-needs="label" placeholder="e.g. Leaving"></div>
+  </div>
+  <div class="line-nudge" id="line-nudge" aria-labelledby="line-nudge-heading">
+    <h3 class="a-h3" id="line-nudge-heading">Move the endpoints with the keyboard</h3>
+    <p class="a-help">First choose an endpoint with its buttons, then move it with the four arrow buttons: one press is a fine step of 0.001 of the picture, and holding Shift makes it a coarse step of 0.01. The endpoint never leaves the picture, so a step that would cross an edge is held at that edge. Arrow keys also work directly in the position fields. Dragging an endpoint is never required.</p>
+    <div class="line-nudge-point">
+      <span class="a-label" id="line-nudge-point-label">Endpoint to move</span>
+      <div class="line-nudge-buttons" role="group" aria-labelledby="line-nudge-point-label">
+        <button class="a-btn" id="line-select-start" type="button" aria-pressed="false" data-testid="line-select-start">Start point</button>
+        <button class="a-btn" id="line-select-end" type="button" aria-pressed="false" data-testid="line-select-end">End point</button>
+      </div>
+    </div>
+    <div class="line-nudge-move">
+      <span class="a-label" id="line-nudge-move-label">Move the chosen endpoint</span>
+      <div class="line-nudge-buttons" role="group" aria-labelledby="line-nudge-move-label">
+        <button class="a-btn" id="line-move-left" type="button" data-testid="line-move-left">Left</button>
+        <button class="a-btn" id="line-move-right" type="button" data-testid="line-move-right">Right</button>
+        <button class="a-btn" id="line-move-up" type="button" data-testid="line-move-up">Up</button>
+        <button class="a-btn" id="line-move-down" type="button" data-testid="line-move-down">Down</button>
+      </div>
+    </div>
+  </div>
+  <div class="line-history" id="line-history" aria-labelledby="line-history-heading">
+    <h3 class="a-h3" id="line-history-heading">Undo and redo</h3>
+    <p class="a-help">Undo steps back through this session's endpoint moves, direction reversals and side-label changes, one change at a time, up to the point where the line was last saved or loaded. Redo puts a step back. Saving the draft does not erase the session's history, but undo never reaches past the last saved state into older work.</p>
+    <div class="line-history-buttons">
+      <button class="a-btn" id="line-undo" type="button" data-testid="line-undo">Undo</button>
+      <button class="a-btn" id="line-redo" type="button" data-testid="line-redo">Redo</button>
+    </div>
   </div>
   <div class="line-direction" id="line-direction">
     <h3 class="a-h3">Direction</h3>
@@ -88,10 +116,17 @@
     <p id="reference-events-status" class="a-help" role="status" aria-live="polite">No reference crossings marked.</p>
     <ul id="reference-event-list" aria-label="Expected crossings in this recording"></ul>
   </div>
+  <div class="line-summary" id="line-summary-box" aria-labelledby="line-summary-heading">
+    <h3 class="a-h3" id="line-summary-heading">The line as text</h3>
+    <p class="a-help">The same geometry as above, written out: nothing here depends on colour or on the picture.</p>
+    <p id="line-summary" class="line-summary-text" role="status" aria-live="polite" data-testid="line-summary"></p>
+  </div>
   <p id="line-status" class="a-help" role="status" aria-live="polite"></p>
   <p id="line-error" class="a-error" role="alert"></p>
-  <button class="a-btn a-btn--primary" id="line-save" type="button" data-needs="label">Save draft and line</button>
-  <button class="a-btn" id="line-clear" type="button" data-needs="label">Clear line</button>
+  <div class="line-actions">
+    <button class="a-btn a-btn--primary" id="line-save" type="button" data-needs="label">Save draft and line</button>
+    <button class="a-btn" id="line-clear" type="button" data-needs="label">Clear line</button>
+  </div>
 </section>
 <section class="section" aria-labelledby="draft-list-heading">
   <h2 class="a-h2" id="draft-list-heading">Your saved drafts</h2>
