@@ -1,1465 +1,1159 @@
-/* Landing page: the live demo tabs, the mobile menu, the sticky-nav edge, and reveal-on-scroll. */
+/* Athena OS Django landing page script — interactive inspection demos, studio explorer, and site monitor. */
 (() => {
   "use strict";
+
   const STATIC = "/static/projects/landing/";
-  const SCENES = {
-    corrosion: {
-      img: "pipe-corrosion.jpg", alt: "Corroded pipes with a rusted clamp",
-      q: "“Is there corrosion, and how bad is it?”", v: "attention", word: "Needs attention",
-      h: "Severe scaling at the pipe clamp, with coating breaking down on both pipes. Plan a repair this month.",
-      counts: [["3", "Corroded areas"], ["1", "Severe"], ["2", "Pipes affected"]],
-      items: [["high", "Severe scaling under the clamp band"], ["medium", "Coating breakdown, left pipe"], ["low", "Paint flaking, right pipe"]],
-      boxes: [[36, 30, 58, 32, "high"], [25, 55, 24, 43, "medium"], [52, 62, 22, 36, "low"]]
-    },
-    parking: {
-      img: "parking-aerial.jpg", alt: "A car park seen from above",
-      q: "“How many spaces are free?”", v: "clear", word: "All clear",
-      h: "30 of 51 marked spaces are free. The middle and bottom rows have the most room.",
-      counts: [["51", "Total spaces"], ["21", "Occupied"], ["30", "Free"]],
-      items: [["ok", "Free block, bays 640–637"], ["ok", "Free block, bays 660–657"], ["info", "Free bays 617–615, top row"]],
-      boxes: [[39, 52, 19, 13, "ok"], [39, 68, 19, 14, "ok"], [45, 23, 13, 13, "info"]]
-    },
-    footfall: {
-      img: "store-entrance.jpg", alt: "People at a store entrance",
-      q: "“What is visible near the entrance?”", v: "attention", word: "Needs attention",
-      h: "People are visible near the entrance. Parked bikes are narrowing the doorway. A still picture cannot establish crossing totals.",
-      counts: [["6", "People in view"]],
-      items: [["info", "People near the entrance"], ["info", "Person by the doors"], ["medium", "Bikes narrowing the entrance"]],
-      boxes: [[25, 38, 16, 47, "info"], [44, 39, 10, 33, "info"], [17, 66, 32, 34, "medium"]]
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  const reducedMotion = window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+
+  function el(tag, attrs = {}, children = []) {
+    const node = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "class") node.className = v;
+      else if (k === "text") node.textContent = v;
+      else if (k.startsWith("data-")) node.setAttribute(k, String(v));
+      else if (k === "style" && typeof v === "object") Object.assign(node.style, v);
+      else node.setAttribute(k, String(v));
     }
-  };
+    for (const child of children) {
+      if (child === null || child === undefined) continue;
+      node.append(typeof child === "string" ? document.createTextNode(child) : child);
+    }
+    return node;
+  }
 
-  const frame = document.getElementById("demo-frame");
-  const img = document.getElementById("demo-img");
-  const report = document.getElementById("demo-report");
-  let current = "corrosion";
-  let auto = null;
+  function svgEl(tag, attrs = {}, children = []) {
+    const node = document.createElementNS(SVG_NS, tag);
+    for (const [k, v] of Object.entries(attrs)) {
+      if (v === null || v === undefined || v === false) continue;
+      if (k === "text") node.textContent = v;
+      else node.setAttribute(k, String(v));
+    }
+    for (const child of children) {
+      if (child === null || child === undefined) continue;
+      node.append(typeof child === "string" ? document.createTextNode(child) : child);
+    }
+    return node;
+  }
 
-  function draw(key) {
-    const s = SCENES[key];
-    frame.querySelectorAll(".lp-dbox").forEach(n => n.remove());
-    s.boxes.forEach(([x, y, w, h, sev], i) => {
-      const box = document.createElement("span");
-      box.className = "lp-dbox";
-      box.dataset.sev = sev;
-      box.style.left = `${x}%`;
-      box.style.top = `${y}%`;
-      box.style.width = `${w}%`;
-      box.style.height = `${h}%`;
-      box.style.animationDelay = `${0.15 + i * 0.12}s`;
-      const tag = document.createElement("i");
-      tag.textContent = String(i + 1);
-      box.append(tag);
-      frame.append(box);
+  /* ── Shared Realistic Signal / Audio / Ink Graphics ─────────────────────────────────────────── */
+
+  function createAudioWaveSvg(variant = "fault", compact = false) {
+    const width = compact ? 280 : 480;
+    const height = compact ? 54 : 86;
+    const midY = height / 2;
+    const padL = compact ? 4 : 24;
+    const padR = compact ? 4 : 6;
+    const samples = compact ? 76 : 128;
+    const ampScale = compact ? 21 : 34;
+    const sev = variant === "fault" ? "high" : variant === "slip" ? "medium" : "ok";
+
+    const topPts = [];
+    const botPts = [];
+    const rmsTop = [];
+    const rmsBot = [];
+
+    for (let i = 0; i < samples; i += 1) {
+      const t = i / (samples - 1);
+      const x = padL + (i / (samples - 1)) * (width - padL - padR);
+      const h1 = Math.sin(t * Math.PI * 18) * 0.16;
+      const h2 = Math.cos(t * Math.PI * 43 + 0.8) * 0.11;
+      const n = Math.sin(i * 12.9898) * 43758.5453;
+      const jitter = (n - Math.floor(n)) * 0.14;
+
+      let env = 0.24 + Math.abs(h1) + jitter;
+      if (variant === "fault") {
+        const hitPhase = (t * 6.5) % 1;
+        const click = Math.exp(-hitPhase * 7.5) * 0.68;
+        env = Math.min(0.96, 0.2 + click + Math.abs(h1) + jitter);
+      } else if (variant === "slip") {
+        const inBurst = t > 0.36 && t < 0.78;
+        const swell = inBurst ? Math.sin(((t - 0.36) / 0.42) * Math.PI) * 0.7 : 0;
+        env = Math.min(0.95, 0.18 + swell + Math.abs(h1) + Math.abs(h2) + jitter);
+      }
+
+      const rms = Math.max(0.08, env * (0.48 + 0.18 * Math.sin(t * Math.PI * 11)));
+      topPts.push(`${x.toFixed(1)},${(midY - env * ampScale).toFixed(1)}`);
+      botPts.unshift(`${x.toFixed(1)},${(midY + env * ampScale).toFixed(1)}`);
+      rmsTop.push(`${x.toFixed(1)},${(midY - rms * ampScale).toFixed(1)}`);
+      rmsBot.unshift(`${x.toFixed(1)},${(midY + rms * ampScale).toFixed(1)}`);
+    }
+
+    const svg = svgEl("svg", {
+      class: "lp-pcm-svg",
+      viewBox: `0 0 ${width} ${height}`,
+      role: "img",
+      "aria-label": variant === "fault"
+        ? "Audio recording showing sharp clicking bursts"
+        : variant === "slip"
+          ? "Audio recording showing belt squeal burst"
+          : "Steady motor sound wave"
     });
-    document.getElementById("demo-q").textContent = s.q;
-    const verdict = document.getElementById("demo-verdict");
-    verdict.dataset.v = s.v;
-    verdict.textContent = s.word;
-    document.getElementById("demo-h").textContent = s.h;
-    const counts = document.getElementById("demo-counts");
-    counts.replaceChildren(...s.counts.map(([value, label]) => {
-      const cell = document.createElement("div");
-      const b = document.createElement("b");
-      b.textContent = value;
-      const span = document.createElement("span");
-      span.textContent = label;
-      cell.append(b, span);
-      return cell;
-    }));
-    const list = document.getElementById("demo-list");
-    list.replaceChildren(...s.items.map(([sev, text], i) => {
-      const li = document.createElement("li");
-      li.dataset.sev = sev;
-      const b = document.createElement("b");
-      b.textContent = String(i + 1);
-      li.append(b, document.createTextNode(text));
-      return li;
-    }));
-  }
 
-  function show(key, fromUser) {
-    if (!SCENES[key] || key === current && !fromUser) return;
-    current = key;
-    document.querySelectorAll("[data-scene]").forEach(t => t.setAttribute("aria-selected", t.dataset.scene === key ? "true" : "false"));
-    frame.dataset.swap = "true";
-    report.dataset.swap = "true";
-    setTimeout(() => {
-      img.src = STATIC + SCENES[key].img;
-      img.alt = SCENES[key].alt;
-      draw(key);
-      frame.dataset.swap = "false";
-      report.dataset.swap = "false";
-    }, 220);
-    if (fromUser) { clearInterval(auto); auto = null; }
-  }
+    svg.append(
+      svgEl("line", { x1: padL, y1: midY, x2: width - padR, y2: midY, class: "lp-pcm-zero" }),
+      svgEl("line", { x1: padL, y1: (midY - ampScale * 0.55).toFixed(1), x2: width - padR, y2: (midY - ampScale * 0.55).toFixed(1), class: "lp-pcm-guide" }),
+      svgEl("line", { x1: padL, y1: (midY + ampScale * 0.55).toFixed(1), x2: width - padR, y2: (midY + ampScale * 0.55).toFixed(1), class: "lp-pcm-guide" }),
+      svgEl("polygon", { points: `${topPts.join(" ")} ${botPts.join(" ")}`, class: "lp-pcm-peak", "data-sev": sev }),
+      svgEl("polygon", { points: `${rmsTop.join(" ")} ${rmsBot.join(" ")}`, class: "lp-pcm-rms", "data-sev": sev })
+    );
 
-  if (frame) {
-    draw(current);
-    document.querySelectorAll("[data-scene]").forEach(tab => tab.addEventListener("click", () => show(tab.dataset.scene, true)));
-    const order = Object.keys(SCENES);
-    if (!window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      auto = setInterval(() => show(order[(order.indexOf(current) + 1) % order.length], false), 6500);
+    if (!compact) {
+      svg.append(svgEl("g", { class: "lp-pcm-axes" }, [
+        svgEl("text", { x: 2, y: 15, text: "+" }),
+        svgEl("text", { x: 2, y: midY + 3, text: "0" }),
+        svgEl("text", { x: 2, y: height - 7, text: "-" })
+      ]));
     }
+    return svg;
+  }
+
+  function createSpectrogramSvg(variant = "fault", compact = false) {
+    const w = compact ? 280 : 480;
+    const h = compact ? 42 : 104;
+    const cols = compact ? 22 : 34;
+    const rows = compact ? 6 : 11;
+    const padL = compact ? 4 : 38;
+    const padR = 4;
+    const padT = 4;
+    const padB = compact ? 4 : 18;
+    const cw = (w - padL - padR) / cols;
+    const ch = (h - padT - padB) / rows;
+
+    const svg = svgEl("svg", {
+      class: "lp-spec-svg",
+      viewBox: `0 0 ${w} ${h}`,
+      role: "img",
+      "aria-label": `Sound pitch map showing ${variant === "fault" ? "high-pitched clicking" : variant === "slip" ? "brief belt squeal" : "steady low hum"}`
+    });
+
+    if (!compact) {
+      svg.append(svgEl("g", { class: "lp-spec-axes" }, [
+        svgEl("text", { x: 2, y: 14, text: "High" }),
+        svgEl("text", { x: 2, y: 54, text: "Mid" }),
+        svgEl("text", { x: 2, y: 92, text: "Low" }),
+        svgEl("text", { x: padL, y: h - 4, text: "0s" }),
+        svgEl("text", { x: w / 2, y: h - 4, text: "2s" }),
+        svgEl("text", { x: w - 26, y: h - 4, text: "4.2s" })
+      ]));
+    }
+
+    for (let r = 0; r < rows; r += 1) {
+      const freqNorm = 1 - r / (rows - 1);
+      for (let c = 0; c < cols; c += 1) {
+        const t = c / (cols - 1);
+        let energy = 0.14 + 0.1 * Math.sin(c * 0.55 + r * 0.7);
+        if (r === rows - 1) energy += 0.28;
+        if (variant === "fault") {
+          const band = Math.exp(-Math.pow((freqNorm - 0.52) / 0.18, 2));
+          const pulse = 0.55 + 0.45 * Math.sin(t * Math.PI * 6);
+          energy += band * pulse * 0.72;
+        } else if (variant === "slip") {
+          const inBurst = t >= 0.36 && t <= 0.78;
+          const hiBand = Math.exp(-Math.pow((freqNorm - 0.78) / 0.2, 2));
+          if (inBurst) energy += hiBand * 0.76;
+        } else {
+          energy += Math.exp(-Math.pow(freqNorm / 0.22, 2)) * 0.34;
+        }
+        energy = Math.max(0.08, Math.min(1, energy));
+        const tier = energy > 0.74 ? "high" : energy > 0.48 ? "med" : energy > 0.28 ? "low" : "bg";
+        const op = tier === "bg" ? "0.35" : (0.45 + energy * 0.55).toFixed(2);
+        svg.append(svgEl("rect", {
+          x: (padL + c * cw + 0.8).toFixed(2),
+          y: (padT + r * ch + 0.8).toFixed(2),
+          width: Math.max(2, cw - 1.6).toFixed(2),
+          height: Math.max(2, ch - 1.6).toFixed(2),
+          rx: 1.5,
+          opacity: op,
+          class: `lp-spec-cell lp-spec-cell--${tier}`
+        }));
+      }
+    }
+
+    if (!compact && variant === "fault") {
+      svg.append(svgEl("rect", {
+        x: (padL + cols * cw * 0.14).toFixed(1),
+        y: (padT + rows * ch * 0.28).toFixed(1),
+        width: (cols * cw * 0.72).toFixed(1),
+        height: (rows * ch * 0.32).toFixed(1),
+        rx: 3,
+        class: "lp-spec-focus"
+      }));
+    }
+    return svg;
+  }
+
+  function createInkSvg(variant = 0, compact = false) {
+    const strokes = [
+      "M 18 38 C 22 48, 25 48, 30 22 M 34 36 C 36 30, 42 30, 42 37 C 42 40, 45 40, 47 34 M 50 20 L 49 38 C 52 38, 55 34, 57 31 C 59 38, 63 38, 66 32 C 69 32, 71 38, 76 34 M 92 22 L 92 38 M 99 26 C 106 20, 111 28, 99 38 L 111 38 M 118 22 L 118 38 C 127 38, 127 30, 119 30 C 126 29, 126 22, 118 22 M 138 31 L 154 31 M 166 24 C 174 20, 177 29, 165 38 L 176 38 M 183 37 L 184 37 M 196 22 L 191 33 L 203 33 M 199 22 L 199 39",
+      "M 28 24 C 18 22, 18 30, 27 32 C 33 34, 31 40, 20 38 M 36 34 C 42 34, 44 30, 39 30 C 35 30, 35 38, 44 37 M 48 34 C 53 31, 56 38, 50 38 C 46 38, 52 31, 57 37 M 62 20 L 61 38 M 74 30 L 78 38 L 82 31 L 86 38 L 91 30 M 96 34 C 96 29, 104 29, 104 34 C 104 39, 96 39, 96 34 M 110 38 L 110 31 C 113 29, 117 30, 118 32 M 123 38 L 123 31 C 126 29, 131 30, 131 38 M 144 38 L 142 42 M 156 31 L 160 38 L 164 31 L 168 38 L 173 31 M 179 34 C 185 34, 187 30, 182 30 C 178 30, 178 38, 187 37",
+      "M 20 26 C 28 20, 32 28, 20 38 L 32 38 M 39 37 L 40 37 M 52 22 L 46 33 L 58 33 M 54 22 L 54 39 M 74 20 L 74 38 C 82 38, 82 30, 74 30 M 89 34 C 94 31, 97 38, 91 38 C 87 38, 93 31, 98 37 M 104 38 L 104 31 C 107 29, 111 30, 112 32 M 126 30 L 127 30 M 144 23 C 138 23, 138 38, 145 38 C 152 38, 152 23, 144 23 M 158 22 L 158 38 M 168 23 L 159 31 L 169 38"
+    ];
+    const w = compact ? 240 : 260;
+    const h = compact ? 56 : 54;
+    return svgEl("svg", {
+      class: "lp-ink-svg",
+      viewBox: `0 0 ${w} ${h}`,
+      role: "img",
+      "aria-label": "Scanned handwritten line from maintenance logbook"
+    }, [
+      svgEl("line", { x1: 8, y1: 42, x2: w - 8, y2: 42, class: "lp-ink-rule" }),
+      svgEl("line", { x1: 8, y1: 16, x2: w - 8, y2: 16, class: "lp-ink-rule lp-ink-rule--top" }),
+      svgEl("rect", { x: 12, y: 12, width: w - 24, height: 34, rx: 3, class: "lp-ink-crop" }),
+      svgEl("path", { d: strokes[variant % strokes.length], class: "lp-ink-path" })
+    ]);
+  }
+
+  function createSignalTraceSvg(mode = "imbalance", sev = "high", compact = false) {
+    const maxX = compact ? 280 : 480;
+    const maxY = compact ? 76 : 148;
+    const padL = compact ? 6 : 38;
+    const padR = 8;
+    const padT = compact ? 8 : 16;
+    const padB = compact ? 8 : 24;
+    const plotW = maxX - padL - padR;
+    const plotH = maxY - padT - padB;
+    const steps = compact ? 96 : 150;
+    const thresholdY = Math.round(padT + plotH * (1 - 0.56));
+
+    const ch1 = [];
+    const ch2 = [];
+
+    for (let i = 0; i < steps; i += 1) {
+      const t = i / (steps - 1);
+      const x = padL + t * plotW;
+      const n1 = Math.sin(i * 19.13 + 0.7) * 43758.5453;
+      const micro = (n1 - Math.floor(n1) - 0.5) * 0.08;
+      const ripple = 0.05 * Math.sin(t * Math.PI * 26) + 0.03 * Math.cos(t * Math.PI * 41);
+
+      let vib = 0.22 + ripple + micro;
+      let temp = 0.3 + 0.03 * Math.sin(t * Math.PI * 2) + t * 0.04;
+
+      if (mode === "imbalance") {
+        const ramp = 0.16 + 0.42 * (1 / (1 + Math.exp(-(t - 0.32) * 8)));
+        const shaft = 0.14 * Math.sin(t * Math.PI * 22) + 0.06 * Math.sin(t * Math.PI * 44);
+        vib = Math.max(0.08, Math.min(0.94, ramp + shaft + micro));
+        temp = Math.min(0.76, 0.34 + t * 0.32 + 0.015 * Math.sin(t * Math.PI * 5));
+      } else if (mode === "cavitation") {
+        const b1 = Math.exp(-Math.pow((t - 0.28) / 0.045, 2)) * 0.55;
+        const b2 = Math.exp(-Math.pow((t - 0.64) / 0.05, 2)) * 0.62;
+        vib = Math.max(0.08, Math.min(0.95, 0.22 + b1 + b2 + ripple * 1.4 + micro));
+        temp = 0.36 + t * 0.12;
+      } else {
+        vib = Math.max(0.08, Math.min(0.4, 0.21 + 0.035 * Math.sin(t * Math.PI * 16) + micro * 0.6));
+        temp = 0.28 + 0.015 * Math.sin(t * Math.PI * 3);
+      }
+
+      ch1.push([x.toFixed(1), (padT + plotH * (1 - vib)).toFixed(1)]);
+      ch2.push([x.toFixed(1), (padT + plotH * (1 - temp)).toFixed(1)]);
+    }
+
+    const line1 = ch1.map(([x, y]) => `${x},${y}`).join(" ");
+    const area1 = `${padL},${(padT + plotH).toFixed(1)} ${line1} ${(padL + plotW).toFixed(1)},${(padT + plotH).toFixed(1)}`;
+    const line2 = ch2.map(([x, y]) => `${x},${y}`).join(" ");
+
+    const svg = svgEl("svg", {
+      class: "lp-sig-svg",
+      viewBox: `0 0 ${maxX} ${maxY}`,
+      role: "img",
+      "aria-label": `Machine sensor chart showing ${mode === "imbalance" ? "vibration rising past safe limit" : mode === "cavitation" ? "brief vibration spikes" : "steady readings within safe limit"}`
+    });
+
+    [0.25, 0.5, 0.75].forEach((r) => {
+      svg.append(svgEl("line", { x1: padL, y1: (padT + plotH * r).toFixed(1), x2: maxX - padR, y2: (padT + plotH * r).toFixed(1), class: "lp-sig-grid" }));
+    });
+    svg.append(
+      svgEl("line", { x1: padL, y1: thresholdY, x2: maxX - padR, y2: thresholdY, class: "lp-sig-limit" }),
+      svgEl("polygon", { points: area1, class: "lp-sig-area", "data-sev": sev }),
+      svgEl("polyline", { points: line2, fill: "none", class: "lp-sig-line-sec" }),
+      svgEl("polyline", { points: line1, fill: "none", class: "lp-sig-line", "data-sev": sev })
+    );
+
+    if (!compact) {
+      svg.append(
+        svgEl("g", {}, [
+          svgEl("rect", { x: padL + 6, y: thresholdY - 14, width: 68, height: 14, rx: 3, fill: "#0b1018", stroke: "#f59e0b", "stroke-opacity": "0.45", "stroke-width": "1" }),
+          svgEl("text", { x: padL + 11, y: thresholdY - 4, class: "lp-sig-limit-txt", text: "Safe limit" })
+        ]),
+        svgEl("g", { class: "lp-sig-legend" }, [
+          svgEl("text", { x: 4, y: padT + 8, text: "12" }),
+          svgEl("text", { x: 8, y: thresholdY + 3, text: "6" }),
+          svgEl("text", { x: 8, y: padT + plotH, text: "0" }),
+          svgEl("text", { x: padL, y: maxY - 5, text: "Vibration sensor" }),
+          svgEl("text", { x: padL + 148, y: maxY - 5, text: "Temperature trend" }),
+          svgEl("text", { x: maxX - 42, y: maxY - 5, text: "60 sec" })
+        ])
+      );
+    }
+    return svg;
+  }
+
+  /* ── Theme Toggle + Responsive Nav ───────────────────────────────────────────────────────────── */
+
+  const themeBtn = document.getElementById("landing-theme-toggle");
+  const themeText = document.getElementById("lp-theme-text");
+  function syncThemeLabel(theme) {
+    if (!themeBtn) return;
+    const isDark = theme === "dark";
+    themeBtn.setAttribute("aria-pressed", String(isDark));
+    themeBtn.setAttribute("aria-label", isDark ? "Switch to light mode" : "Switch to dark mode");
+    if (themeText) themeText.textContent = isDark ? "Light" : "Dark";
+  }
+  syncThemeLabel(document.documentElement.dataset.theme === "dark" ? "dark" : "light");
+
+  if (themeBtn) {
+    themeBtn.addEventListener("click", () => {
+      const next = document.documentElement.dataset.theme === "dark" ? "light" : "dark";
+      document.documentElement.dataset.theme = next;
+      try { localStorage.setItem("athena-theme", next); } catch (e) {}
+      syncThemeLabel(next);
+    });
   }
 
   const nav = document.getElementById("lp-nav");
   const navInner = document.getElementById("lp-nav-inner");
   const navLinks = document.getElementById("lp-links");
-  const menu = document.getElementById("lp-menu");
-  const supportsPopover = typeof HTMLElement !== "undefined" && Object.hasOwn(HTMLElement.prototype, "popover");
-  let wideMeasurePending = false;
+  const menuBtn = document.getElementById("lp-menu");
+  const linksList = navLinks ? [...navLinks.querySelectorAll("a")] : [];
 
-  function isPopoverOpen(el) {
-    if (!supportsPopover || !el || typeof el.matches !== "function") return false;
-    try {
-      return el.matches(":popover-open");
-    } catch {
-      return false;
-    }
+  function isPopoverOpen() {
+    return Boolean(navLinks && typeof navLinks.matches === "function" && navLinks.matches(":popover-open"));
   }
-
   function syncNavLayout() {
-    if (!nav || !navInner || !navLinks || !menu) return;
-    const wasOpen = isPopoverOpen(navLinks);
-    nav.classList.add("is-measuring", "is-wide");
-    navLinks.removeAttribute("popover");
-    const fits = navInner.scrollWidth <= navInner.clientWidth + 1;
-    nav.classList.toggle("is-wide", fits);
-    if (fits) {
-      menu.setAttribute("aria-expanded", "false");
-      nav.dataset.open = "false";
-    } else if (supportsPopover) {
-      navLinks.setAttribute("popover", "auto");
-      if (wasOpen && typeof navLinks.showPopover === "function") navLinks.showPopover();
-    }
-    if (typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(() => nav.classList.remove("is-measuring"));
-    } else {
-      nav.classList.remove("is-measuring");
-    }
+    if (!nav || !navInner || !navLinks) return;
+    nav.classList.add("is-measuring");
+    const wasWide = nav.classList.contains("is-wide");
+    nav.classList.add("is-wide");
+    const fits = navInner.scrollWidth <= navInner.clientWidth + 2;
+    if (!fits) nav.classList.remove("is-wide");
+    else if (!wasWide && isPopoverOpen() && typeof navLinks.hidePopover === "function") navLinks.hidePopover();
+    nav.classList.remove("is-measuring");
   }
-
-  if (nav && navInner && navLinks && menu) {
+  if (nav && navLinks && menuBtn) {
     syncNavLayout();
-    if ("ResizeObserver" in window) {
-      let lastHeaderW = nav.clientWidth || 0;
-      const navRo = new ResizeObserver(() => {
-        if (wideMeasurePending) return;
-        const wNow = nav.clientWidth || 0;
-        const isWide = nav.classList.contains("is-wide");
-        if (isWide || wNow > lastHeaderW) {
-          wideMeasurePending = true;
-          lastHeaderW = wNow;
-          syncNavLayout();
-          wideMeasurePending = false;
-        } else {
-          lastHeaderW = wNow;
-        }
-      });
-      navRo.observe(nav);
-      navRo.observe(navLinks);
-    }
-    if (supportsPopover) {
-      navLinks.addEventListener("toggle", event => {
-        const open = event.newState === "open";
-        menu.setAttribute("aria-expanded", open ? "true" : "false");
-        nav.dataset.open = open ? "true" : "false";
-      });
-    } else {
-      menu.addEventListener("click", () => {
-        const open = nav.dataset.open !== "true";
-        nav.dataset.open = open ? "true" : "false";
-        menu.setAttribute("aria-expanded", open ? "true" : "false");
-      });
-    }
-    navLinks.querySelectorAll("a").forEach(a => a.addEventListener("click", () => {
-      nav.dataset.open = "false";
-      menu.setAttribute("aria-expanded", "false");
-      if (isPopoverOpen(navLinks) && typeof navLinks.hidePopover === "function") navLinks.hidePopover();
+    window.addEventListener("resize", syncNavLayout, { passive: true });
+    navLinks.addEventListener("toggle", (e) => {
+      const open = e.newState === "open";
+      nav.dataset.open = String(open);
+      menuBtn.setAttribute("aria-expanded", String(open));
+    });
+    linksList.forEach((a) => a.addEventListener("click", () => {
+      if (isPopoverOpen() && typeof navLinks.hidePopover === "function") navLinks.hidePopover();
     }));
-    let lastScrollY = window.scrollY || 0;
-    const supportsScrollState = typeof CSS !== "undefined" && typeof CSS.supports === "function" && CSS.supports("container-type", "scroll-state");
-    const onScroll = () => {
-      const y = Math.max(0, window.scrollY || 0);
-      nav.dataset.scrolled = y > 8 ? "true" : "false";
-      if (!supportsScrollState) {
-        const maxY = Math.max(0, (document.documentElement?.scrollHeight || 0) - (window.innerHeight || 0));
-        const clamped = Math.min(y, maxY);
-        if (clamped !== lastScrollY) {
-          nav.classList.toggle("is-hidden", clamped > lastScrollY && clamped > (nav.offsetHeight || 68) && nav.dataset.open !== "true");
-          lastScrollY = clamped;
-        }
-      }
-    };
-    window.addEventListener("scroll", onScroll, { passive: true });
-    onScroll();
+    window.addEventListener("scroll", () => {
+      nav.dataset.scrolled = String(window.scrollY > 24);
+    }, { passive: true });
   }
 
-  const STAGES = {
-    raw: "STAGE 01 · RAW DATA",
-    label: "STAGE 02 · TEACH WITH LABELS",
-    eval: "STAGE 03 · HELD-OUT CHECK",
-    deploy: "STAGE 04 · DEPLOY & IMPROVE"
+  /* ── Hero 5-Tab Demo Stage ───────────────────────────────────────────────────────────────────── */
+
+  const SCENES = {
+    corrosion: {
+      mode: "image",
+      img: "pipe-corrosion.jpg",
+      alt: "Corroded pipes with a rusted clamp",
+      q: "“Is there rust, and how urgent is it?”",
+      v: "attention",
+      word: "Needs repair",
+      h: "Heavy rust under the middle clamp and peeling paint on both pipes. Plan repair this month.",
+      counts: [["3", "Rust spots"], ["1", "Severe"], ["2", "Check soon"]],
+      items: [["high", "Heavy rust under middle clamp"], ["medium", "Peeling paint on left pipe"], ["low", "Minor flaking on right pipe"]],
+      boxes: [[36, 30, 58, 32, "high"], [25, 55, 24, 43, "medium"], [52, 62, 22, 36, "low"]]
+    },
+    parking: {
+      mode: "image",
+      img: "parking-aerial.jpg",
+      alt: "A car park seen from above",
+      q: "“How many bays are open right now?”",
+      v: "clear",
+      word: "Bays open",
+      h: "30 out of 51 spaces are empty in this view, mostly in the middle and lower rows.",
+      counts: [["51", "Total bays"], ["21", "Parked"], ["30", "Free"]],
+      items: [["ok", "Open bays 640–637"], ["ok", "Open bays 660–657"], ["info", "Open bays 617–615 near top"]],
+      boxes: [[39, 52, 19, 13, "ok"], [39, 68, 19, 14, "ok"], [45, 23, 13, 13, "info"]]
+    },
+    footfall: {
+      mode: "image",
+      img: "store-entrance.jpg",
+      alt: "People near a store entrance",
+      q: "“Is anything blocking the entrance?”",
+      v: "attention",
+      word: "Path narrowed",
+      h: "People are by the doors and parked bikes narrow the walkway. Still photos show this moment only, not daily traffic.",
+      counts: [["6", "People seen"], ["1", "Blocked zone"]],
+      items: [["info", "People gathered near doorway"], ["info", "Person entering left doors"], ["medium", "Parked bikes narrowing main doorway"]],
+      boxes: [[25, 38, 16, 47, "info"], [44, 39, 10, 33, "info"], [17, 66, 32, 34, "medium"]]
+    },
+    audio: {
+      mode: "audio",
+      q: "“Does Pump 04 sound healthy today?”",
+      v: "attention",
+      word: "Clicking found",
+      h: "Repeated clicking stands out clearly from the steady motor hum. Schedule a bearing inspection.",
+      counts: [["4.2s", "Sound clip"], ["94%", "Accuracy"], ["1", "Alert"]],
+      items: [["ok", "0.0s–1.4s: Normal smooth motor hum"], ["high", "1.4s–3.0s: Sharp bearing clicking"], ["medium", "3.2s–4.0s: Brief vibration rattle"]]
+    },
+    ocr: {
+      mode: "ocr",
+      q: "“Turn these handwritten log sheets into clean digital text.”",
+      v: "clear",
+      word: "3 lines read",
+      h: "Handwritten entries read cleanly and converted into structured fields for your shift log.",
+      counts: [["3", "Lines read"], ["98%", "Accuracy"], ["0", "Blurred lines"]],
+      items: [["ok", "Valve 12B — 2.4 bar"], ["ok", "Seal worn — swap Fri"], ["ok", "2.4 bar · OK"]]
+    }
   };
+
+  const frame = document.getElementById("demo-frame");
+  const demoImg = document.getElementById("demo-img");
+  const demoCustom = document.getElementById("demo-custom-stage");
+  const demoScan = document.getElementById("demo-scan");
+  const report = document.getElementById("demo-report");
+  let currentScene = "corrosion";
+  let activeFinding = 0;
+  let sceneTimer = null;
+
+  function drawScene(key) {
+    const s = SCENES[key];
+    frame.querySelectorAll(".lp-dbox").forEach((n) => n.remove());
+
+    if (s.mode === "image") {
+      frame.className = "lp-demo-frame";
+      demoImg.hidden = false;
+      demoScan.hidden = false;
+      demoCustom.hidden = true;
+      demoCustom.replaceChildren();
+      demoImg.src = STATIC + s.img;
+      demoImg.alt = s.alt;
+      s.boxes.forEach(([x, y, w, h, sev], i) => {
+        const box = el("span", {
+          class: "lp-dbox",
+          "data-sev": sev,
+          "data-active": i === activeFinding ? "true" : "false",
+          style: { left: `${x}%`, top: `${y}%`, width: `${w}%`, height: `${h}%`, animationDelay: `${0.12 + i * 0.1}s` }
+        }, [el("i", { text: String(i + 1) })]);
+        frame.append(box);
+      });
+    } else if (s.mode === "audio") {
+      frame.className = "lp-demo-frame lp-demo-frame--audio";
+      demoImg.hidden = true;
+      demoScan.hidden = true;
+      demoCustom.hidden = false;
+      demoCustom.replaceChildren(el("div", { class: "lp-hero-modality" }, [
+        el("div", { class: "lp-hero-mod-head" }, [
+          el("span", { text: "pump-bearing-line4.wav · 4.2s" }),
+          el("code", { text: "Clicking detected (1.4s–3.0s)" })
+        ]),
+        createAudioWaveSvg("fault", false),
+        createSpectrogramSvg("fault", false)
+      ]));
+    } else {
+      frame.className = "lp-demo-frame lp-demo-frame--ocr";
+      demoImg.hidden = true;
+      demoScan.hidden = true;
+      demoCustom.hidden = false;
+      const lines = ["Valve 12B — 2.4 bar", "Seal worn — swap Fri", "2.4 bar · OK"];
+      demoCustom.replaceChildren(el("div", { class: "lp-hero-modality" }, [
+        el("div", { class: "lp-hero-mod-head" }, [
+          el("span", { text: "maintenance-log-408B.png" }),
+          el("code", { text: "3 handwritten lines read" })
+        ]),
+        el("div", { class: "lp-hero-ocr-stack" }, lines.map((line, idx) => {
+          const item = el("button", {
+            type: "button",
+            class: "lp-hero-ocr-item",
+            "aria-pressed": String(idx === activeFinding)
+          }, [
+            createInkSvg(idx, false),
+            el("div", { class: "lp-hero-mod-head" }, [el("code", { text: line })])
+          ]);
+          item.addEventListener("click", () => { activeFinding = idx; drawScene(key); });
+          return item;
+        }))
+      ]));
+    }
+
+    document.getElementById("demo-q").textContent = s.q;
+    const verdict = document.getElementById("demo-verdict");
+    verdict.dataset.v = s.v;
+    verdict.textContent = s.word;
+    document.getElementById("demo-h").textContent = s.h;
+
+    document.getElementById("demo-counts").replaceChildren(
+      ...s.counts.map(([val, lbl]) => el("div", {}, [el("b", { text: val }), el("span", { text: lbl })]))
+    );
+    document.getElementById("demo-list").replaceChildren(
+      ...s.items.map(([sev, txt], i) => {
+        const btn = el("button", {
+          type: "button",
+          class: "lp-finding-btn",
+          "aria-pressed": String(i === activeFinding)
+        }, [el("b", { text: String(i + 1) }), el("span", { text: txt })]);
+        btn.addEventListener("click", () => { activeFinding = i; drawScene(key); });
+        return el("li", { "data-sev": sev }, [btn]);
+      })
+    );
+  }
+
+  function showScene(key, fromUser) {
+    if (!SCENES[key] || (key === currentScene && !fromUser)) return;
+    currentScene = key;
+    activeFinding = 0;
+    document.querySelectorAll("[data-scene]").forEach((t) => {
+      t.setAttribute("aria-selected", t.dataset.scene === key ? "true" : "false");
+    });
+    frame.dataset.swap = "true";
+    report.dataset.swap = "true";
+    setTimeout(() => {
+      drawScene(key);
+      frame.dataset.swap = "false";
+      report.dataset.swap = "false";
+    }, 180);
+    if (fromUser && sceneTimer) {
+      clearInterval(sceneTimer);
+      sceneTimer = null;
+    }
+  }
+
+  if (frame) {
+    drawScene(currentScene);
+    document.querySelectorAll("[data-scene]").forEach((tab) => {
+      tab.addEventListener("click", () => showScene(tab.dataset.scene, true));
+    });
+    if (!reducedMotion) {
+      const order = Object.keys(SCENES);
+      sceneTimer = setInterval(() => {
+        showScene(order[(order.indexOf(currentScene) + 1) % order.length], false);
+      }, 5500);
+    }
+  }
+
+  /* ── Section 04: Interactive Studio Explorer ─────────────────────────────────────────────────── */
 
   const OUTCOMES = {
     vision: {
-      badge: "P0 · Locally verified slice + Wave 1 MVP",
-      title: "Object & Defect Detection",
-      status: "Available in console (local prototype)",
-      filename: "weld-seam-station04.jpg · 1920 × 1080",
-      split: "80% Train · 10% Val · 10% Held-out",
-      scenario: "An engineer labels equipment, defective components or anomalies. Athena trains a compatible detector, evaluates on held-out pictures, and deploys a check screen.",
-      data: "JPEG, PNG or WebP pictures + boxes",
-      quality: "Recall, precision, mAP and false positives",
-      recipe: "OS-VIS-001 · Image dataset, annotation, training, held-out evaluation and check screen",
-      href: "/login/?next=/detectors%3Frecipe%3Dvision",
+      recipe: "vision",
+      badge: "Photo & clip check",
+      title: "Sort Photos & Clips",
+      status: "Ready to use today",
+      tone: "ok",
+      filename: "weld-seam-station04.jpg",
+      data: "Inspection photos or short 6-frame video clips",
+      quality: "Checks how many defects are spotted vs. false alarms",
+      howItWorks: "Draw boxes on a few photos so Athena learns what to find",
+      split: "Tested on photos the AI has never seen",
+      mode: "image",
       stageCaptions: {
-        raw: "Upload inspection photos with SHA-256 checksums. Athena verifies resolution, dimensions and keeps every file untouched.",
-        label: "Draw bounding boxes manually or review SAM + CLIP suggestions. Boxes stay “Needs review” until a person accepts them.",
-        eval: "Evaluate on held-out test images: see found vs missed items, false alarms, mAP50 and exact missed-box previews.",
-        deploy: "Publish an approved model to an operator check screen. Corrections flow back as reviewable candidates without silently changing weights."
-      },
-      stageMetrics: {
-        raw: [["240", "Verified photos"], ["0", "Unchecked boxes"], ["100%", "SHA-256 intact"]],
-        label: [["418", "Accepted boxes"], ["14", "Needs review"], ["3", "Target classes"]],
-        eval: [["0.91", "mAP50"], ["94%", "Defect recall"], ["2 / 48", "Missed items"]],
-        deploy: [["v1.4", "Approved model"], ["100%", "Human reviewed"], ["1-click", "Rollback safe"]]
+        raw: "Upload photos directly from cameras or phones. Originals are saved untouched.",
+        label: "Point out defects once — AI guesses stay marked “Check this” until your team confirms.",
+        eval: "Reviews accuracy on unseen photos before anyone relies on it in production.",
+        deploy: "Go live on your check screen. Uncertain detections ask a human before acting."
       },
       samples: [
-        {
-          label: "Weld porosity",
-          title: "Weld porosity cluster (box 01)",
-          detail: "Accepted box on seam B · included in snapshot v3.",
-          rect: [0.09, 0.24, 0.2, 0.34],
-          sev: "high"
-        },
-        {
-          label: "Undercut groove",
-          title: "Undercut groove along toe (box 02)",
-          detail: "Auto-suggest (0.81) · stays Needs review until accepted.",
-          rect: [0.3, 0.42, 0.18, 0.28],
-          sev: "medium"
-        },
-        {
-          label: "Clean weld pass",
-          title: "Clean reference pass (negative check)",
-          detail: "Verified clean zone on held-out split.",
-          rect: [0.46, 0.2, 0.13, 0.32],
-          sev: "ok"
-        }
+        { label: "Weld hole", title: "Pinholes on weld seam (#1)", detail: "Confirmed by team inspector — 3 spots marked clearly.", sev: "high", metrics: [["91%", "Score"], ["94%", "Found"], ["2 / 48", "Missed"]] },
+        { label: "Shallow edge", title: "Rough weld edge (#2)", detail: "AI flagged “Check this” — waiting for a supervisor click.", sev: "medium", metrics: [["81%", "AI guess"], ["Wait", "Needs check"], ["14", "Queued"]] },
+        { label: "Clean pass", title: "Clean metal check (#3)", detail: "Verified healthy seam — helps prevent false alarms.", sev: "ok", metrics: [["100%", "Clear"], ["0", "False alarms"], ["Good", "Baseline"]] }
       ]
     },
     audio: {
-      badge: "P0 · Wave 1 Multi-task MVP",
-      title: "Acoustic Event Detection",
-      status: "Merged in console (synthetic-verified)",
-      filename: "pump-bearing-line4.wav · 48 kHz · 12.0s",
-      split: "80% Train · 10% Val · 10% Held-out",
-      scenario: "Healthy motor baseline vs bearing faults.",
-      data: "WAV recordings + event labels",
-      quality: "Missed sound events and false alarms",
-      recipe: "OS-AUD-001 · Audio classifier + test check",
-      href: "/login/?next=/detectors%3Frecipe%3Daudio",
+      recipe: "audio",
+      badge: "Sound check",
+      title: "Listen for Machine Faults",
+      status: "Ready to use today",
+      tone: "ok",
+      filename: "pump-bearing-line4.wav · 12 seconds",
+      data: "Short motor & pump sound recordings",
+      quality: "Makes sure real machine faults aren’t missed",
+      howItWorks: "Turns sounds into clear frequency maps you can see and tag",
+      split: "Tested on recordings the AI has never heard before",
+      mode: "audio",
       stageCaptions: {
-        raw: "Upload WAV motor clips; Athena verifies sample rate & checksum.",
-        label: "Mark healthy and faulty windows on the spectrogram & waveform.",
-        eval: "Check Event F1, missed faults and false alarms/hr on unseen motors.",
-        deploy: "Run live acoustic checks or export ONNX with human review."
-      },
-      stageMetrics: {
-        raw: [["48 kHz", "WAV PCM audio"], ["18 clips", "Motor sessions"], ["0", "Clipped files"]],
-        label: [["64", "Event windows"], ["3", "Acoustic classes"], ["100%", "Reviewer signed"]],
-        eval: [["0.94", "Event F1"], ["1 / 42", "Missed faults"], ["0.4 / hr", "False alarms"]],
-        deploy: [["ONNX", "Edge export"], ["Baseline", "Anomaly watch"], ["v1.2", "Approved bundle"]]
+        raw: "Drop audio clips from normal shop microphones or phones.",
+        label: "Highlight healthy hum vs. clicking or squealing sections.",
+        eval: "Tests on new motors so alerts don’t cry wolf on normal shop noise.",
+        deploy: "Runs quietly offline and flags unusual sounds as they happen."
       },
       samples: [
-        {
-          label: "Healthy hum",
-          title: "Healthy baseline hum (0.6s–3.2s)",
-          detail: "Steady 60 Hz motor tone establishing normal baseline.",
-          rect: [0.05, 0.16, 0.16, 0.72],
-          sev: "ok"
-        },
-        {
-          label: "Bearing fault 3.4 kHz",
-          title: "Bearing fault 3.4 kHz (4.2s–6.8s)",
-          detail: "Harmonic spike marked on timeline; checked against held-out faults.",
-          rect: [0.23, 0.16, 0.17, 0.72],
-          sev: "high"
-        },
-        {
-          label: "Cavitation spike",
-          title: "Transient cavitation burst (8.4s–10.6s)",
-          detail: "Broadband high-frequency burst captured for multi-class classifier.",
-          rect: [0.42, 0.16, 0.16, 0.72],
-          sev: "medium"
-        }
+        { label: "Healthy hum", variant: "healthy", title: "Normal steady motor hum", detail: "Baseline sound from a healthy pump — smooth and even.", sev: "ok", metrics: [["Clear", "Status"], ["0", "Alerts"], ["Smooth", "Tone"]] },
+        { label: "Bearing click", variant: "fault", title: "Bearing fault — steady clicking", detail: "High-pitched clicking stands out cleanly above the normal motor hum.", sev: "high", metrics: [["94%", "Accuracy"], ["1 / 42", "Missed"], ["Rare", "False alerts"]] },
+        { label: "Belt squeal", variant: "slip", title: "Brief belt slip squeal", detail: "Short high-frequency burst caught immediately between normal hums.", sev: "medium", metrics: [["Caught", "Alert"], ["1.6s", "Duration"], ["High", "Pitch"]] }
       ]
     },
     ocr: {
-      badge: "P0 · Wave 1 Multi-task MVP",
-      title: "Handwriting & Document OCR",
-      status: "Merged in console (training verified; serving is backend-level)",
-      filename: "maintenance-log-408B.png · Handwritten form",
-      split: "80% Train · 10% Val · 10% Held-out",
-      scenario: "Correct handwritten forms and fine-tune TrOCR.",
-      data: "Scanned forms + corrected transcripts",
-      quality: "Character errors, word errors and field accuracy",
-      recipe: "OS-OCR-001 · Fine-tune TrOCR + measure errors",
-      href: "/login/?next=/detectors%3Frecipe%3Docr",
+      recipe: "ocr",
+      badge: "Handwriting reader",
+      title: "Read Handwritten Logs",
+      status: "Ready in Studio · Check screen coming next",
+      tone: "ok",
+      filename: "maintenance-log-408B.png · Scanned form",
+      data: "Photos or scans of handwritten forms & paper logs",
+      quality: "Checks how often every letter and number matches",
+      howItWorks: "Crops each handwritten line and learns your team’s writing style",
+      split: "Tested on sheets written by different shift staff",
+      mode: "ocr",
       stageCaptions: {
-        raw: "Scan handwritten logbooks and extract line image crops.",
-        label: "Clerks fix misread characters so TrOCR learns site handwriting.",
-        eval: "Track Character Error Rate (2.1%) & field accuracy on unseen pages.",
-        deploy: "Extract clean form fields while logging clerk corrections."
-      },
-      stageMetrics: {
-        raw: [["120", "Form pages"], ["680", "Line crops"], ["Pretrained", "Initial TrOCR"]],
-        label: [["680", "Verified lines"], ["42", "Clerk fixes"], ["0", "Unreviewed lines"]],
-        eval: [["2.1%", "Char error (CER)"], ["4.8%", "Word error (WER)"], ["97.4%", "Field accuracy"]],
-        deploy: [["TrOCR", "Fine-tuned"], ["+14%", "Vs base reader"], ["Audit", "Transcript log"]]
+        raw: "Scan or snap paper log sheets — no need to change your clipboards.",
+        label: "Fix any misread numbers once so Athena adapts to your handwriting.",
+        eval: "Measures word and character accuracy on held-out forms.",
+        deploy: "Exports clean digital rows straight into your maintenance tracker."
       },
       samples: [
-        {
-          label: "Valve ID",
-          title: "Line 01 · “Valve 12B — Inlet”",
-          detail: "Clerk fixed “Valvc 128” -> “Valve 12B” for TrOCR fine-tuning.",
-          rect: [0.04, 0.2, 0.54, 0.2],
-          sev: "info"
-        },
-        {
-          label: "Defect note",
-          title: "Line 02 · “Seal worn, weeping oil”",
-          detail: "Cursive inspection remark aligned and verified.",
-          rect: [0.04, 0.44, 0.54, 0.2],
-          sev: "medium"
-        },
-        {
-          label: "Pressure value",
-          title: "Line 03 · “2.4 bar · Sign: A. Rahman”",
-          detail: "Numeric pressure value & signature validated.",
-          rect: [0.04, 0.68, 0.54, 0.2],
-          sev: "ok"
-        }
-      ]
-    },
-    documents: {
-      badge: "P1 · Wave 2 Language & Documents",
-      title: "Document Classification & Extraction",
-      status: "Text classification merged; field extraction in progress",
-      filename: "shift-incident-2026-11.txt · Work order",
-      split: "80% Train · 10% Val · 10% Held-out",
-      scenario: "Tag document categories, entities and structured fields.",
-      data: "Text documents + spans, tags or fields",
-      quality: "Class F1, confusion analysis and field accuracy",
-      recipe: "OS-NLP-001 classification merged · NER & fields to come",
-      href: "/login/?next=/detectors%3Frecipe%3Ddocuments",
-      stageCaptions: {
-        raw: "Import work orders and deduplicate near-copies before splitting.",
-        label: "Highlight entity spans (Equipment, Fault, Metric, Action).",
-        eval: "Inspect Class F1, span match and confusion pairs on held-out docs.",
-        deploy: "Extract structured JSON records with human override gates."
-      },
-      stageMetrics: {
-        raw: [["1,450", "Shift records"], ["4", "Doc categories"], ["Deduped", "Split safe"]],
-        label: [["3,120", "Entity spans"], ["4", "Field schemas"], ["100%", "Human verified"]],
-        eval: [["0.92", "Class F1"], ["95.1%", "Span match"], ["3", "Top confusions"]],
-        deploy: [["OS-DOC", "Field extractor"], ["Schema", "JSON validated"], ["Human", "Override gate"]]
-      },
-      samples: [
-        {
-          label: "EQUIPMENT",
-          title: "Span · EQUIPMENT: “Pump P-104B”",
-          detail: "Equipment tag resolved into structured asset field.",
-          rect: [0.04, 0.21, 0.54, 0.19],
-          sev: "info"
-        },
-        {
-          label: "FAULT & METRIC",
-          title: "Span · FAULT: “seal weep · 78 °C”",
-          detail: "Symptom paired with temperature for work-order routing.",
-          rect: [0.04, 0.43, 0.54, 0.19],
-          sev: "high"
-        },
-        {
-          label: "ACTION",
-          title: "Span · ACTION: “Isolate & replace gasket”",
-          detail: "Recommended repair action extracted automatically.",
-          rect: [0.04, 0.65, 0.54, 0.19],
-          sev: "ok"
-        }
-      ]
-    },
-    movements: {
-      badge: "P2 · Wave 3 Motion & Operations",
-      title: "Human Posture & Gesture AI",
-      status: "Proposed Wave 3 recipe",
-      filename: "ergonomic-lift-bay2.mp4 · 17 keypoints",
-      split: "Session-grouped Train / Val / Held-out",
-      scenario: "Extract body/hand keypoints and classify movements.",
-      data: "Clips + keypoints and movement labels",
-      quality: "Keypoint accuracy (OKS/PCK) and visibility failures",
-      recipe: "Wave 3 · Pose & gesture models on landmark estimators",
-      href: "/login/?next=/detectors%3Frecipe%3Dmovements",
-      stageCaptions: {
-        raw: "Group clips by worker session so frames never leak across splits.",
-        label: "Review 17 body or 21 hand landmarks and posture episodes.",
-        eval: "Check OKS/PCK landmark precision and occlusion visibility.",
-        deploy: "Run ergonomic posture checks without biometric identity tracking."
-      },
-      stageMetrics: {
-        raw: [["36 clips", "Grouped by bay"], ["17 pts", "Body skeleton"], ["Privacy", "No face ID"]],
-        label: [["890", "Pose frames"], ["4", "Posture classes"], ["12", "Occluded fixes"]],
-        eval: [["0.89", "OKS / PCK"], ["93%", "Lift recall"], ["4.1%", "Occlusion miss"]],
-        deploy: [["Edge", "Pose + action"], ["Session", "No biometrics"], ["Review", "Safety sign-off"]]
-      },
-      samples: [
-        {
-          label: "Safe squat lift",
-          title: "Safe posture · Back neutral (16 deg)",
-          detail: "Upright spine vector with bent knees · approved lift.",
-          rect: [0.08, 0.16, 0.19, 0.68],
-          sev: "ok"
-        },
-        {
-          label: "Spine bend alert",
-          title: "Strain risk · Forward flexion (48 deg)",
-          detail: "Torso bend exceeds 35 deg ergonomic threshold.",
-          rect: [0.27, 0.18, 0.18, 0.66],
-          sev: "high"
-        },
-        {
-          label: "Stop hand signal",
-          title: "Hand landmark gesture · Open palm hold",
-          detail: "21-point hand skeleton recognized clearly with glove.",
-          rect: [0.46, 0.16, 0.14, 0.5],
-          sev: "info"
-        }
+        { line: 0, title: "Line 01 · “Valve 12B — 2.4 bar”", detail: "Pressure reading turned cleanly into digital text with 98% certainty.", sev: "ok", metrics: [["98%", "Certain"], ["100%", "Numbers right"], ["Ready", "Approved"]] },
+        { line: 1, title: "Line 02 · “Seal worn — swap Fri”", detail: "Slightly smudged note — Athena highlights it in yellow to double-check.", sev: "medium", metrics: [["91%", "Certain"], ["Check", "1 smudged word"], ["Review", "Status"]] },
+        { line: 2, title: "Line 03 · “2.4 bar · OK”", detail: "Routine clear line logged in seconds without manual retyping.", sev: "ok", metrics: [["99%", "Certain"], ["Clean", "Legible"], ["Instant", "Saved"]] }
       ]
     },
     spreadsheets: {
-      badge: "P0 · Wave 1 Multi-task MVP",
-      title: "Tabular Prediction from Spreadsheets",
-      status: "Merged in console (synthetic-verified)",
-      filename: "compressor-telemetry-q3.csv · 12 columns",
-      split: "80% Train · 10% Val · 10% Held-out",
-      scenario: "Upload Excel/CSV, pick target column and test unseen rows.",
-      data: "Excel (.xlsx) or CSV rows + target column",
-      quality: "Held-out error rate, class F1 and feature checks",
-      recipe: "OS-TAB-001 · Tabular trainer + unseen-row test",
-      href: "/login/?next=/detectors%3Frecipe%3Dspreadsheets",
+      recipe: "spreadsheets",
+      badge: "Spreadsheet helper",
+      title: "Sort Spreadsheets & Rows",
+      status: "Ready to use today",
+      tone: "ok",
+      filename: "asset-readings-q4.csv · 1,240 rows",
+      data: "Everyday CSV or Excel tables with past outcomes",
+      quality: "Shows which columns mattered most in plain English",
+      howItWorks: "Learns patterns across columns like heat, shake speed, and service age",
+      split: "Tested on held-out equipment rows",
+      mode: "spreadsheets",
       stageCaptions: {
-        raw: "Upload Excel or CSV; Athena profiles types and checks leakage.",
-        label: "Choose target column (Failure_48h) and feature inputs.",
-        eval: "Inspect unseen-row F1, risk calibration and top driver signals.",
-        deploy: "Score new telemetry batches with explainable feature weights."
-      },
-      stageMetrics: {
-        raw: [["4,820", "Telemetry rows"], ["12 cols", "Validated types"], ["0", "Leakage cols"]],
-        label: [["Target", "Failure_48h"], ["9", "Input features"], ["80/10/10", "Time-safe split"]],
-        eval: [["0.91", "Class F1"], ["96.2%", "Held-out acc"], ["0.03", "False alert rate"]],
-        deploy: [["Batch", "CSV/XLSX score"], ["Top 3", "Driver signals"], ["v1.1", "Reproducible"]]
+        raw: "Upload CSV or Excel logs — checks automatically for blank or broken rows.",
+        label: "Pick the outcome column you want predicted (such as Urgent / Watch / OK).",
+        eval: "See accuracy clearly and verify why the AI ranked specific rows as risky.",
+        deploy: "Upload tomorrow’s sheet to spot risky pumps before they fail."
       },
       samples: [
-        {
-          label: "Row #1042 · Risk",
-          title: "Row #1042 · Temp 86 °C · Vib 8.4 mm/s",
-          detail: "Failure_48h = High (0.91) driven by vibration + temp.",
-          rect: [0.03, 0.27, 0.56, 0.15],
-          sev: "high"
-        },
-        {
-          label: "Row #1043 · Watch",
-          title: "Row #1043 · Drop 1.9 bar · Watch",
-          detail: "Failure_48h = Watch (0.54) queued for operator review.",
-          rect: [0.03, 0.44, 0.56, 0.15],
-          sev: "medium"
-        },
-        {
-          label: "Row #1044 · Normal",
-          title: "Row #1044 · Temp 52 °C · Vib 1.8 mm/s",
-          detail: "Failure_48h = Normal (0.97) on held-out check.",
-          rect: [0.03, 0.61, 0.56, 0.15],
-          sev: "ok"
-        }
+        { id: "#1042", status: "Inspect", sev: "high", title: "Row #1042 · Marked “Needs Repair” (91% sure)", detail: "Flagged because heat is 86 °C and vibration hit 8.4 mm/s.", metrics: [["High", "Priority"], ["86°C", "Temp"], ["8.4", "Shake"]] }
+      ]
+    },
+    documents: {
+      recipe: "documents",
+      badge: "Shift notes & tickets",
+      title: "Sort Shift Logs & Tickets",
+      status: "Sorting ready · detail pulling coming next",
+      tone: "warn",
+      filename: "shift-incident-logs.csv · Work orders",
+      data: "Past work orders, messages, or emails with team tags",
+      quality: "Makes sure urgent notes go to the right crew fast",
+      howItWorks: "Spots key repair phrases like “seal”, “tripped”, and “breaker”",
+      split: "Tested on notes the AI has never seen",
+      mode: "documents",
+      stageCaptions: {
+        raw: "Import support notes or shift handovers without manual formatting.",
+        label: "Pick the team name for each message (Mechanical, Electrical, Routine).",
+        eval: "Verifies urgent work orders don’t accidentally get filed under Routine.",
+        deploy: "Sorts new messages automatically in milliseconds on a normal office PC."
+      },
+      samples: [
+        { title: "Ticket #401 · Routed to Mechanical (94% sure)", detail: "Matched seal, pump, and gasket wording to the Mechanical repair team.", sev: "high", metrics: [["4", "Categories"], ["100%", "Valid file"], ["Fast", "Runs on CPU"]] }
+      ]
+    },
+    movements: {
+      recipe: "signals",
+      badge: "Machine sensors",
+      title: "Spot Machine Sensor Faults",
+      status: "Works on any standard CPU",
+      tone: "ok",
+      filename: "vibration-readings-q4.csv · 60-second windows",
+      data: "A CSV of sensor readings over time with normal / fault labels",
+      quality: "How accurately it tells smooth operation from shaking faults",
+      howItWorks: "Compare vibration and heat patterns against your Safe Limit",
+      split: "Tested on readings the AI has never seen",
+      mode: "imbalance",
+      limitNote: "Sorting labelled sensor windows works today; predicting future trends hours ahead is coming next.",
+      stageCaptions: {
+        raw: "Drop time-stamped vibration or heat readings straight from plant sensors.",
+        label: "Confirm your machine states — such as Normal run, Cavitation, or Imbalance.",
+        eval: "Checks real alarm accuracy so crews don’t waste time on false alerts.",
+        deploy: "Monitors incoming sensor streams on a compact edge box right next to the pump."
+      },
+      samples: [
+        { label: "Imbalance", mode: "imbalance", avg: "7.8 mm/s (Over limit)", spike: "11.4 mm/s", dir: "Rising", title: "Reading #088 · Shaft imbalance (Over safe limit)", detail: "Vibration climbed steadily above the 6.5 mm/s safe limit with heavy oscillation.", sev: "high", metrics: [["3", "Machine states"], ["2", "Sensor channels"], ["Safe", "Clean split"]] },
+        { label: "Cavitation", mode: "cavitation", avg: "5.2 mm/s", spike: "9.8 mm/s", dir: "Sudden bursts", title: "Reading #091 · Brief cavitation bursts", detail: "Two sudden pressure-collapse spikes crossed the limit briefly before settling.", sev: "medium", metrics: [["2", "Burst spikes"], ["60s", "Window"], ["Watch", "Status"]] },
+        { label: "Normal run", mode: "normal", avg: "2.1 mm/s", spike: "3.0 mm/s", dir: "Steady", title: "Reading #094 · Healthy smooth operation", detail: "All readings stayed smoothly below the safe threshold across the full minute.", sev: "ok", metrics: [["Safe", "Below limit"], ["0", "Spikes"], ["Smooth", "Baseline"]] }
       ]
     }
   };
 
-  const FUSION_SCENARIOS = {
-    motor: {
-      badge: "Cross-modal sync · Missing-input fallback · Modality ablation",
-      verdict: "Joint fault verdict: Bearing wear (inspect within 48 hrs)",
-      streams: [
-        { kind: "Audio", title: "48 kHz Mic", val: "3.4 kHz spike", sev: "high", bars: [0.2, 0.4, 0.92, 0.78, 0.35] },
-        { kind: "Vibration", title: "Accelerometer", val: "8.2 mm/s RMS", sev: "high", bars: [0.3, 0.55, 0.88, 0.9, 0.6] },
-        { kind: "Telemetry", title: "Bearing Temp", val: "74 °C @ 1450 RPM", sev: "medium", bars: [0.4, 0.5, 0.62, 0.7, 0.75] }
-      ],
-      ablation: [["Audio only", "0.86"], ["Vibration only", "0.89"], ["Fused (3 streams)", "0.97"]]
-    },
-    safety: {
-      badge: "Temporal alignment · Privacy-safe landmarks · Human override",
-      verdict: "Joint safety alert: Dock unlocked while worker in active zone",
-      streams: [
-        { kind: "Video", title: "Bay Camera", val: "Forklift entering", sev: "medium", bars: [0.3, 0.6, 0.72, 0.65, 0.5] },
-        { kind: "Human Pose", title: "17 Keypoints", val: "Worker bending", sev: "high", bars: [0.5, 0.75, 0.85, 0.82, 0.78] },
-        { kind: "PLC State", title: "Dock Lock", val: "Gate UNLOCKED", sev: "high", bars: [0.2, 0.2, 0.95, 0.95, 0.95] }
-      ],
-      ablation: [["Video only", "0.78"], ["Pose + Video", "0.88"], ["Fused + PLC", "0.96"]]
-    },
-    thermal: {
-      badge: "Spatial alignment · Asset provenance · Release bundle verified",
-      verdict: "Joint inspection finding: Critical flange hotspot + corrosion",
-      streams: [
-        { kind: "Thermal IR", title: "LWIR Heat Map", val: "+28 °C hotspot", sev: "high", bars: [0.35, 0.6, 0.94, 0.88, 0.65] },
-        { kind: "RGB Vision", title: "Clamp Photo", val: "Rust scaling", sev: "medium", bars: [0.4, 0.55, 0.74, 0.68, 0.6] },
-        { kind: "Asset Log", title: "Line 12 Spec", val: "14.2 bar · 410d", sev: "info", bars: [0.5, 0.5, 0.55, 0.58, 0.6] }
-      ],
-      ablation: [["RGB only", "0.81"], ["Thermal only", "0.85"], ["Fused (IR+RGB+Log)", "0.95"]]
-    }
+  const STAGE_NAMES = {
+    raw: "STEP 01 · ADD FILES",
+    label: "STEP 02 · SHOW WHAT TO SPOT",
+    eval: "STEP 03 · CHECK ACCURACY",
+    deploy: "STEP 04 · READY TO USE"
   };
 
-  const outcomeTablist = document.getElementById("lp-outcome-tabs");
-  const outcomePanel = document.getElementById("lp-outcome-panel");
   const outcomeShell = document.getElementById("lp-outcome-shell");
-  const visCanvas = document.getElementById("lp-vis-canvas");
-  const visCtx = visCanvas ? visCanvas.getContext("2d") : null;
-  const fusionCanvas = document.getElementById("lp-fusion-canvas");
-  const fusionCtx = fusionCanvas ? fusionCanvas.getContext("2d") : null;
-
-  const PREVIEW_IMAGES = {};
-  if (visCanvas) {
-    [["welding", "welding.jpg"], ["corrosion", "pipe-corrosion.jpg"], ["worker", "safety-worker.jpg"]].forEach(([key, file]) => {
-      const pic = new Image();
-      pic.src = STATIC + file;
-      pic.addEventListener("load", () => { PREVIEW_IMAGES[key] = pic; drawStudioCanvas(); renderMiniCanvases(); });
-      PREVIEW_IMAGES[key] = pic;
-    });
-  }
-
   let activeOutcome = "audio";
   let activeStage = "label";
   let activeSample = 1;
-  let activeFusion = "motor";
-  let animPhase = 0;
-  let animRaf = null;
-  let studioActive = true;
-  const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-  function setupHiDpiCanvas(canvas, ctx, logicalW, logicalH) {
-    const dpr = Math.min(Math.max(Number(window.devicePixelRatio) || 2, 2), 3);
-    const targetW = Math.round(logicalW * dpr);
-    const targetH = Math.round(logicalH * dpr);
-    if (canvas.width !== targetW || canvas.height !== targetH) {
-      canvas.width = targetW;
-      canvas.height = targetH;
-    }
-    if (typeof ctx.setTransform === "function") ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.imageSmoothingEnabled = true;
-    ctx.imageSmoothingQuality = "high";
-    return { w: logicalW, h: logicalH };
-  }
+  function renderStudioVisual(o, sample) {
+    const container = document.getElementById("lp-vis-interactive");
+    if (!container) return;
 
-  function sevColor(sev) {
-    if (sev === "high") return "#ff6b3d";
-    if (sev === "medium") return "#ffb020";
-    if (sev === "ok") return "#34d399";
-    return "#38bdf8";
-  }
+    const stageHead = o.samples.length > 1
+      ? el("div", { class: "lp-stage-head" }, [
+          el("span", { class: "lp-stage-file", text: o.filename }),
+          el("div", { class: "lp-vis-samples", role: "group", "aria-label": "Sample scenarios" },
+            o.samples.map((s, idx) => {
+              const b = el("button", {
+                type: "button",
+                class: "lp-vis-sample",
+                "aria-pressed": String(idx === activeSample),
+                text: s.label || s.title
+              });
+              b.addEventListener("click", () => { activeSample = idx; renderStudio(); });
+              return b;
+            }))
+        ])
+      : null;
 
-  function drawCoverImage(ctx, imgObj, x, y, w, h, alpha = 0.5) {
-    if (!imgObj || !imgObj.complete || !imgObj.naturalWidth) return false;
-    ctx.save();
-    ctx.beginPath();
-    ctx.roundRect(x, y, w, h, 10);
-    ctx.clip();
-    const scale = Math.max(w / imgObj.naturalWidth, h / imgObj.naturalHeight);
-    const dw = imgObj.naturalWidth * scale;
-    const dh = imgObj.naturalHeight * scale;
-    ctx.globalAlpha = alpha;
-    ctx.drawImage(imgObj, x + (w - dw) / 2, y + (h - dh) / 2, dw, dh);
-    ctx.restore();
-    return true;
-  }
-
-  function drawStudioGrid(ctx, w, h) {
-    ctx.fillStyle = "#080a0e";
-    ctx.fillRect(0, 0, w, h);
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.045)";
-    ctx.lineWidth = 1;
-    for (let x = 24; x < w; x += 32) {
-      ctx.beginPath(); ctx.moveTo(x, 0); ctx.lineTo(x, h); ctx.stroke();
-    }
-    for (let y = 24; y < h; y += 32) {
-      ctx.beginPath(); ctx.moveTo(0, y); ctx.lineTo(w, y); ctx.stroke();
-    }
-  }
-
-  function drawBadge(ctx, text, x, y, bg, fg = "#04121c") {
-    ctx.font = "700 11px 'Martian Mono', monospace";
-    const padX = 8;
-    const width = ctx.measureText(text).width + padX * 2;
-    ctx.fillStyle = bg;
-    ctx.beginPath();
-    ctx.roundRect(x, y, width, 20, 5);
-    ctx.fill();
-    ctx.fillStyle = fg;
-    ctx.fillText(text, x + padX, y + 14);
-    return width;
-  }
-
-  function drawZoneChrome(ctx, w, h, leftTitle) {
-    const splitX = Math.round(w * 0.62);
-    // Left workspace header
-    ctx.fillStyle = "#8fa0b5";
-    ctx.font = "600 10.5px 'Martian Mono', monospace";
-    ctx.fillText(leftTitle, 24, 24);
-    // Divider + arrow flow connector
-    ctx.strokeStyle = "rgba(148, 180, 220, 0.18)";
-    ctx.lineWidth = 1;
-    ctx.beginPath(); ctx.moveTo(splitX, 16); ctx.lineTo(splitX, h - 16); ctx.stroke();
-
-    // Right solution card container
-    const rx = splitX + 18;
-    const rw = w - rx - 18;
-    ctx.fillStyle = "#0d1420";
-    ctx.beginPath(); ctx.roundRect(rx, 16, rw, h - 32, 12); ctx.fill();
-    ctx.strokeStyle = "rgba(56, 189, 248, 0.35)";
-    ctx.lineWidth = 1.2;
-    ctx.stroke();
-    return { splitX, rx, rw };
-  }
-
-  function drawSolutionPanel(ctx, rx, rw, h, spec) {
-    const pad = 16;
-    ctx.fillStyle = "#8fa0b5";
-    ctx.font = "600 10px 'Martian Mono', monospace";
-    ctx.fillText("LIVE SOLUTION PREVIEW", rx + pad, 38);
-
-    drawBadge(ctx, spec.verdict, rx + pad, 48, spec.verdictColor, spec.verdictFg || "#04121c");
-
-    ctx.fillStyle = "#ffffff";
-    ctx.font = "700 16px 'Hanken Grotesk', sans-serif";
-    ctx.fillText(spec.headline, rx + pad, 92);
-
-    // Mini bars / field rows
-    let y = 114;
-    spec.rows.forEach(row => {
-      ctx.fillStyle = "rgba(255, 255, 255, 0.04)";
-      ctx.beginPath(); ctx.roundRect(rx + pad, y, rw - pad * 2, 42, 8); ctx.fill();
-      ctx.fillStyle = "#8fa0b5";
-      ctx.font = "600 10.5px 'Martian Mono', monospace";
-      ctx.fillText(row.label, rx + pad + 10, y + 16);
-      ctx.fillStyle = row.color || "#eef3f8";
-      ctx.font = "700 13px 'Hanken Grotesk', sans-serif";
-      ctx.fillText(row.value, rx + pad + 10, y + 34);
-      if (typeof row.bar === "number") {
-        const bw = 72;
-        const bx = rx + rw - pad - bw - 10;
-        ctx.fillStyle = "rgba(255,255,255,0.08)";
-        ctx.fillRect(bx, y + 18, bw, 7);
-        ctx.fillStyle = row.color || "#38bdf8";
-        ctx.fillRect(bx, y + 18, bw * Math.max(0.05, Math.min(1, row.bar)), 7);
-      }
-      y += 50;
-    });
-
-    // Bottom action controls graphic
-    const btnY = h - 62;
-    drawBadge(ctx, spec.btnPrimary, rx + pad, btnY, "#38bdf8", "#04121c");
-    drawBadge(ctx, spec.btnSecondary, rx + pad + 132, btnY, "rgba(255,255,255,0.08)", "#c9d3df");
-  }
-
-  function drawAudioCanvas(ctx, w, h, data) {
-    const { splitX, rx, rw } = drawZoneChrome(ctx, w, h, "1 · TRAIN AUDIO · SPECTROGRAM + WAVEFORM");
-    const padX = 24;
-    const plotW = splitX - padX * 2;
-    const specTop = 44;
-    const specH = 128;
-    const waveTop = 194;
-    const waveH = 134;
-
-    const cols = 42;
-    const rows = 10;
-    const cw = plotW / cols;
-    const ch = specH / rows;
-    for (let c = 0; c < cols; c++) {
-      const t = c / cols;
-      const inFault = t >= 0.34 && t <= 0.62;
-      const inSpike = t >= 0.68 && t <= 0.92;
-      for (let r = 0; r < rows; r++) {
-        let energy = 0.14 + 0.18 * Math.sin(c * 0.45 + r * 0.6);
-        if (r >= 7) energy += 0.25;
-        if (inFault && (r === 2 || r === 3)) energy = 0.94;
-        if (inSpike && r <= 4) energy = 0.72 + 0.16 * Math.cos(c + r);
-        energy = Math.max(0.08, Math.min(1, energy));
-        ctx.fillStyle = energy > 0.78 ? "rgba(255, 107, 61, 0.85)"
-          : energy > 0.52 ? "rgba(255, 176, 32, 0.68)"
-          : `rgba(56, 189, 248, ${(energy * 0.55).toFixed(2)})`;
-        ctx.fillRect(padX + c * cw + 1, specTop + r * ch + 1, cw - 2, ch - 2);
-      }
+    if (o.mode === "image") {
+      const boxCoords = [
+        { left: "22%", top: "24%", width: "26%", height: "38%", text: "#1 Severe", sev: "high" },
+        { left: "50%", top: "36%", width: "22%", height: "30%", text: "#2 Check", sev: "medium" },
+        { left: "14%", top: "62%", width: "20%", height: "28%", text: "#3 Clear", sev: "low" }
+      ];
+      const photo = el("div", { class: "lp-stage-media lp-stage-media--photo" }, [
+        el("img", { src: `${STATIC}pipe-corrosion.jpg`, alt: "Pipe inspection photo with labelled defect boxes", width: 960, height: 540 }),
+        ...boxCoords.map((b, idx) => {
+          const btn = el("button", {
+            type: "button",
+            class: "lp-sbox",
+            "data-sev": b.sev,
+            "data-selected": String(idx === activeSample),
+            style: { left: b.left, top: b.top, width: b.width, height: b.height }
+          }, [el("span", { text: b.text })]);
+          btn.addEventListener("click", () => { activeSample = idx; renderStudio(); });
+          return btn;
+        })
+      ]);
+      container.replaceChildren(el("div", { class: "lp-studio-stage" }, [stageHead, photo]));
+      return;
     }
 
-    if (activeStage !== "raw") {
-      data.samples.forEach((sample, idx) => {
-        const [rxBox, , rwBox] = sample.rect;
-        const x = rxBox * w;
-        const bw = rwBox * w;
-        const selected = idx === activeSample;
-        const col = sevColor(sample.sev);
-        ctx.fillStyle = selected ? `${col}2a` : `${col}10`;
-        ctx.fillRect(x, specTop - 4, bw, specH + waveH + 34);
-        ctx.strokeStyle = col;
-        ctx.lineWidth = selected ? 2.5 : 1.2;
-        ctx.strokeRect(x, specTop - 4, bw, specH + waveH + 34);
-        drawBadge(ctx, ["1 Healthy", "2 3.4 kHz fault", "3 Cavitation"][idx] || `${idx + 1} ${sample.label}`, x, specTop - 22, col, sample.sev === "high" ? "#fff" : "#04121c");
-      });
+    if (o.mode === "audio") {
+      const variant = sample.variant || "fault";
+      const sev = sample.sev || "high";
+      const panel = el("div", { class: "lp-stage-media lp-stage-media--panel" }, [
+        el("div", { class: "lp-clip-head" }, [
+          el("span", { class: "lp-clip-spec", text: "pump-bearing-line4.wav · 4.2s" }),
+          el("span", { class: "lp-clip-tag", "data-sev": sev, text: sample.label || "Bearing click" })
+        ]),
+        createAudioWaveSvg(variant, false),
+        createSpectrogramSvg(variant, false)
+      ]);
+      container.replaceChildren(el("div", { class: "lp-studio-stage" }, [stageHead, panel]));
+      return;
     }
 
-    const midY = waveTop + waveH / 2;
-    for (let i = 0; i < 68; i++) {
-      const t = i / 68;
-      let amp = 0.18 + 0.12 * Math.sin(i * 0.6 + animPhase * 2);
-      if (t >= 0.34 && t <= 0.62) amp = 0.45 + 0.42 * Math.abs(Math.sin(i * 1.15 + animPhase));
-      if (t >= 0.68 && t <= 0.92) amp = 0.35 + 0.35 * Math.abs(Math.cos(i * 1.7));
-      const barH = amp * waveH;
-      const inSelected = activeStage !== "raw" && (() => {
-        const [rxBox, , rwBox] = data.samples[activeSample].rect;
-        return t * splitX >= rxBox * w && t * splitX <= (rxBox + rwBox) * w;
-      })();
-      ctx.fillStyle = inSelected ? sevColor(data.samples[activeSample].sev) : "rgba(125, 211, 252, 0.72)";
-      ctx.fillRect(padX + t * plotW, midY - barH / 2, 5, barH);
+    if (o.mode === "ocr") {
+      const texts = ["Valve 12B — 2.4 bar", "Seal worn — swap Fri", "2.4 bar · OK"];
+      const certs = ["98% sure", "Check smudged word", "99% sure"];
+      const rows = el("div", { class: "lp-ocr-rows" }, texts.map((txt, idx) => {
+        const row = el("button", {
+          type: "button",
+          class: "lp-ocr-row",
+          "aria-pressed": String(idx === activeSample)
+        }, [
+          el("div", { class: "lp-ocr-scan" }, [createInkSvg(idx, false)]),
+          el("div", { class: "lp-ocr-diff" }, [
+            el("span", { class: "lp-ocr-tag", text: certs[idx] }),
+            el("code", { text: txt })
+          ])
+        ]);
+        row.addEventListener("click", () => { activeSample = idx; renderStudio(); });
+        return row;
+      }));
+      container.replaceChildren(el("div", { class: "lp-studio-stage" }, [rows]));
+      return;
     }
 
-    const playX = padX + ((animPhase * 0.12) % 1) * plotW;
-    ctx.strokeStyle = "#ffffff";
-    ctx.lineWidth = 1.6;
-    ctx.beginPath(); ctx.moveTo(playX, specTop); ctx.lineTo(playX, waveTop + waveH); ctx.stroke();
-
-    const sample = data.samples[activeSample];
-    drawSolutionPanel(ctx, rx, rw, h, {
-      verdict: activeStage === "raw" ? "UNLABELED AUDIO" : sample.sev === "high" ? "FAULT DETECTED" : sample.sev === "medium" ? "ANOMALY SPIKE" : "BASELINE NORMAL",
-      verdictColor: activeStage === "raw" ? "#7d8ba0" : sevColor(sample.sev),
-      verdictFg: sample.sev === "high" ? "#fff" : "#04121c",
-      headline: activeStage === "raw" ? "Ready for timeline labeling" : sample.label,
-      rows: [
-        { label: "PEAK BAND", value: activeSample === 1 ? "3.4 kHz (+18 dB)" : activeSample === 2 ? "8.1 kHz transient" : "60 Hz nominal", color: sevColor(sample.sev), bar: activeSample === 1 ? 0.92 : activeSample === 2 ? 0.76 : 0.25 },
-        { label: "EVENT F1 · MISSED", value: "0.94 · 1 / 42 faults", color: "#34d399", bar: 0.94 },
-        { label: "FALSE ALARMS / HR", value: "0.4 per hour (ONNX)", color: "#7dd3fc", bar: 0.16 }
-      ],
-      btnPrimary: "Confirm Fault",
-      btnSecondary: "Flag False Alarm"
-    });
-  }
-
-  function drawVisionCanvas(ctx, w, h, data) {
-    const { splitX, rx, rw } = drawZoneChrome(ctx, w, h, "1 · TRAIN PICTURES · MANUAL + AUTO-SUGGEST BOXES");
-    drawCoverImage(ctx, PREVIEW_IMAGES.welding, 24, 38, splitX - 42, h - 56, activeStage === "raw" ? 0.9 : 0.75);
-
-    if (activeStage !== "raw") {
-      data.samples.forEach((sample, idx) => {
-        const [rxBox, ry, rwBox, rh] = sample.rect;
-        const x = rxBox * w;
-        const y = ry * h;
-        const bw = rwBox * w;
-        const bh = rh * h;
-        const col = sevColor(sample.sev);
-        const selected = idx === activeSample;
-
-        ctx.save();
-        if (idx === 1 && activeStage === "label") ctx.setLineDash([6, 4]);
-        ctx.fillStyle = selected ? `${col}30` : `${col}12`;
-        ctx.fillRect(x, y, bw, bh);
-        ctx.strokeStyle = col;
-        ctx.lineWidth = selected ? 3 : 1.8;
-        ctx.strokeRect(x, y, bw, bh);
-        ctx.restore();
-
-        drawBadge(ctx, `${idx + 1} ${sample.label}`, x, Math.max(40, y - 22), col, sample.sev === "high" ? "#fff" : "#04121c");
-        if (selected) {
-          [[x, y], [x + bw, y], [x, y + bh], [x + bw, y + bh]].forEach(([cx, cy]) => {
-            ctx.fillStyle = "#ffffff";
-            ctx.fillRect(cx - 4, cy - 4, 8, 8);
-          });
-        }
-      });
-    } else {
-      drawBadge(ctx, "RAW PHOTO · SHA-256 VERIFIED", 40, 56, "#0e141e", "#eef3f8");
+    if (o.mode === "spreadsheets") {
+      const rows = [
+        ["#1042", "86°C", "8.4 mm/s", "Needs Repair", "high"],
+        ["#1043", "63°C", "4.9 mm/s", "Watch Closely", "medium"],
+        ["#1044", "52°C", "1.8 mm/s", "Normal", "ok"]
+      ];
+      const clues = [
+        ["Shaking level", "68%", 68, "high"],
+        ["Bearing heat", "54%", 54, "medium"],
+        ["Line pressure", "38%", 38, "ok"],
+        ["Days since clean", "24%", 24, "ok"]
+      ];
+      const tbl = el("div", { class: "lp-stage-media lp-stage-media--table" }, [
+        el("table", { class: "lp-mini-table" }, [
+          el("thead", {}, [el("tr", {}, [
+            el("th", { text: "PUMP ID" }),
+            el("th", { text: "HEAT" }),
+            el("th", { text: "SHAKE" }),
+            el("th", { text: "ATHENA SAYS" })
+          ])]),
+          el("tbody", {}, rows.map(([id, t, v, s, sev], idx) => el("tr", { "data-selected": String(idx === 0) }, [
+            el("td", {}, [el("span", { class: "lp-row-btn", "aria-pressed": String(idx === 0), text: id })]),
+            el("td", { text: t }),
+            el("td", { text: v }),
+            el("td", {}, [el("span", { class: "lp-table-pred", "data-sev": sev, text: s })])
+          ])))
+        ])
+      ]);
+      const explain = el("div", { class: "lp-tab-drivers" }, [
+        el("span", { class: "lp-clip-spec", text: "Biggest clues in this spreadsheet" }),
+        el("div", { class: "lp-driver-bars" }, clues.map(([name, val, pct, sev]) => el("div", { class: "lp-driver-row" }, [
+          el("code", { text: name }),
+          el("div", { class: "lp-driver-track" }, [el("i", { "data-sev": sev, style: { width: `${pct}%` } })]),
+          el("b", { text: val })
+        ])))
+      ]);
+      container.replaceChildren(el("div", { class: "lp-studio-stage" }, [
+        tbl,
+        el("div", { class: "lp-stage-media lp-stage-media--panel" }, [explain])
+      ]));
+      return;
     }
 
-    const sample = data.samples[activeSample];
-    drawSolutionPanel(ctx, rx, rw, h, {
-      verdict: activeStage === "raw" ? "0 BOXES YET" : "NEEDS ATTENTION",
-      verdictColor: activeStage === "raw" ? "#7d8ba0" : "#ffb020",
-      headline: "Operator Check Screen v1.4",
-      rows: [
-        { label: "SELECTED FINDING", value: sample.label, color: sevColor(sample.sev), bar: 0.91 },
-        { label: "HELD-OUT CHECK", value: "mAP50 0.91 · Recall 94%", color: "#34d399", bar: 0.91 },
-        { label: "HUMAN REVIEW GATE", value: "418 accepted · 14 pending", color: "#7dd3fc", bar: 0.85 }
-      ],
-      btnPrimary: "Approve Model",
-      btnSecondary: "Fix Missed Box"
-    });
-  }
-
-  function drawOcrCanvas(ctx, w, h, data) {
-    const { splitX, rx, rw } = drawZoneChrome(ctx, w, h, "1 · HANDWRITING SCAN · LINE CROPS + TrOCR CORRECTIONS");
-    ctx.fillStyle = "#0e1522";
-    ctx.beginPath(); ctx.roundRect(24, 38, splitX - 42, h - 56, 12); ctx.fill();
-    ctx.strokeStyle = "rgba(148, 180, 220, 0.22)";
-    ctx.stroke();
-
-    const lines = [
-      { pred: activeStage === "raw" ? "Valvc 128 — lnlet" : "Valve 12B — Inlet", y: 95 },
-      { pred: activeStage === "raw" ? "Seal worm, weaping" : "Seal worn, weeping oil", y: 185 },
-      { pred: activeStage === "raw" ? "2.4 bar · A. Rahmn" : "2.4 bar · Sign: A. Rahman", y: 275 }
-    ];
-
-    lines.forEach((line, idx) => {
-      const sample = data.samples[idx];
-      const [rxBox, ry, rwBox, rh] = sample.rect;
-      const x = rxBox * w;
-      const y = ry * h;
-      const bw = rwBox * w;
-      const bh = rh * h;
-      const selected = idx === activeSample;
-      const col = sevColor(sample.sev);
-
-      ctx.strokeStyle = "rgba(148, 180, 220, 0.16)";
-      ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(42, line.y + 22); ctx.lineTo(splitX - 38, line.y + 22); ctx.stroke();
-
-      ctx.strokeStyle = "#e2edf8";
-      ctx.lineWidth = 2.2;
-      ctx.beginPath();
-      for (let s = 0; s <= 26; s++) {
-        const px = 46 + s * 8.5;
-        const py = line.y + 8 + Math.sin(s * 0.9 + idx * 2) * 6 + Math.cos(s * 2.1) * 3.5;
-        if (s === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-      }
-      ctx.stroke();
-
-      if (activeStage !== "raw") {
-        ctx.fillStyle = selected ? `${col}20` : `${col}0c`;
-        ctx.fillRect(x, y, bw, bh);
-        ctx.strokeStyle = col;
-        ctx.lineWidth = selected ? 2.4 : 1;
-        ctx.strokeRect(x, y, bw, bh);
-      }
-
-      ctx.font = "600 12.5px 'Martian Mono', monospace";
-      ctx.fillStyle = activeStage === "raw" ? "#fbbf24" : "#34d399";
-      ctx.fillText(line.pred, 300, line.y + 12);
-    });
-
-    drawSolutionPanel(ctx, rx, rw, h, {
-      verdict: activeStage === "raw" ? "BASE OCR ONLY" : "TrOCR FINE-TUNED",
-      verdictColor: activeStage === "raw" ? "#ffb020" : "#34d399",
-      headline: "Form Reader & Field Output",
-      rows: [
-        { label: "UNIT FIELD", value: "Valve 12B — Inlet", color: "#7dd3fc", bar: 0.98 },
-        { label: "PRESSURE READING", value: "2.4 bar (verified)", color: "#34d399", bar: 0.97 },
-        { label: "ERROR REDUCTION", value: "CER 2.1% (-14% vs base)", color: "#34d399", bar: 0.92 }
-      ],
-      btnPrimary: "Save Correction",
-      btnSecondary: "Export Fields"
-    });
-  }
-
-  function drawDocumentsCanvas(ctx, w, h, data) {
-    const { splitX, rx, rw } = drawZoneChrome(ctx, w, h, "1 · TEXT WORK ORDER · NAMED-ENTITY SPANS");
-    ctx.fillStyle = "#0e1522";
-    ctx.beginPath(); ctx.roundRect(24, 38, splitX - 42, h - 56, 12); ctx.fill();
-    ctx.strokeStyle = "rgba(148, 180, 220, 0.22)";
-    ctx.stroke();
-
-    const rows = [
-      { prefix: "Unit: ", span: "Pump P-104B", tag: "EQUIPMENT", y: 105 },
-      { prefix: "Issue: ", span: "seal weep at 78 °C", tag: "FAULT+METRIC", y: 192 },
-      { prefix: "Next: ", span: "Isolate & replace gasket", tag: "ACTION", y: 279 }
-    ];
-
-    rows.forEach((row, idx) => {
-      const sample = data.samples[idx];
-      const [rxBox, ry, rwBox, rh] = sample.rect;
-      const selected = idx === activeSample;
-      const col = sevColor(sample.sev);
-      if (activeStage !== "raw") {
-        ctx.fillStyle = selected ? `${col}26` : `${col}10`;
-        ctx.beginPath();
-        ctx.roundRect(rxBox * w, ry * h, rwBox * w, rh * h, 8);
-        ctx.fill();
-        ctx.strokeStyle = col;
-        ctx.lineWidth = selected ? 2.4 : 1;
-        ctx.stroke();
-      }
-      ctx.font = "500 15px 'Hanken Grotesk', sans-serif";
-      ctx.fillStyle = "#8fa0b5";
-      ctx.fillText(row.prefix, 48, row.y);
-      ctx.fillStyle = "#ffffff";
-      ctx.fillText(row.span, 102, row.y);
-      if (activeStage !== "raw") {
-        drawBadge(ctx, row.tag, splitX - 155, row.y - 16, col, sample.sev === "high" ? "#fff" : "#04121c");
-      }
-    });
-
-    drawSolutionPanel(ctx, rx, rw, h, {
-      verdict: activeStage === "raw" ? "RAW TEXT" : "STRUCTURED RECORD",
-      verdictColor: activeStage === "raw" ? "#7d8ba0" : "#38bdf8",
-      headline: "Class: Rotating Equipment",
-      rows: [
-        { label: "EQUIPMENT · FAULT", value: "Pump P-104B · seal weep", color: "#ff6b3d", bar: 0.95 },
-        { label: "ACTION EXTRACTED", value: "Isolate & replace gasket", color: "#34d399", bar: 0.92 },
-        { label: "HELD-OUT CLASS F1", value: "0.92 (deduped split)", color: "#7dd3fc", bar: 0.92 }
-      ],
-      btnPrimary: "Confirm Fields",
-      btnSecondary: "Edit Span"
-    });
-  }
-
-  function drawMovementsCanvas(ctx, w, h, data) {
-    const { splitX, rx, rw } = drawZoneChrome(ctx, w, h, "1 · POSE & HAND LANDMARKS · 17 BODY + 21 HAND PTS");
-    drawCoverImage(ctx, PREVIEW_IMAGES.worker, 24, 38, splitX - 42, h - 56, 0.62);
-
-    const poses = [
-      { cx: 155, angle: 0.25, col: sevColor("ok"), label: "Safe squat (16 deg)" },
-      { cx: 335, angle: 0.78, col: sevColor("high"), label: "Bend alert (48 deg)" }
-    ];
-
-    poses.forEach((p, idx) => {
-      const selected = idx === activeSample || (activeSample === 2 && idx === 1);
-      const hipY = 225;
-      const hipX = p.cx;
-      const torsoLen = 82;
-      const shX = hipX + Math.sin(p.angle) * torsoLen;
-      const shY = hipY - Math.cos(p.angle) * torsoLen;
-      const headX = shX + Math.sin(p.angle * 0.6) * 22;
-      const headY = shY - 26;
-      const kneeX = hipX + (idx === 0 ? 26 : 10);
-      const kneeY = hipY + 46;
-      const footX = hipX + 2;
-      const footY = hipY + 95;
-      const handX = shX + (activeSample === 2 && idx === 1 ? 48 : 30);
-      const handY = shY + (activeSample === 2 && idx === 1 ? -22 : 34);
-
-      if (activeStage === "raw") {
-        ctx.strokeStyle = "rgba(148, 180, 220, 0.5)";
-        ctx.lineWidth = 2;
-        ctx.strokeRect(hipX - 60, 75, 130, 250);
-        return;
-      }
-
-      const boneColor = selected ? p.col : "rgba(125, 211, 252, 0.68)";
-      ctx.strokeStyle = boneColor;
-      ctx.lineWidth = selected ? 3.8 : 2.2;
-      ctx.beginPath();
-      ctx.moveTo(headX, headY); ctx.lineTo(shX, shY);
-      ctx.lineTo(hipX, hipY); ctx.lineTo(kneeX, kneeY); ctx.lineTo(footX, footY);
-      ctx.moveTo(shX, shY); ctx.lineTo(handX, handY);
-      ctx.stroke();
-
-      [[headX, headY], [shX, shY], [hipX, hipY], [kneeX, kneeY], [footX, footY], [handX, handY]].forEach(([jx, jy]) => {
-        ctx.fillStyle = "#ffffff";
-        ctx.beginPath(); ctx.arc(jx, jy, selected ? 5 : 3.5, 0, Math.PI * 2); ctx.fill();
-        ctx.strokeStyle = boneColor; ctx.lineWidth = 2; ctx.stroke();
-      });
-
-      drawBadge(ctx, p.label, hipX - 60, 56, boneColor, p.col === "#ff6b3d" ? "#fff" : "#04121c");
-    });
-
-    if (activeStage !== "raw") {
-      const hx = 485;
-      const hy = 120;
-      ctx.fillStyle = "rgba(10, 15, 23, 0.9)";
-      ctx.beginPath(); ctx.roundRect(hx - 40, hy - 42, 118, 128, 10); ctx.fill();
-      ctx.strokeStyle = activeSample === 2 ? "#38bdf8" : "rgba(148,180,220,0.3)";
-      ctx.lineWidth = activeSample === 2 ? 2.4 : 1;
-      ctx.stroke();
-      ctx.fillStyle = "#8fa0b5";
-      ctx.font = "600 10px 'Martian Mono', monospace";
-      ctx.fillText("21-PT HAND", hx - 28, hy - 22);
-      const wrist = [hx + 18, hy + 58];
-      [[hx - 14, hy + 20], [hx + 2, hy - 6], [hx + 18, hy - 12], [hx + 34, hy - 6], [hx + 46, hy + 12]].forEach(([tx, ty]) => {
-        ctx.strokeStyle = "#38bdf8"; ctx.lineWidth = 2;
-        ctx.beginPath(); ctx.moveTo(wrist[0], wrist[1]); ctx.lineTo(tx, ty); ctx.stroke();
-        ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(tx, ty, 3, 0, Math.PI * 2); ctx.fill();
-      });
+    if (o.mode === "documents") {
+      const tickets = [
+        ["#401", "Pump P-104B mechanical seal weeping oil at 78 °C; isolate and replace gasket.", "Mechanical (94%)", "high"],
+        ["#402", "Compressor panel breaker tripped twice on startup — inspect relay contacts.", "Electrical (89%)", "medium"],
+        ["#403", "Routine filter washdown completed cleanly; pressure returned to normal.", "Routine (97%)", "ok"]
+      ];
+      const tokens = [["seal", "high"], ["weeping", "high"], ["gasket", "med"], ["breaker", "med"], ["normal", "ok"]];
+      const panel = el("div", { class: "lp-stage-media lp-stage-media--panel" }, [
+        el("div", { class: "lp-doc-list" }, tickets.map(([id, txt, badge, sev], idx) => el("div", {
+          class: "lp-doc-row",
+          "aria-pressed": String(idx === 0)
+        }, [
+          el("div", { class: "lp-doc-top" }, [
+            el("code", { text: `Ticket ${id}` }),
+            el("span", { class: "lp-doc-class", "data-sev": sev, text: badge })
+          ]),
+          el("p", { text: txt })
+        ]))),
+        el("div", { class: "lp-token-strip" }, [
+          el("span", { class: "lp-clip-spec", text: "Key words Athena noticed" }),
+          el("div", { class: "lp-token-chips" }, tokens.map(([w, weight]) => el("span", { "data-w": weight, text: w })))
+        ])
+      ]);
+      container.replaceChildren(el("div", { class: "lp-studio-stage" }, [panel]));
+      return;
     }
 
-    const sample = data.samples[activeSample];
-    drawSolutionPanel(ctx, rx, rw, h, {
-      verdict: activeStage === "raw" ? "SESSION GROUPED" : sample.sev === "high" ? "STRAIN ALERT" : "SAFE POSTURE",
-      verdictColor: activeStage === "raw" ? "#7d8ba0" : sevColor(sample.sev),
-      verdictFg: sample.sev === "high" ? "#fff" : "#04121c",
-      headline: "Ergonomic & Gesture Monitor",
-      rows: [
-        { label: "DETECTED EPISODE", value: sample.label, color: sevColor(sample.sev), bar: 0.93 },
-        { label: "KEYPOINT OKS / PCK", value: "0.89 · 93% lift recall", color: "#34d399", bar: 0.89 },
-        { label: "PRIVACY CONTROL", value: "Landmarks only (no face ID)", color: "#7dd3fc", bar: 1.0 }
-      ],
-      btnPrimary: "Approve Action",
-      btnSecondary: "Adjust Joint"
-    });
+    // Machine sensors ("movements" -> 150-point continuous chart + Safe limit badge)
+    const panel = el("div", { class: "lp-stage-media lp-stage-media--panel" }, [
+      el("div", { class: "lp-clip-head" }, [
+        el("span", { class: "lp-clip-spec", text: "Reading #088 · 60-SECOND MACHINE LOG" }),
+        el("span", { class: "lp-clip-tag", "data-sev": sample.sev || "high", text: `${sample.label || "Imbalance"} (93% sure)` })
+      ]),
+      createSignalTraceSvg(sample.mode || "imbalance", sample.sev || "high", false),
+      el("div", { class: "lp-sig-stats" }, [
+        el("div", {}, [el("span", { text: "Average shake" }), el("b", { text: sample.avg || "7.8 mm/s" })]),
+        el("div", {}, [el("span", { text: "Highest spike" }), el("b", { text: sample.spike || "11.4 mm/s" })]),
+        el("div", {}, [el("span", { text: "Direction" }), el("b", { text: sample.dir || "Rising" })])
+      ])
+    ]);
+    container.replaceChildren(el("div", { class: "lp-studio-stage" }, [stageHead, panel]));
   }
 
-  function drawSpreadsheetsCanvas(ctx, w, h, data) {
-    const { splitX, rx, rw } = drawZoneChrome(ctx, w, h, "1 · CSV / EXCEL TABLE · TARGET & FEATURE DRIVERS");
-    ctx.fillStyle = "#0e1522";
-    ctx.beginPath(); ctx.roundRect(24, 38, splitX - 42, h - 56, 12); ctx.fill();
-    ctx.strokeStyle = "rgba(148, 180, 220, 0.22)";
-    ctx.stroke();
-
-    const cols = ["Row", "Temp °C", "Vib mm/s", "Bar", "Target: Failure_48h"];
-    const xs = [40, 118, 206, 296, 362];
-    ctx.fillStyle = "#7dd3fc";
-    ctx.font = "700 11px 'Martian Mono', monospace";
-    cols.forEach((col, idx) => ctx.fillText(col, xs[idx], 74));
-    ctx.strokeStyle = "rgba(148, 180, 220, 0.2)";
-    ctx.beginPath(); ctx.moveTo(34, 88); ctx.lineTo(splitX - 28, 88); ctx.stroke();
-
-    const rows = [
-      ["#1042", "86.4", "8.4", "14.1", activeStage === "raw" ? "?" : "High (0.91)"],
-      ["#1043", "63.1", "4.9", "12.2", activeStage === "raw" ? "?" : "Watch (0.54)"],
-      ["#1044", "52.0", "1.8", "14.0", activeStage === "raw" ? "?" : "Normal (0.97)"]
-    ];
-
-    rows.forEach((r, idx) => {
-      const sample = data.samples[idx];
-      const [rxBox, ry, rwBox, rh] = sample.rect;
-      const selected = idx === activeSample;
-      const col = sevColor(sample.sev);
-      if (activeStage !== "raw") {
-        ctx.fillStyle = selected ? `${col}24` : `${col}0d`;
-        ctx.fillRect(rxBox * w, ry * h, rwBox * w, rh * h);
-        if (selected) {
-          ctx.strokeStyle = col; ctx.lineWidth = 2;
-          ctx.strokeRect(rxBox * w, ry * h, rwBox * w, rh * h);
-        }
-      }
-      ctx.font = "500 13px 'Martian Mono', monospace";
-      r.forEach((cell, cIdx) => {
-        ctx.fillStyle = cIdx === 4 && activeStage !== "raw" ? col : "#eef3f8";
-        ctx.fillText(cell, xs[cIdx], ry * h + 34);
-      });
-    });
-
-    // Sparkline at bottom of table
-    ctx.strokeStyle = "#38bdf8";
-    ctx.lineWidth = 2;
-    ctx.beginPath();
-    [0.2, 0.25, 0.35, 0.42, 0.65, 0.91, 0.88].forEach((v, i) => {
-      const sx = 42 + i * 76;
-      const sy = h - 38 - v * 46;
-      if (i === 0) ctx.moveTo(sx, sy); else ctx.lineTo(sx, sy);
-    });
-    ctx.stroke();
-
-    const sample = data.samples[activeSample];
-    drawSolutionPanel(ctx, rx, rw, h, {
-      verdict: activeStage === "raw" ? "RAW COLUMNS" : sample.sev === "high" ? "HIGH RISK (0.91)" : sample.sev === "medium" ? "WATCH (0.54)" : "NORMAL (0.97)",
-      verdictColor: activeStage === "raw" ? "#7d8ba0" : sevColor(sample.sev),
-      verdictFg: sample.sev === "high" ? "#fff" : "#04121c",
-      headline: "Tabular Forecast Scorecard",
-      rows: [
-        { label: "TOP DRIVER: RMS_VIB", value: "44% impact on Failure_48h", color: "#38bdf8", bar: 0.84 },
-        { label: "DRIVER 2: HOUSING_TEMP", value: "33% impact (86.4 °C)", color: "#ffb020", bar: 0.68 },
-        { label: "HELD-OUT UNSEEN ROWS", value: "F1 0.91 · 96.2% acc", color: "#34d399", bar: 0.91 }
-      ],
-      btnPrimary: "Score Batch CSV",
-      btnSecondary: "Check Leakage"
-    });
-  }
-
-  function drawStudioCanvas() {
-    if (!visCanvas || !visCtx) return;
-    const data = OUTCOMES[activeOutcome];
-    if (!data) return;
-    const { w, h } = setupHiDpiCanvas(visCanvas, visCtx, 960, 380);
-    drawStudioGrid(visCtx, w, h);
-    if (activeOutcome === "audio") drawAudioCanvas(visCtx, w, h, data);
-    else if (activeOutcome === "vision") drawVisionCanvas(visCtx, w, h, data);
-    else if (activeOutcome === "ocr") drawOcrCanvas(visCtx, w, h, data);
-    else if (activeOutcome === "documents") drawDocumentsCanvas(visCtx, w, h, data);
-    else if (activeOutcome === "movements") drawMovementsCanvas(visCtx, w, h, data);
-    else if (activeOutcome === "spreadsheets") drawSpreadsheetsCanvas(visCtx, w, h, data);
-  }
-
-  function renderMiniCanvases() {
-    document.querySelectorAll(".lp-mini-canvas[data-mini-modality]").forEach(canvas => {
-      const ctx = canvas.getContext("2d");
-      if (!ctx) return;
-      const mode = canvas.dataset.miniModality;
-      const { w, h } = setupHiDpiCanvas(canvas, ctx, 320, 145);
-      ctx.fillStyle = "#080d16";
-      ctx.fillRect(0, 0, w, h);
-
-      if (mode === "audio") {
-        for (let i = 0; i < 36; i++) {
-          const t = i / 36;
-          const fault = t >= 0.34 && t <= 0.62;
-          const bh = (fault ? 0.45 + 0.4 * Math.abs(Math.sin(i * 1.4)) : 0.16 + 0.15 * Math.cos(i)) * 96;
-          ctx.fillStyle = fault ? "#ff6b3d" : "#38bdf8";
-          ctx.fillRect(16 + i * 8, h / 2 - bh / 2, 5, bh);
-        }
-        ctx.strokeStyle = "#ff6b3d";
-        ctx.lineWidth = 1.6;
-        ctx.strokeRect(110, 18, 92, 108);
-        drawBadge(ctx, "FAULT 3.4 kHz", 112, 16, "#ff6b3d", "#fff");
-      } else if (mode === "ocr") {
-        [38, 76, 114].forEach((y, idx) => {
-          ctx.strokeStyle = "rgba(148,180,220,0.2)";
-          ctx.beginPath(); ctx.moveTo(16, y + 12); ctx.lineTo(w - 16, y + 12); ctx.stroke();
-          ctx.strokeStyle = "#e2edf8"; ctx.lineWidth = 2;
-          ctx.beginPath();
-          for (let s = 0; s < 14; s++) {
-            const px = 22 + s * 7.5;
-            const py = y + Math.sin(s + idx) * 5;
-            if (s === 0) ctx.moveTo(px, py); else ctx.lineTo(px, py);
-          }
-          ctx.stroke();
-          ctx.fillStyle = "#34d399";
-          ctx.font = "600 11px 'Martian Mono', monospace";
-          ctx.fillText(["Valve 12B", "Seal worn", "2.4 bar"][idx], 160, y + 4);
-        });
-      } else if (mode === "documents") {
-        const spans = [["EQUIPMENT", "Pump P-104B", "#38bdf8", 24], ["FAULT", "seal weep 78°C", "#ff6b3d", 62], ["ACTION", "replace gasket", "#34d399", 100]];
-        spans.forEach(([tag, txt, col, y]) => {
-          ctx.fillStyle = `${col}20`;
-          ctx.beginPath(); ctx.roundRect(16, y, w - 32, 28, 6); ctx.fill();
-          ctx.strokeStyle = col; ctx.stroke();
-          ctx.fillStyle = "#fff"; ctx.font = "600 12px 'Hanken Grotesk', sans-serif";
-          ctx.fillText(txt, 26, y + 19);
-          drawBadge(ctx, tag, w - 110, y + 4, col, col === "#ff6b3d" ? "#fff" : "#04121c");
-        });
-      } else if (mode === "movements") {
-        drawCoverImage(ctx, PREVIEW_IMAGES.worker, 0, 0, w, h, 0.62);
-        [[105, 0.22, "#34d399"], [215, 0.72, "#ff6b3d"]].forEach(([cx, ang, col]) => {
-          const hy = 92; const sx = cx + Math.sin(ang) * 42; const sy = hy - Math.cos(ang) * 42;
-          ctx.strokeStyle = col; ctx.lineWidth = 3;
-          ctx.beginPath(); ctx.moveTo(cx, hy + 34); ctx.lineTo(cx, hy); ctx.lineTo(sx, sy); ctx.lineTo(sx, sy - 14); ctx.stroke();
-          [[cx, hy], [sx, sy], [sx, sy - 14]].forEach(([jx, jy]) => {
-            ctx.fillStyle = "#fff"; ctx.beginPath(); ctx.arc(jx, jy, 3.5, 0, Math.PI * 2); ctx.fill();
-          });
-        });
-        drawBadge(ctx, "OKS 0.89", 16, 14, "#34d399");
-      } else if (mode === "spreadsheets") {
-        const rows = [["#1042", "86°C", "High 0.91", "#ff6b3d", 26], ["#1043", "63°C", "Watch 0.54", "#ffb020", 62], ["#1044", "52°C", "Normal 0.97", "#34d399", 98]];
-        rows.forEach(([id, tmp, res, col, y]) => {
-          ctx.fillStyle = `${col}18`; ctx.fillRect(16, y, w - 32, 28);
-          ctx.fillStyle = "#eef3f8"; ctx.font = "600 11.5px 'Martian Mono', monospace";
-          ctx.fillText(`${id}  ${tmp}`, 26, y + 18);
-          ctx.fillStyle = col; ctx.fillText(res, 172, y + 18);
-        });
-      } else if (mode === "vision") {
-        drawCoverImage(ctx, PREVIEW_IMAGES.welding, 0, 0, w, h, 0.9);
-        ctx.strokeStyle = "#ff6b3d"; ctx.lineWidth = 2.4; ctx.strokeRect(48, 32, 108, 72);
-        drawBadge(ctx, "Porosity", 48, 12, "#ff6b3d", "#fff");
-        ctx.strokeStyle = "#ffb020"; ctx.lineWidth = 2; ctx.strokeRect(184, 62, 86, 56);
-        drawBadge(ctx, "Undercut", 184, 42, "#ffb020");
+  function renderGalleryThumbs() {
+    document.querySelectorAll("[data-mini-modality]").forEach((host) => {
+      const mod = host.dataset.miniModality;
+      if (mod === "vision") {
+        host.replaceChildren(el("div", { class: "lp-thumb lp-thumb--photo" }, [
+          el("img", { src: `${STATIC}pipe-corrosion.jpg`, alt: "", width: 320, height: 180 }),
+          el("span", { class: "lp-thumb-box lp-thumb-box--ok", style: { left: "34%", top: "24%", width: "54%", height: "38%" }, text: "Rust" }),
+          el("span", { class: "lp-thumb-box lp-thumb-box--draft", style: { left: "22%", top: "54%", width: "28%", height: "36%" }, text: "Check" })
+        ]));
+      } else if (mod === "audio") {
+        host.replaceChildren(el("div", { class: "lp-thumb lp-thumb--audio" }, [
+          createAudioWaveSvg("fault", true),
+          createSpectrogramSvg("fault", true)
+        ]));
+      } else if (mod === "ocr") {
+        host.replaceChildren(el("div", { class: "lp-thumb lp-thumb--ocr" }, [
+          createInkSvg(0, true),
+          el("div", { class: "lp-thumb-ocr-meta" }, [el("span", { text: "Read as" }), el("code", { text: "Valve 12B — 2.4 bar" })])
+        ]));
+      } else if (mod === "spreadsheets") {
+        const rows = [["#1042", "86°C", "8.4", "Inspect", "high", 32], ["#1043", "63°C", "4.9", "Watch", "med", 52], ["#1044", "52°C", "1.8", "Normal", "ok", 72]];
+        const svg = svgEl("svg", { class: "lp-thumb-svg", viewBox: "0 0 280 96" }, [
+          svgEl("rect", { x: 8, y: 8, width: 264, height: 20, rx: 3, class: "lp-th-head" }),
+          svgEl("text", { x: 16, y: 21, class: "lp-th-txt", text: "UNIT" }),
+          svgEl("text", { x: 72, y: 21, class: "lp-th-txt", text: "TEMP" }),
+          svgEl("text", { x: 128, y: 21, class: "lp-th-txt", text: "SHAKE" }),
+          svgEl("text", { x: 184, y: 21, class: "lp-th-txt-accent", text: "RISK" }),
+          ...rows.map(([id, t, v, pred, sev, y]) => svgEl("g", {}, [
+            svgEl("rect", { x: 8, y, width: 264, height: 17, rx: 2, class: `lp-th-row lp-th-row--${sev}` }),
+            svgEl("text", { x: 16, y: y + 12, class: "lp-th-cell", text: id }),
+            svgEl("text", { x: 72, y: y + 12, class: "lp-th-cell", text: t }),
+            svgEl("text", { x: 128, y: y + 12, class: "lp-th-cell", text: v }),
+            svgEl("text", { x: 184, y: y + 12, class: `lp-th-pred lp-th-pred--${sev}`, text: pred })
+          ]))
+        ]);
+        host.replaceChildren(el("div", { class: "lp-thumb lp-thumb--svg" }, [svg]));
+      } else if (mod === "documents") {
+        const rows = [["Pump P-104B weeping", "Mechanical", "high", 32], ["Breaker tripped startup", "Electrical", "med", 56]];
+        const svg = svgEl("svg", { class: "lp-thumb-svg", viewBox: "0 0 280 96" }, [
+          svgEl("rect", { x: 8, y: 8, width: 264, height: 80, rx: 5, class: "lp-th-head" }),
+          svgEl("text", { x: 16, y: 24, class: "lp-th-txt", text: "INCOMING SHIFT NOTES" }),
+          ...rows.map(([note, dept, sev, y]) => svgEl("g", {}, [
+            svgEl("rect", { x: 14, y, width: 252, height: 20, rx: 3, class: `lp-th-row lp-th-row--${sev}` }),
+            svgEl("text", { x: 20, y: y + 13, class: "lp-th-cell", text: note }),
+            svgEl("text", { x: 258, y: y + 13, "text-anchor": "end", class: `lp-th-pred lp-th-pred--${sev}`, text: dept })
+          ]))
+        ]);
+        host.replaceChildren(el("div", { class: "lp-thumb lp-thumb--svg" }, [svg]));
+      } else {
+        host.replaceChildren(el("div", { class: "lp-thumb lp-thumb--svg" }, [
+          createSignalTraceSvg("imbalance", "high", true)
+        ]));
       }
     });
   }
 
-  function drawFusionCanvas() {
-    if (!fusionCanvas || !fusionCtx) return;
-    const scenario = FUSION_SCENARIOS[activeFusion];
-    if (!scenario) return;
-    const { w, h } = setupHiDpiCanvas(fusionCanvas, fusionCtx, 880, 210);
-    drawStudioGrid(fusionCtx, w, h);
+  function renderStudio() {
+    const o = OUTCOMES[activeOutcome];
+    if (!o) return;
+    const sample = o.samples[Math.min(activeSample, o.samples.length - 1)] || o.samples[0];
 
-    // 3 input stream cards on left -> convergence lines -> joint decision card on right
-    const leftX = 20;
-    const cardW = 286;
-    const mergeX = 446;
-    const outX = 532;
-    const outW = w - outX - 20;
-
-    scenario.streams.forEach((s, idx) => {
-      const y = 16 + idx * 62;
-      const col = sevColor(s.sev);
-      fusionCtx.fillStyle = "#0e1522";
-      fusionCtx.beginPath(); fusionCtx.roundRect(leftX, y, cardW, 50, 8); fusionCtx.fill();
-      fusionCtx.strokeStyle = col; fusionCtx.lineWidth = 1.4; fusionCtx.stroke();
-
-      fusionCtx.fillStyle = col;
-      fusionCtx.font = "700 10px 'Martian Mono', monospace";
-      fusionCtx.fillText(s.kind.toUpperCase(), leftX + 12, y + 17);
-      fusionCtx.fillStyle = "#ffffff";
-      fusionCtx.font = "700 12.5px 'Hanken Grotesk', sans-serif";
-      fusionCtx.fillText(`${s.title} · ${s.val}`, leftX + 12, y + 36);
-
-      // Signal spark bars inside card
-      s.bars.forEach((b, bIdx) => {
-        const bx = leftX + cardW - 50 + bIdx * 8;
-        const bh = b * 24;
-        fusionCtx.fillStyle = col;
-        fusionCtx.fillRect(bx, y + 38 - bh, 5, bh);
-      });
-
-      // Connector curve to fusion node
-      fusionCtx.strokeStyle = col;
-      fusionCtx.lineWidth = 2;
-      fusionCtx.beginPath();
-      fusionCtx.moveTo(leftX + cardW, y + 25);
-      fusionCtx.bezierCurveTo(leftX + cardW + 60, y + 25, mergeX - 50, h / 2, mergeX, h / 2);
-      fusionCtx.stroke();
-    });
-
-    // Center Fusion Sync Node
-    fusionCtx.fillStyle = "#0e1522";
-    fusionCtx.beginPath(); fusionCtx.arc(mergeX, h / 2, 34, 0, Math.PI * 2); fusionCtx.fill();
-    fusionCtx.strokeStyle = "#38bdf8"; fusionCtx.lineWidth = 2.4; fusionCtx.stroke();
-    fusionCtx.fillStyle = "#7dd3fc";
-    fusionCtx.font = "700 10px 'Martian Mono', monospace";
-    fusionCtx.fillText("SYNC", mergeX - 15, h / 2 - 2);
-    fusionCtx.fillText("FUSE", mergeX - 15, h / 2 + 12);
-
-    fusionCtx.strokeStyle = "#34d399";
-    fusionCtx.lineWidth = 2.5;
-    fusionCtx.beginPath();
-    fusionCtx.moveTo(mergeX + 34, h / 2);
-    fusionCtx.lineTo(outX, h / 2);
-    fusionCtx.stroke();
-
-    // Right Output + Ablation Panel
-    fusionCtx.fillStyle = "#0d1822";
-    fusionCtx.beginPath(); fusionCtx.roundRect(outX, 18, outW, h - 36, 12); fusionCtx.fill();
-    fusionCtx.strokeStyle = "rgba(52, 211, 153, 0.55)"; fusionCtx.lineWidth = 1.6; fusionCtx.stroke();
-
-    drawBadge(fusionCtx, "JOINT DECISION + ABLATION", outX + 16, 30, "#34d399", "#04121c");
-    fusionCtx.fillStyle = "#ffffff";
-    fusionCtx.font = "700 13.5px 'Hanken Grotesk', sans-serif";
-    fusionCtx.fillText(scenario.verdict.replace(/^Joint [^:]+:\s*/, ""), outX + 16, 73);
-
-    scenario.ablation.forEach(([lbl, score], idx) => {
-      const ay = 94 + idx * 30;
-      const pct = Number(score) || 0.8;
-      fusionCtx.fillStyle = "#8fa0b5";
-      fusionCtx.font = "600 10.5px 'Martian Mono', monospace";
-      fusionCtx.fillText(lbl, outX + 16, ay + 12);
-      const barX = outX + 168;
-      const barW = outW - 222;
-      fusionCtx.fillStyle = "rgba(255,255,255,0.08)";
-      fusionCtx.fillRect(barX, ay + 4, barW, 8);
-      fusionCtx.fillStyle = idx === 2 ? "#34d399" : "#38bdf8";
-      fusionCtx.fillRect(barX, ay + 4, barW * pct, 8);
-      fusionCtx.fillStyle = "#ffffff";
-      fusionCtx.fillText(score, outX + outW - 44, ay + 12);
-    });
-  }
-
-  function renderInspector() {
-    const data = OUTCOMES[activeOutcome];
-    if (!data) return;
-    const sample = data.samples[activeSample] || data.samples[0];
-    document.getElementById("lp-vis-filename").textContent = data.filename;
-    document.getElementById("lp-vis-mode").textContent = STAGES[activeStage] || STAGES.label;
-    const stageCapEl = document.getElementById("lp-stage-caption");
-    if (stageCapEl) stageCapEl.textContent = data.stageCaptions[activeStage] || "";
+    document.getElementById("lp-outcome-badge").textContent = o.badge;
+    document.getElementById("lp-outcome-title").textContent = o.title;
+    const st = document.getElementById("lp-outcome-status");
+    st.textContent = o.status;
+    st.dataset.tone = o.tone;
+    document.getElementById("lp-vis-filename").textContent = o.filename;
+    document.getElementById("lp-vis-mode").textContent = STAGE_NAMES[activeStage] || STAGE_NAMES.label;
+    document.getElementById("lp-hud-eyebrow").textContent = o.badge;
     document.getElementById("lp-vis-selection-title").textContent = sample.title;
-    document.getElementById("lp-vis-split").textContent = data.split;
     document.getElementById("lp-vis-selection-detail").textContent = sample.detail;
+    document.getElementById("lp-hud-caption").textContent = o.stageCaptions[activeStage] || "";
 
-    const samplesBox = document.getElementById("lp-vis-samples");
-    if (samplesBox) {
-      samplesBox.replaceChildren(...data.samples.map((item, idx) => {
-        const btn = document.createElement("button");
-        btn.type = "button";
-        btn.className = "lp-vis-sample";
-        btn.dataset.sample = String(idx);
-        btn.setAttribute("aria-pressed", idx === activeSample ? "true" : "false");
-        btn.textContent = item.label;
-        return btn;
-      }));
-    }
+    const lim = document.getElementById("lp-hud-limit");
+    if (o.limitNote) { lim.hidden = false; lim.textContent = o.limitNote; }
+    else { lim.hidden = true; lim.textContent = ""; }
 
-    const metricsBox = document.getElementById("lp-vis-metrics");
-    if (metricsBox) {
-      const cells = data.stageMetrics[activeStage] || data.stageMetrics.eval;
-      metricsBox.replaceChildren(...cells.map(([val, lbl]) => {
-        const card = document.createElement("div");
-        const b = document.createElement("b");
-        b.textContent = val;
-        const span = document.createElement("span");
-        span.textContent = lbl;
-        card.append(b, span);
-        return card;
-      }));
-    }
-    drawStudioCanvas();
+    document.getElementById("lp-vis-metrics").replaceChildren(
+      ...(sample.metrics || []).map(([v, l]) => el("div", {}, [el("b", { text: v }), el("span", { text: l })]))
+    );
+
+    document.getElementById("lp-outcome-data").textContent = o.data;
+    document.getElementById("lp-outcome-quality").textContent = o.quality;
+    document.getElementById("lp-outcome-recipe").textContent = o.howItWorks;
+    document.getElementById("lp-vis-split").textContent = o.split;
+    document.getElementById("lp-outcome-cta").href = `/login/?next=/detectors%3Frecipe%3D${o.recipe}`;
+
+    const panel = document.getElementById("lp-outcome-panel");
+    if (panel) panel.setAttribute("aria-labelledby", `lp-outcome-tab-${activeOutcome}`);
+
+    document.querySelectorAll("#lp-outcome-tabs [data-outcome]").forEach((tab) => {
+      const sel = tab.dataset.outcome === activeOutcome;
+      tab.setAttribute("aria-selected", String(sel));
+      tab.tabIndex = sel ? 0 : -1;
+    });
+    document.querySelectorAll("#lp-stage-tabs [data-stage]").forEach((btn) => {
+      btn.setAttribute("aria-pressed", String(btn.dataset.stage === activeStage));
+    });
+    document.querySelectorAll("#lp-modality-gallery [data-jump-outcome]").forEach((card) => {
+      card.setAttribute("aria-pressed", String(card.dataset.jumpOutcome === activeOutcome));
+    });
+
+    renderStudioVisual(o, sample);
   }
 
-  if (outcomeTablist && outcomePanel) {
-    const tabs = [...outcomeTablist.querySelectorAll("[data-outcome]")];
-    const stageButtons = [...document.querySelectorAll("#lp-stage-tabs [data-stage]")];
-    const samplesWrap = document.getElementById("lp-vis-samples");
-    const galleryCards = [...document.querySelectorAll(".lp-mod-card[data-jump-outcome]")];
+  const outcomeTabs = [...document.querySelectorAll("#lp-outcome-tabs [data-outcome]")];
+  if (outcomeTabs.length) {
+    renderStudio();
+    renderGalleryThumbs();
 
-    const selectOutcome = (key, moveFocus = false) => {
-      const data = OUTCOMES[key];
-      if (!data) return;
-      activeOutcome = key;
-      activeSample = key === "audio" ? 1 : 0;
-      tabs.forEach(tab => {
-        const active = tab.dataset.outcome === key;
-        tab.setAttribute("aria-selected", active ? "true" : "false");
-        tab.tabIndex = active ? 0 : -1;
-        if (active) {
-          outcomePanel.setAttribute("aria-labelledby", tab.id);
-          if (typeof tab.scrollIntoView === "function") {
-            tab.scrollIntoView({ block: "nearest", inline: "nearest" });
-          }
-          if (moveFocus) tab.focus();
-        }
+    outcomeTabs.forEach((tab, idx) => {
+      tab.addEventListener("click", () => {
+        activeOutcome = tab.dataset.outcome;
+        activeSample = activeOutcome === "audio" ? 1 : 0;
+        renderStudio();
       });
-      galleryCards.forEach(card => card.setAttribute("aria-pressed", String(card.dataset.jumpOutcome === key)));
-      document.getElementById("lp-outcome-badge").textContent = data.badge;
-      document.getElementById("lp-outcome-title").textContent = data.title;
-      const statusEl = document.getElementById("lp-outcome-status");
-      if (statusEl) statusEl.textContent = data.status;
-      const scenEl = document.getElementById("lp-outcome-scenario");
-      if (scenEl) scenEl.textContent = data.scenario;
-      document.getElementById("lp-outcome-data").textContent = data.data;
-      document.getElementById("lp-outcome-quality").textContent = data.quality;
-      document.getElementById("lp-outcome-recipe").textContent = data.recipe;
-      const cta = document.getElementById("lp-outcome-cta");
-      if (cta) cta.setAttribute("href", data.href);
-      renderInspector();
-    };
-
-    const selectStage = stage => {
-      if (!STAGES[stage]) return;
-      activeStage = stage;
-      stageButtons.forEach(btn => btn.setAttribute("aria-pressed", String(btn.dataset.stage === stage)));
-      renderInspector();
-    };
-
-    tabs.forEach((tab, index) => {
-      tab.addEventListener("click", () => selectOutcome(tab.dataset.outcome, false));
-      tab.addEventListener("keydown", event => {
-        let next = -1;
-        if (event.key === "ArrowRight") next = (index + 1) % tabs.length;
-        else if (event.key === "ArrowLeft") next = (index - 1 + tabs.length) % tabs.length;
-        else if (event.key === "Home") next = 0;
-        else if (event.key === "End") next = tabs.length - 1;
-        if (next >= 0) {
-          event.preventDefault();
-          selectOutcome(tabs[next].dataset.outcome, true);
-        }
+      tab.addEventListener("keydown", (e) => {
+        if (e.key !== "ArrowRight" && e.key !== "ArrowLeft") return;
+        e.preventDefault();
+        const nextIdx = e.key === "ArrowRight" ? (idx + 1) % outcomeTabs.length : (idx - 1 + outcomeTabs.length) % outcomeTabs.length;
+        const nextTab = outcomeTabs[nextIdx];
+        activeOutcome = nextTab.dataset.outcome;
+        activeSample = activeOutcome === "audio" ? 1 : 0;
+        renderStudio();
+        nextTab.focus();
       });
     });
 
-    stageButtons.forEach(btn => btn.addEventListener("click", () => selectStage(btn.dataset.stage)));
+    document.querySelectorAll("#lp-stage-tabs [data-stage]").forEach((btn) => {
+      btn.addEventListener("click", () => { activeStage = btn.dataset.stage; renderStudio(); });
+    });
 
-    if (samplesWrap) {
-      samplesWrap.addEventListener("click", event => {
-        const btn = event.target.closest("[data-sample]");
-        if (!btn) return;
-        activeSample = Number(btn.dataset.sample) || 0;
-        renderInspector();
-      });
-    }
-
-    if (visCanvas) {
-      visCanvas.addEventListener("click", event => {
-        const rect = visCanvas.getBoundingClientRect();
-        const nx = (event.clientX - rect.left) / rect.width;
-        const ny = (event.clientY - rect.top) / rect.height;
-        const samples = OUTCOMES[activeOutcome]?.samples || [];
-        const hit = samples.findIndex(({ rect: [rx, ry, rw, rh] }) => nx >= rx && nx <= rx + rw && ny >= ry && ny <= ry + rh);
-        if (hit >= 0) {
-          activeSample = hit;
-          if (activeStage === "raw") selectStage("label");
-          else renderInspector();
-        }
-      });
-    }
-
-    document.querySelectorAll("[data-jump-outcome]").forEach(card => {
+    document.querySelectorAll("[data-jump-outcome]").forEach((card) => {
       card.addEventListener("click", () => {
         const key = card.dataset.jumpOutcome;
         if (!OUTCOMES[key]) return;
-        selectOutcome(key, false);
+        activeOutcome = key;
+        activeSample = key === "audio" ? 1 : 0;
+        renderStudio();
         outcomeShell?.scrollIntoView({ behavior: reducedMotion ? "auto" : "smooth", block: "center" });
       });
     });
 
-    const startCanvasLoop = () => {
-      if (reducedMotion || animRaf !== null) return;
-      let lastTick = 0;
-      const tick = now => {
-        if (!studioActive) { animRaf = null; return; }
-        if (now - lastTick > 70) {
-          lastTick = now;
-          animPhase += 0.14;
-          if (activeOutcome === "audio") drawStudioCanvas();
-        }
-        animRaf = requestAnimationFrame(tick);
-      };
-      animRaf = requestAnimationFrame(tick);
-    };
-
-    const stopCanvasLoop = () => {
-      if (animRaf !== null) { cancelAnimationFrame(animRaf); animRaf = null; }
-    };
-
     if (outcomeShell) {
-      outcomeShell.addEventListener("contentvisibilityautostatechange", event => {
-        studioActive = !event.skipped;
-        if (studioActive) startCanvasLoop();
-        else stopCanvasLoop();
-      });
-      if (!("contentVisibility" in document.documentElement.style) && "IntersectionObserver" in window) {
-        const visObs = new IntersectionObserver(entries => {
-          studioActive = entries.some(entry => entry.isIntersecting);
-          if (studioActive) startCanvasLoop();
-          else stopCanvasLoop();
-        }, { rootMargin: "200px" });
-        visObs.observe(outcomeShell);
-      }
+      outcomeShell.addEventListener("contentvisibilityautostatechange", () => {});
     }
+  }
 
-    renderInspector();
-    renderMiniCanvases();
-    startCanvasLoop();
+  /* ── Section 05: Combined Site Monitor Scenarios ─────────────────────────────────────────────── */
+
+  const FUSION_SCENARIOS = {
+    motor: {
+      siteTitle: "Pump Station 04 · Combined Check",
+      edgeNode: "Runs offline on your plant computer",
+      verdictBadge: "Needs attention",
+      verdict: "Bearing wear on Pump 04 — inspect within 48 hours",
+      whyUseful: "A single sensor can easily cry wolf. By checking sound, vibration, and bearing temperature together, your maintenance team catches real wear early without chasing false alarms.",
+      checks: [
+        "Microphone hears repeated clicking that wasn’t there last week",
+        "Vibration crossed the 6.5 mm/s safe limit and keeps oscillating",
+        "Bearing housing warmed up from 62 °C to 74 °C"
+      ],
+      fallbackNote: "Keeps watching even if the microphone disconnects — vibration and heat still protect the pump.",
+      actionLabel: "Supervisor decides · Schedule check or dismiss",
+      streams: [
+        { kind: "Sound check", title: "Pump microphone", val: "Clicking noise detected", graphic: "audio" },
+        { kind: "Vibration", title: "Shaft sensor", val: "Crossed safe limit", graphic: "signal", mode: "imbalance", sev: "high" },
+        { kind: "Temperature", title: "Bearing heat", val: "74 °C (normal is 62 °C)", graphic: "gauge", pct: 78, sev: "medium" }
+      ]
+    },
+    thermal: {
+      siteTitle: "Line 12 Walkdown · Field Check",
+      edgeNode: "Runs on field laptop · No internet needed",
+      verdictBadge: "Action needed",
+      verdict: "Hotspot (+28 °C) matches rusted clamp on Line 12 — inspect seal",
+      whyUseful: "Sunlight glare can fool a thermal camera on its own, and a normal photo cannot feel heat. Matching the heat spot directly to visible rust and service history shows crews exactly which clamp needs a gasket.",
+      checks: [
+        "Thermal view shows +28 °C hotspot centered on the pipe clamp",
+        "Normal photo confirms heavy rust and paint flaking in the exact spot",
+        "Maintenance log shows 410 days since the last gasket change"
+      ],
+      fallbackNote: "Works right on your field laptop during walkdowns — photos never leave your computer.",
+      actionLabel: "Crew decides · Tag clamp for repair",
+      streams: [
+        { kind: "Thermal camera", title: "Heat view", val: "+28 °C hot spot on clamp", graphic: "thermal" },
+        { kind: "Normal camera", title: "Pipe photo", val: "Heavy rust around clamp", graphic: "photo" },
+        { kind: "Service log", title: "Line 12 history", val: "410 days since last service", graphic: "gauge", pct: 86, sev: "high" }
+      ]
+    },
+    safety: {
+      siteTitle: "North Loading Yard · Gate Check",
+      edgeNode: "Runs locally on site · Photos stay private",
+      verdictBadge: "Needs attention",
+      verdict: "Entry gate is open while loading bays are busy — check lane",
+      whyUseful: "A gate sensor alone doesn’t know if the yard is full, and a photo alone doesn’t know if the gate is locked. Combining camera bays, gate status, and vehicle flow prevents yard bottlenecks.",
+      checks: [
+        "Overhead camera sees 21 bays taken and heavy traffic in middle row",
+        "Gate sensor reports the north loading gate is currently OPEN",
+        "Entry lane activity shows vehicles queuing at the entrance"
+      ],
+      fallbackNote: "Runs completely inside your warehouse server — zero video or photos sent to external clouds.",
+      actionLabel: "Dispatcher decides · Direct trucks to open south bays",
+      streams: [
+        { kind: "Overhead camera", title: "North yard bays", val: "21 of 51 bays occupied", graphic: "parking" },
+        { kind: "Gate sensor", title: "North entry gate", val: "Gate OPEN right now", graphic: "plc" },
+        { kind: "Lane activity", title: "Arrival sensor", val: "Vehicle burst at entry", graphic: "signal", mode: "cavitation", sev: "medium" }
+      ]
+    }
+  };
+
+  function buildStreamGraphic(s) {
+    if (s.graphic === "audio") return el("div", { class: "lp-fs-gfx", "aria-hidden": "true" }, [createAudioWaveSvg("fault", true)]);
+    if (s.graphic === "signal") return el("div", { class: "lp-fs-gfx", "aria-hidden": "true" }, [createSignalTraceSvg(s.mode || "imbalance", s.sev || "high", true)]);
+    if (s.graphic === "photo") {
+      return el("div", { class: "lp-fs-gfx lp-fs-gfx--photo", "aria-hidden": "true" }, [
+        el("img", { src: `${STATIC}pipe-corrosion.jpg`, alt: "", width: 280, height: 140 }),
+        el("span", { class: "lp-fs-box", style: { left: "34%", top: "24%", width: "54%", height: "42%" } }, [el("i", { text: "Rust" })])
+      ]);
+    }
+    if (s.graphic === "thermal") {
+      return el("div", { class: "lp-fs-gfx lp-fs-gfx--thermal", "aria-hidden": "true" }, [
+        el("img", { src: `${STATIC}pipe-corrosion.jpg`, alt: "", width: 280, height: 140 }),
+        el("span", { class: "lp-fs-hotspot" }),
+        el("span", { class: "lp-fs-temp-tag", text: "+28 °C" })
+      ]);
+    }
+    if (s.graphic === "parking") {
+      return el("div", { class: "lp-fs-gfx lp-fs-gfx--photo", "aria-hidden": "true" }, [
+        el("img", { src: `${STATIC}parking-aerial.jpg`, alt: "", width: 280, height: 140 }),
+        el("span", { class: "lp-fs-box lp-fs-box--ok", style: { left: "38%", top: "48%", width: "22%", height: "34%" } }, [el("i", { text: "30 free" })])
+      ]);
+    }
+    if (s.graphic === "plc") {
+      return el("div", { class: "lp-fs-gfx lp-fs-gfx--plc", "aria-hidden": "true" }, [
+        el("span", { class: "lp-plc-state" }, [el("i"), "GATE OPEN"]),
+        el("span", { class: "lp-plc-sub", text: "North bay entry active" })
+      ]);
+    }
+    return el("div", { class: "lp-fs-gfx lp-fs-gfx--gauge", "aria-hidden": "true" }, [
+      el("div", { class: "lp-fs-gauge-bar" }, [el("span", { style: { width: `${s.pct || 72}%` }, "data-sev": s.sev })]),
+      el("div", { class: "lp-fs-gauge-scale" }, [el("span", { text: "Safe" }), el("span", { text: "Watch" }), el("span", { text: "Alert" })])
+    ]);
+  }
+
+  function renderFusion(key) {
+    const scenario = FUSION_SCENARIOS[key];
+    if (!scenario) return;
+    document.getElementById("lp-monitor-title").textContent = scenario.siteTitle;
+    document.getElementById("lp-fusion-badge").textContent = scenario.edgeNode;
+    document.getElementById("lp-monitor-verdict-badge").textContent = scenario.verdictBadge;
+    document.getElementById("lp-fusion-verdict").textContent = scenario.verdict;
+    document.getElementById("lp-monitor-why").textContent = scenario.whyUseful;
+    document.getElementById("lp-monitor-fallback").textContent = scenario.fallbackNote;
+    document.getElementById("lp-monitor-action").textContent = scenario.actionLabel;
+
+    document.getElementById("lp-monitor-inputs").replaceChildren(
+      el("p", { class: "lp-monitor-subhead", text: "1 · What Athena is checking on site" }),
+      ...scenario.streams.map((stream) => el("div", { class: "lp-monitor-feed" }, [
+        el("div", { class: "lp-monitor-feed-text" }, [
+          el("span", { class: "lp-fusion-kind", text: stream.kind }),
+          el("strong", { text: stream.title }),
+          el("span", { class: "lp-fusion-val", text: stream.val })
+        ]),
+        buildStreamGraphic(stream)
+      ]))
+    );
+
+    document.getElementById("lp-monitor-checks").replaceChildren(
+      ...scenario.checks.map((item) => el("li", { text: item }))
+    );
   }
 
   const fusionTabs = [...document.querySelectorAll("#lp-fusion-tabs [data-fusion]")];
   if (fusionTabs.length) {
-    drawFusionCanvas();
-    fusionTabs.forEach(tab => {
+    renderFusion("motor");
+    fusionTabs.forEach((tab) => {
       tab.addEventListener("click", () => {
-        const scenario = FUSION_SCENARIOS[tab.dataset.fusion];
-        if (!scenario) return;
-        activeFusion = tab.dataset.fusion;
-        fusionTabs.forEach(btn => btn.setAttribute("aria-pressed", String(btn === tab)));
-        document.getElementById("lp-fusion-badge").textContent = scenario.badge;
-        document.getElementById("lp-fusion-verdict").textContent = scenario.verdict;
-        drawFusionCanvas();
+        const key = tab.dataset.fusion;
+        if (!FUSION_SCENARIOS[key]) return;
+        fusionTabs.forEach((btn) => btn.setAttribute("aria-pressed", String(btn === tab)));
+        renderFusion(key);
       });
     });
   }
 
-  let lastDpr = window.devicePixelRatio || 1;
-  window.addEventListener("resize", () => {
-    const dprNow = window.devicePixelRatio || 1;
-    if (dprNow !== lastDpr) {
-      lastDpr = dprNow;
-      drawStudioCanvas();
-      renderMiniCanvases();
-      drawFusionCanvas();
-    }
-  }, { passive: true });
+  /* ── Reveal on scroll ────────────────────────────────────────────────────────────────────────── */
 
-  const items = document.querySelectorAll(".lp-reveal");
+  const revealItems = document.querySelectorAll(".lp-reveal");
   if ("IntersectionObserver" in window) {
-    const seen = new IntersectionObserver(entries => entries.forEach(entry => {
-      if (entry.isIntersecting) { entry.target.classList.add("is-in"); seen.unobserve(entry.target); }
-    }), { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
-    items.forEach(item => seen.observe(item));
+    const seen = new IntersectionObserver((entries) => {
+      entries.forEach((entry) => {
+        if (entry.isIntersecting) {
+          entry.target.classList.add("is-in");
+          seen.unobserve(entry.target);
+        }
+      });
+    }, { rootMargin: "0px 0px -8% 0px", threshold: 0.08 });
+    revealItems.forEach((item) => seen.observe(item));
   } else {
-    items.forEach(item => item.classList.add("is-in"));
+    revealItems.forEach((item) => item.classList.add("is-in"));
   }
 })();

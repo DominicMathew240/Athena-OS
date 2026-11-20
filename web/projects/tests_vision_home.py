@@ -149,7 +149,7 @@ class LandingCoversOnFrontViewTests(TestCase):
         self.assertEqual(landing.status_code, 200)
         html = landing.content.decode()
         for expected in (
-            "Teach AI what matters to your world. No coding required.",
+            "Athena OS · Plain-English AI for Everyday Operations",
             'data-testid="landing-teach-workflow"',
             'data-testid="landing-outcome-vision"',
             'data-testid="landing-outcome-audio"',
@@ -157,9 +157,9 @@ class LandingCoversOnFrontViewTests(TestCase):
             'data-testid="landing-outcome-documents"',
             'data-testid="landing-outcome-movements"',
             'data-testid="landing-outcome-spreadsheets"',
-            "Acoustic Event Detection",
-            "WAV recordings + event labels",
-            "Missed sound events and false alarms",
+            "Listen for Machine Faults",
+            "Short motor &amp; pump sound recordings",
+            "Makes sure real machine faults aren’t missed",
             'data-testid="landing-six-steps"',
             'data-testid="landing-stage-stepper"',
             'data-testid="landing-stage-raw"',
@@ -167,7 +167,7 @@ class LandingCoversOnFrontViewTests(TestCase):
             'data-testid="landing-stage-eval"',
             'data-testid="landing-stage-deploy"',
             'data-testid="landing-multimodal-visualizer"',
-            'id="lp-vis-canvas"',
+            'id="lp-vis-interactive"',
             'data-testid="landing-vis-inspector"',
             'data-testid="landing-modality-gallery"',
             'data-mini-modality="audio"',
@@ -179,21 +179,19 @@ class LandingCoversOnFrontViewTests(TestCase):
             'data-testid="landing-roadmap-section"',
             'data-testid="landing-fusion-showcase"',
             'id="lp-fusion-tabs"',
-            'id="lp-fusion-canvas"',
-            "OS-CORE-001",
-            "OS-VIS-001",
-            "OS-AUD-001",
-            "OS-OCR-001",
-            "OS-TAB-001",
+            'id="lp-fusion-diagram"',
+            'lp-site-monitor',
+            'data-testid="landing-theme-toggle"',
         ):
             with self.subTest(expected=expected):
                 self.assertIn(expected, html)
         landing_js = (STATIC / "landing.js").read_text()
         self.assertIn("lp-outcome-tabs", landing_js)
         self.assertIn("ArrowRight", landing_js)
-        self.assertIn("drawStudioCanvas", landing_js)
-        self.assertIn("renderMiniCanvases", landing_js)
-        self.assertIn("drawFusionCanvas", landing_js)
+        self.assertIn("renderStudio", landing_js)
+        self.assertIn("renderGalleryThumbs", landing_js)
+        self.assertIn("renderFusion", landing_js)
+        self.assertIn("Safe limit", landing_js)
         self.assertIn("contentvisibilityautostatechange", landing_js)
 
     def test_home_and_console_surface_outcome_first_training_recipes(self) -> None:

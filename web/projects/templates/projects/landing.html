@@ -1,33 +1,43 @@
 {% load static athena_ui %}<!doctype html>
-<html lang="en" data-theme="dark">
+<html lang="en" data-theme="light">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="description" content="Athena OS: Train AI on all your data — photos, video, audio, handwriting, documents, motion, and spreadsheets. No coding required.">
-  <title>Athena OS · Train AI on all your data</title>
+  <meta name="color-scheme" content="light dark">
+  <meta name="description" content="Athena OS: Plain-English AI for everyday operations — inspect photos, listen to machine sounds, read handwritten logs, and monitor sensors right inside your building.">
+  <title>Athena OS · Plain-English AI for Everyday Operations</title>
   <link rel="icon" type="image/png" href="{% static 'projects/brand/athena-mark-32.png' %}">
+  <script src="{% static 'projects/theme.js' %}"></script>
   <link rel="stylesheet" href="{% static 'projects/tokens.css' %}">
-  <link rel="stylesheet" href="{% static 'projects/landing.css' %}?v=5">
+  <link rel="stylesheet" href="{% static 'projects/landing.css' %}?v=6">
 </head>
 <body class="lp">
   <a class="lp-skip" href="#main">Skip to main content</a>
-  <header class="lp-nav" id="lp-nav" data-testid="landing-nav">
+
+  <header class="lp-nav is-wide" id="lp-nav" data-testid="landing-nav">
     <div class="lp-container lp-nav-inner" id="lp-nav-inner">
-      <a class="lp-brand" href="/" aria-label="Athena OS home" data-testid="landing-brand"><span class="lp-mark" aria-hidden="true"></span><span>Athena<em>OS</em></span></a>
+      <a class="lp-brand" href="/" aria-label="Athena OS home" data-testid="landing-brand">
+        <span class="lp-mark" aria-hidden="true"></span>
+        <span>Athena<em>OS</em></span>
+      </a>
       <nav class="lp-nav-group" aria-label="Page sections">
         <button class="lp-menu" id="lp-menu" type="button" popovertarget="lp-links" popovertargetaction="toggle" aria-expanded="false" aria-controls="lp-links" aria-label="Open menu" data-testid="landing-menu-toggle">{% icon "menu" 20 %}</button>
         <ul class="lp-links" id="lp-links">
           <li><a href="#use-cases" data-testid="landing-nav-use-cases">Use cases</a></li>
-          <li><a href="#how" data-testid="landing-nav-how">Workflow</a></li>
+          <li><a href="#how" data-testid="landing-nav-how">How it works</a></li>
           <li><a href="#teach-workflow" data-testid="landing-nav-teach">Studio</a></li>
-          <li><a href="#roadmap" data-testid="landing-nav-roadmap">Roadmap</a></li>
+          <li><a href="#roadmap" data-testid="landing-nav-roadmap">Site &amp; Edge</a></li>
           <li><a href="#your-ai" data-testid="landing-nav-ai">Your AI</a></li>
-          <li><a href="#open" data-testid="landing-nav-open">Trust</a></li>
           <li><a href="{% url 'docs-page' %}" data-testid="landing-nav-docs">Docs</a></li>
           <li class="lp-links-cta"><a class="lp-btn lp-btn--outline lp-btn--sm" href="{% url 'login' %}">Sign in</a></li>
         </ul>
       </nav>
       <div class="lp-nav-cta">
+        <button type="button" class="lp-theme-btn" id="landing-theme-toggle" data-testid="landing-theme-toggle" aria-label="Switch color theme" aria-pressed="false">
+          <span class="lp-theme-ico lp-theme-ico--moon" aria-hidden="true">{% icon "moon" 16 %}</span>
+          <span class="lp-theme-ico lp-theme-ico--sun" aria-hidden="true">{% icon "sun" 16 %}</span>
+          <span class="lp-theme-text" id="lp-theme-text">Dark</span>
+        </button>
         <a class="lp-btn lp-btn--outline" href="{% url 'login' %}" data-testid="landing-signin-button">Sign in</a>
         <a class="lp-btn lp-btn--primary" href="{% url 'login' %}?next=/inspect/new" data-testid="landing-nav-cta-button">Start inspecting{% icon "arrow" 16 %}</a>
       </div>
@@ -38,18 +48,18 @@
     <section class="lp-hero" aria-labelledby="hero-title">
       <div class="lp-container lp-hero-grid">
         <div class="lp-hero-copy">
-          <p class="lp-kicker" data-testid="landing-positioning-kicker">Athena OS · Teach AI what matters to your world. No coding required.</p>
+          <p class="lp-kicker" data-testid="landing-positioning-kicker">Athena OS · Plain-English AI for Everyday Operations</p>
           <h1 class="lp-h1" id="hero-title" data-testid="landing-hero-title">Train AI on <em>all</em> your data.</h1>
-          <p class="lp-lead">Build, label, test, and run models across photos, audio, handwriting, documents, motion, and spreadsheets — no coding required.</p>
+          <p class="lp-lead">Spot pipe rust, count yard bays, listen for motor wear, read handwritten logs, and combine machine sensors on one offline system — built so field teams and supervisors never touch code or math.</p>
           <p class="lp-lead-note">Inspect photos or clips today. Videos are sampled into six still frames; this is not a complete crossing count or live monitor.</p>
           <div class="lp-cta-row">
             <a class="lp-btn lp-btn--primary lp-btn--lg" href="{% url 'login' %}?next=/inspect/new" data-testid="landing-hero-cta-button">Start inspecting{% icon "arrow" 18 %}</a>
-            <a class="lp-btn lp-btn--line lp-btn--lg" href="#teach-workflow" data-testid="landing-hero-secondary-button">Open training studio{% icon "arrow" 16 %}</a>
+            <a class="lp-btn lp-btn--line lp-btn--lg" href="#teach-workflow" data-testid="landing-hero-secondary-button">Try interactive examples{% icon "arrow" 16 %}</a>
           </div>
-          <ul class="lp-proof" aria-label="At a glance">
-            <li>{% icon "layers" 16 %}Vision · Audio · OCR · Text · Motion · Tables</li>
-            <li>{% icon "cpu" 16 %}<strong>Qwen</strong> or your own AI</li>
-            <li>{% icon "server" 16 %}Self-hosted · Apache-2.0</li>
+          <ul class="lp-proof" aria-label="Key capabilities">
+            <li>{% icon "layers" 16 %}Photos · Audio · Handwriting · Sensors · Tables</li>
+            <li>{% icon "cpu" 16 %}<strong>Private AI</strong> on your server</li>
+            <li>{% icon "server" 16 %}Runs offline · Open-source Apache-2.0</li>
           </ul>
         </div>
 
@@ -57,21 +67,24 @@
           <div class="lp-demo-bar">
             <span class="lp-dots" aria-hidden="true"><i></i><i></i><i></i></span>
             <div class="lp-demo-tabs" role="tablist" aria-label="Example inspections">
-              <button type="button" role="tab" aria-selected="true" data-scene="corrosion" data-testid="landing-demo-tab-corrosion">Corrosion</button>
+              <button type="button" role="tab" aria-selected="true" data-scene="corrosion" data-testid="landing-demo-tab-corrosion">Rust check</button>
               <button type="button" role="tab" aria-selected="false" data-scene="parking" data-testid="landing-demo-tab-parking">Parking</button>
-              <button type="button" role="tab" aria-selected="false" data-scene="footfall" data-testid="landing-demo-tab-footfall">People in snapshot</button>
+              <button type="button" role="tab" aria-selected="false" data-scene="footfall" data-testid="landing-demo-tab-footfall">Entrance</button>
+              <button type="button" role="tab" aria-selected="false" data-scene="audio" data-testid="landing-demo-tab-audio">Motor sound</button>
+              <button type="button" role="tab" aria-selected="false" data-scene="ocr" data-testid="landing-demo-tab-ocr">Handwriting</button>
             </div>
             <span class="lp-demo-live">PREVIEW</span>
           </div>
           <div class="lp-demo-stage">
             <div class="lp-demo-frame" id="demo-frame">
               <img id="demo-img" src="{% static 'projects/landing/pipe-corrosion.jpg' %}" alt="Corroded pipes with a rusted clamp" width="1400" height="933">
-              <span class="lp-scan" aria-hidden="true"></span>
+              <div id="demo-custom-stage" hidden></div>
+              <span class="lp-scan" id="demo-scan" aria-hidden="true"></span>
             </div>
             <div class="lp-report" id="demo-report" aria-live="polite">
               <p class="lp-report-q" id="demo-q">“Is there corrosion, and how bad is it?”</p>
               <span class="lp-verdict" id="demo-verdict" data-v="attention">Needs attention</span>
-              <p class="lp-report-h" id="demo-h">Severe clamp scaling and coating breakdown. Plan repair this month.</p>
+              <p class="lp-report-h" id="demo-h">Severe scaling at the pipe clamp, with coating breaking down on both pipes. Plan a repair this month.</p>
               <div class="lp-report-counts" id="demo-counts"></div>
               <ol class="lp-report-list" id="demo-list"></ol>
             </div>
@@ -80,10 +93,10 @@
       </div>
     </section>
 
-    <div class="lp-ticker" aria-label="Things people check and teach with Athena">
+    <div class="lp-ticker" aria-label="Things you can inspect or automate with Athena">
       <div class="lp-ticker-track">
-        <span>Parking photo review</span><span>People in snapshot</span><span>Corrosion grading</span><span>Weld defects</span><span>Hard hats &amp; vests</span><span>Motor fault acoustics</span><span>Handwriting (TrOCR)</span><span>Tabular predictions</span><span>Speech ASR</span><span>Posture &amp; gestures</span><span>Sensor anomalies</span><span>Multimodal fusion</span>
-        <span aria-hidden="true">Parking photo review</span><span aria-hidden="true">People in snapshot</span><span aria-hidden="true">Corrosion grading</span><span aria-hidden="true">Weld defects</span><span aria-hidden="true">Hard hats &amp; vests</span><span aria-hidden="true">Motor fault acoustics</span><span aria-hidden="true">Handwriting (TrOCR)</span><span aria-hidden="true">Tabular predictions</span><span aria-hidden="true">Speech ASR</span><span aria-hidden="true">Posture &amp; gestures</span><span aria-hidden="true">Sensor anomalies</span><span aria-hidden="true">Multimodal fusion</span>
+        <span>Pipe rust grading</span><span>Open bay tracking</span><span>Entrance safety</span><span>Pump bearing clicks</span><span>Handwritten shift logs</span><span>Machine vibration alerts</span><span>Ticket auto-sorting</span><span>Spreadsheet risk checks</span><span>Offline site boxes</span><span>Human sign-off</span>
+        <span aria-hidden="true">Pipe rust grading</span><span aria-hidden="true">Open bay tracking</span><span aria-hidden="true">Entrance safety</span><span aria-hidden="true">Pump bearing clicks</span><span aria-hidden="true">Handwritten shift logs</span><span aria-hidden="true">Machine vibration alerts</span><span aria-hidden="true">Ticket auto-sorting</span><span aria-hidden="true">Spreadsheet risk checks</span><span aria-hidden="true">Offline site boxes</span><span aria-hidden="true">Human sign-off</span>
       </div>
     </div>
 
@@ -91,32 +104,36 @@
       <div class="lp-container">
         <div class="lp-head lp-reveal">
           <p class="lp-eyebrow"><b>01</b> Why Athena</p>
-          <h2 class="lp-h2" id="why-title">A detector shows <span>what</span>.<br>Athena tells you <em>why it matters.</em></h2>
+          <h2 class="lp-h2" id="why-title">Typical AI only points at things.<br>Athena tells you <em>what to do next.</em></h2>
         </div>
         <div class="lp-compare">
           <article class="lp-compare-card lp-reveal" data-testid="landing-compare-detector">
-            <p class="lp-compare-tag">Standard detector (CNN)</p>
+            <p class="lp-compare-tag">Typical single-purpose tool</p>
             <div class="lp-compare-img lp-compare-img--plain">
               <img src="{% static 'projects/landing/pipe-corrosion.jpg' %}" alt="" loading="lazy" width="1400" height="933">
-              <span class="lp-cbox" data-b="1"><i>rust 0.82</i></span><span class="lp-cbox" data-b="2"><i>rust 0.77</i></span><span class="lp-cbox" data-b="3"><i>rust 0.61</i></span>
+              <span class="lp-cbox" data-b="1"><i>rust 82%</i></span>
+              <span class="lp-cbox" data-b="2"><i>rust 77%</i></span>
+              <span class="lp-cbox" data-b="3"><i>rust 61%</i></span>
             </div>
             <ul class="lp-list lp-list--muted">
-              <li>Raw boxes and class names only.</li>
-              <li>Requires thousands of pre-labeled images.</li>
-              <li>Single-purpose models per task.</li>
+              <li>Technical boxes with numbers, no clear action.</li>
+              <li>Needs weeks of manual labelling before it works.</li>
+              <li>Built only for photos — ignores sound, text, and sensors.</li>
             </ul>
           </article>
           <article class="lp-compare-card lp-compare-card--athena lp-reveal" data-testid="landing-compare-athena">
-            <p class="lp-compare-tag"><span class="lp-live" aria-hidden="true"></span>Athena vision-language inspection</p>
+            <p class="lp-compare-tag"><span class="lp-live" aria-hidden="true"></span>Athena guided inspection</p>
             <div class="lp-compare-img">
-              <img src="{% static 'projects/landing/pipe-corrosion.jpg' %}" alt="" loading="lazy" width="1400" height="933">
-              <span class="lp-abox" data-b="1" data-sev="high"><i>1</i></span><span class="lp-abox" data-b="2" data-sev="medium"><i>2</i></span><span class="lp-abox" data-b="3" data-sev="low"><i>3</i></span>
+              <img src="{% static 'projects/landing/pipe-corrosion.jpg' %}" alt="Pipes with numbered boxes and clear repair tags" loading="lazy" width="1400" height="933">
+              <span class="lp-abox" data-b="1" data-sev="high"><i>1</i></span>
+              <span class="lp-abox" data-b="2" data-sev="medium"><i>2 · check</i></span>
+              <span class="lp-abox" data-b="3" data-sev="low"><i>3</i></span>
             </div>
-            <p class="lp-quote">“<strong>Severe clamp scaling (1)</strong> and coating breakdown on both pipes (2, 3) — wire-brush, recoat, and check wall thickness.”</p>
+            <p class="lp-quote">“<strong>Severe clamp rust (1)</strong> and peeling paint on both pipes (2, 3) — wire-brush, recoat, and check pipe thickness.”</p>
             <ul class="lp-list">
-              <li>Plain-language severity and repair actions.</li>
-              <li>Works from frame one via templates or questions.</li>
-              <li>One assistant across checks and training.</li>
+              <li>Clear repair advice in everyday language.</li>
+              <li>AI guesses stay marked “Check” until a person confirms.</li>
+              <li>One easy tool across photos, audio, forms, and Excel files.</li>
             </ul>
           </article>
         </div>
@@ -127,7 +144,7 @@
       <div class="lp-container">
         <div class="lp-head lp-head--split lp-reveal">
           <div><p class="lp-eyebrow"><b>02</b> Use cases</p><h2 class="lp-h2" id="cases-title">Ready-made checks out of the box.</h2></div>
-          <p class="lp-sub">Marked regions, counts, and clear visual reports ready for human review.</p>
+          <p class="lp-sub">Marked regions, counts, and clear visual reports designed for human decision-making.</p>
         </div>
         <div class="lp-bento">
           <article class="lp-case lp-case--hero lp-reveal" data-testid="landing-case-oil-gas">
@@ -156,9 +173,19 @@
             <div class="lp-case-body"><span class="lp-case-tag">Manufacturing</span><h3>Weld &amp; surface defects</h3><p>Cracks, porosity, dents, and spatter bounds.</p></div>
           </article>
           <article class="lp-case lp-case--text lp-reveal" data-testid="landing-case-custom">
-            <span class="lp-case-icon">{% icon "sparkle" 24 %}</span>
-            <div class="lp-case-body"><span class="lp-case-tag">Custom prompt</span><h3>Your own question</h3><p>“Are gauge needles in green?” Photograph it, ask it.</p></div>
-            <a class="lp-btn lp-btn--primary lp-case-cta" href="{% url 'login' %}?next=/inspect/new%3Ftemplate%3Dcustom" data-testid="landing-case-custom-cta">Ask your own question{% icon "arrow" 16 %}</a>
+            <div class="lp-case-prompt">
+              <div class="lp-case-prompt-main">
+                <span class="lp-case-tag">Custom prompt</span>
+                <h3>Ask your own inspection question</h3>
+                <p>Point Athena at any photo or 6-frame clip, mark optional target areas, and get a structured verdict ready for review.</p>
+              </div>
+              <div class="lp-case-prompt-sample" aria-hidden="true">
+                <span class="lp-prompt-label">Question</span>
+                <code>“Are gauge needles inside the green operating zone?”</code>
+                <span class="lp-prompt-result">Verdict: All clear · 3 gauges checked</span>
+              </div>
+              <a class="lp-btn lp-btn--primary" href="{% url 'login' %}?next=/inspect/new%3Ftemplate%3Dcustom" data-testid="landing-case-custom-cta">Ask your own question{% icon "arrow" 16 %}</a>
+            </div>
           </article>
         </div>
       </div>
@@ -168,26 +195,32 @@
       <div class="lp-container">
         <div class="lp-head lp-reveal">
           <p class="lp-eyebrow"><b>03</b> How it works</p>
-          <h2 class="lp-h2" id="how-title">Photo to report in three steps.</h2>
+          <h2 class="lp-h2" id="how-title">Photo to reviewed report in three steps.</h2>
         </div>
         <ol class="lp-steps">
           <li class="lp-step lp-reveal" data-testid="landing-step-1">
             <span class="lp-step-n">01</span>
             <h3>Pick a check</h3>
-            <p>Select a template or ask a plain question.</p>
-            <div class="lp-mini lp-mini--chips" aria-hidden="true"><span data-on="true">Corrosion</span><span>Parking</span><span>Safety</span><span>Custom…</span></div>
+            <p>Select a ready-made template or write your inspection question in plain English.</p>
+            <div class="lp-mini lp-mini--chips" aria-hidden="true"><span data-on="true">Corrosion</span><span>Parking</span><span>Safety</span><span>Custom</span></div>
           </li>
           <li class="lp-step lp-reveal" data-testid="landing-step-2">
             <span class="lp-step-n">02</span>
             <h3>Add media</h3>
-            <p>Drop up to six photos or a clip (videos are sampled into six still frames).</p>
-            <div class="lp-mini lp-mini--drop" aria-hidden="true"><span></span><span></span><span></span><b>+</b></div>
+            <p>Drop up to six photos or one video clip (videos are sampled into six still frames).</p>
+            <div class="lp-mini lp-mini--drop" aria-hidden="true"><span></span><span></span><span></span><b>6 max</b></div>
           </li>
           <li class="lp-step lp-reveal" data-testid="landing-step-3">
             <span class="lp-step-n">03</span>
-            <h3>Read the report</h3>
-            <p>Marked regions, counts, and next actions.</p>
-            <div class="lp-mini lp-mini--report" aria-hidden="true"><b>NEEDS ATTENTION</b><i></i><i></i><i></i></div>
+            <h3>Review &amp; decide</h3>
+            <p>Read the verdict, inspect numbered boxes, and confirm or reject findings yourself.</p>
+            <div class="lp-mini lp-mini--report" aria-hidden="true">
+              <div class="lp-mini-report-head">
+                <b>NEEDS ATTENTION</b>
+                <span>1 severe · 2 moderate</span>
+              </div>
+              <p>1. Severe clamp scaling — schedule wall-thickness check.</p>
+            </div>
           </li>
         </ol>
       </div>
@@ -197,112 +230,115 @@
       <div class="lp-container">
         <div class="lp-head lp-head--split lp-reveal">
           <div>
-            <p class="lp-eyebrow"><b>04</b> ATHENA OS · NEW MODEL</p>
+            <p class="lp-eyebrow"><b>04</b> Training Studio</p>
             <h2 class="lp-h2" id="teach-title">What do you want Athena to <em>learn?</em></h2>
           </div>
-          <p class="lp-sub">Inspect the training data, labeling flow, and live solution for every modality.</p>
+          <p class="lp-sub">One guided workflow across photos, audio clips, handwriting, spreadsheets, text logs, and sensor signals — no coding required.</p>
         </div>
 
         <div class="lp-outcome-shell lp-reveal" id="lp-outcome-shell">
           <div class="lp-outcome-tabs" id="lp-outcome-tabs" role="tablist" aria-label="What do you want Athena to learn?">
-            <button type="button" role="tab" class="lp-outcome-tab" id="lp-outcome-tab-vision" aria-selected="false" tabindex="-1" data-outcome="vision" data-testid="landing-outcome-vision">{% icon "image" 16 %}<span>Vision</span></button>
-            <button type="button" role="tab" class="lp-outcome-tab" id="lp-outcome-tab-audio" aria-selected="true" tabindex="0" data-outcome="audio" data-testid="landing-outcome-audio">{% icon "volume" 16 %}<span>Audio</span></button>
+            <button type="button" role="tab" class="lp-outcome-tab" id="lp-outcome-tab-vision" aria-selected="false" tabindex="-1" data-outcome="vision" data-testid="landing-outcome-vision">{% icon "image" 16 %}<span>Photos</span></button>
+            <button type="button" role="tab" class="lp-outcome-tab" id="lp-outcome-tab-audio" aria-selected="true" tabindex="0" data-outcome="audio" data-testid="landing-outcome-audio">{% icon "volume" 16 %}<span>Sounds</span></button>
             <button type="button" role="tab" class="lp-outcome-tab" id="lp-outcome-tab-ocr" aria-selected="false" tabindex="-1" data-outcome="ocr" data-testid="landing-outcome-ocr">{% icon "file-text" 16 %}<span>Handwriting</span></button>
-            <button type="button" role="tab" class="lp-outcome-tab" id="lp-outcome-tab-documents" aria-selected="false" tabindex="-1" data-outcome="documents" data-testid="landing-outcome-documents">{% icon "book" 16 %}<span>Documents</span></button>
-            <button type="button" role="tab" class="lp-outcome-tab" id="lp-outcome-tab-movements" aria-selected="false" tabindex="-1" data-outcome="movements" data-testid="landing-outcome-movements">{% icon "activity" 16 %}<span>Movements</span></button>
             <button type="button" role="tab" class="lp-outcome-tab" id="lp-outcome-tab-spreadsheets" aria-selected="false" tabindex="-1" data-outcome="spreadsheets" data-testid="landing-outcome-spreadsheets">{% icon "table" 16 %}<span>Spreadsheets</span></button>
+            <button type="button" role="tab" class="lp-outcome-tab" id="lp-outcome-tab-documents" aria-selected="false" tabindex="-1" data-outcome="documents" data-testid="landing-outcome-documents">{% icon "book" 16 %}<span>Text notes</span></button>
+            <button type="button" role="tab" class="lp-outcome-tab" id="lp-outcome-tab-movements" aria-selected="false" tabindex="-1" data-outcome="movements" data-testid="landing-outcome-movements">{% icon "activity" 16 %}<span>Sensors</span></button>
           </div>
 
           <div class="lp-outcome-panel" id="lp-outcome-panel" role="tabpanel" aria-labelledby="lp-outcome-tab-audio" tabindex="0" data-testid="landing-outcome-card">
             <div class="lp-studio-top">
               <div class="lp-studio-title">
-                <span class="lp-outcome-badge" id="lp-outcome-badge">P0 · Wave 1 MVP</span>
-                <h3 id="lp-outcome-title">Acoustic Event Detection</h3>
-                <span class="lp-outcome-status" id="lp-outcome-status">Proposed recipe</span>
+                <span class="lp-outcome-badge" id="lp-outcome-badge">Sound check</span>
+                <h3 id="lp-outcome-title">Listen for Machine Faults</h3>
+                <span class="lp-outcome-status" id="lp-outcome-status" data-tone="ok">Ready to use today</span>
               </div>
-              <div class="lp-stage-tabs" id="lp-stage-tabs" role="group" aria-label="Inspect training pipeline stages" data-testid="landing-stage-stepper">
-                <button type="button" class="lp-stage-btn" data-stage="raw" aria-pressed="false" data-testid="landing-stage-raw"><b>01</b><span>Raw</span></button>
-                <button type="button" class="lp-stage-btn" data-stage="label" aria-pressed="true" data-testid="landing-stage-label"><b>02</b><span>Label</span></button>
-                <button type="button" class="lp-stage-btn" data-stage="eval" aria-pressed="false" data-testid="landing-stage-eval"><b>03</b><span>Check</span></button>
-                <button type="button" class="lp-stage-btn" data-stage="deploy" aria-pressed="false" data-testid="landing-stage-deploy"><b>04</b><span>Deploy</span></button>
+              <div class="lp-stage-tabs" id="lp-stage-tabs" role="group" aria-label="Step-by-step training workflow" data-testid="landing-stage-stepper">
+                <button type="button" class="lp-stage-btn" data-stage="raw" aria-pressed="false" data-testid="landing-stage-raw"><b>01</b><span>Add files</span></button>
+                <button type="button" class="lp-stage-btn" data-stage="label" aria-pressed="true" data-testid="landing-stage-label"><b>02</b><span>Teach</span></button>
+                <button type="button" class="lp-stage-btn" data-stage="eval" aria-pressed="false" data-testid="landing-stage-eval"><b>03</b><span>Test</span></button>
+                <button type="button" class="lp-stage-btn" data-stage="deploy" aria-pressed="false" data-testid="landing-stage-deploy"><b>04</b><span>Use</span></button>
               </div>
             </div>
 
             <div class="lp-studio-visualizer" id="lp-studio-visualizer" data-testid="landing-multimodal-visualizer">
               <div class="lp-vis-bar">
                 <span class="lp-dots" aria-hidden="true"><i></i><i></i><i></i></span>
-                <span class="lp-vis-filename" id="lp-vis-filename">pump-bearing-line4.wav · 48 kHz</span>
-                <div class="lp-vis-samples" id="lp-vis-samples" role="group" aria-label="Inspect training examples and annotations">
-                  <button type="button" class="lp-vis-sample" data-sample="0" aria-pressed="false">Healthy hum</button>
-                  <button type="button" class="lp-vis-sample" data-sample="1" aria-pressed="true">Bearing fault 3.4 kHz</button>
-                  <button type="button" class="lp-vis-sample" data-sample="2" aria-pressed="false">Cavitation spike</button>
-                </div>
-                <span class="lp-vis-mode" id="lp-vis-mode">STAGE 02 · LABEL</span>
+                <span class="lp-vis-filename" id="lp-vis-filename">pump-bearing-line4.wav · 12 seconds</span>
+                <span class="lp-vis-mode" id="lp-vis-mode">STEP 02 · SHOW WHAT TO SPOT</span>
               </div>
-              <div class="lp-vis-stage">
-                <canvas id="lp-vis-canvas" width="960" height="380" aria-label="Interactive multimodal training data and solution preview — click any stage or sample region"></canvas>
-              </div>
-              <div class="lp-vis-hud" id="lp-vis-inspector" aria-live="polite" data-testid="landing-vis-inspector">
-                <div class="lp-vis-hud-text">
-                  <strong id="lp-vis-selection-title">Bearing fault 3.4 kHz (4.2s–6.8s)</strong>
-                  <p id="lp-vis-selection-detail">Harmonic spike marked on operator timeline.</p>
-                </div>
-                <div class="lp-vis-metrics" id="lp-vis-metrics">
-                  <div><b>0.94</b><span>Event F1</span></div>
-                  <div><b>1 / 42</b><span>Missed faults</span></div>
-                  <div><b>0.4 / hr</b><span>False alarms</span></div>
+
+              <div class="lp-studio-grid" id="lp-vis-stage">
+                <div id="lp-vis-interactive"></div>
+                <div class="lp-studio-inspector" id="lp-vis-inspector" aria-live="polite" data-testid="landing-vis-inspector">
+                  <div class="lp-insp-head">
+                    <span class="lp-insp-eyebrow" id="lp-hud-eyebrow">Sound check</span>
+                  </div>
+                  <div class="lp-insp-selection">
+                    <strong id="lp-vis-selection-title">Bearing fault — steady clicking</strong>
+                    <p id="lp-vis-selection-detail">High-pitched clicking stands out cleanly above the normal motor hum.</p>
+                  </div>
+                  <div class="lp-vis-metrics" id="lp-vis-metrics"></div>
+                  <p class="lp-insp-caption" id="lp-hud-caption"></p>
+                  <p class="lp-insp-honesty" id="lp-hud-limit" hidden></p>
                 </div>
               </div>
             </div>
 
             <div class="lp-studio-meta">
               <dl class="lp-outcome-specs">
-                <div><dt>Data needed</dt><dd id="lp-outcome-data">WAV recordings + event labels</dd></div>
-                <div><dt>Quality check</dt><dd id="lp-outcome-quality">Missed sound events and false alarms</dd></div>
-                <div><dt>Recipe</dt><dd id="lp-outcome-recipe">OS-AUD-001 · Audio classifier</dd></div>
+                <div><dt>What you upload</dt><dd id="lp-outcome-data">Short motor &amp; pump sound recordings</dd></div>
+                <div><dt>How we test it</dt><dd id="lp-outcome-quality">Makes sure real machine faults aren’t missed</dd></div>
+                <div><dt>How it works</dt><dd id="lp-outcome-recipe">Turns sounds into clear frequency maps you can see and tag</dd></div>
               </dl>
               <div class="lp-outcome-foot">
-                <span class="lp-vis-split" id="lp-vis-split">80% Train · 10% Val · 10% Held-out</span>
-                <a class="lp-btn lp-btn--primary" id="lp-outcome-cta" href="{% url 'login' %}?next=/detectors%3Frecipe%3Daudio" data-testid="landing-outcome-explore">Open training workflow{% icon "arrow" 16 %}</a>
+                <span class="lp-vis-split" id="lp-vis-split">Tested on recordings the AI has never heard before</span>
+                <a class="lp-btn lp-btn--primary" id="lp-outcome-cta" href="{% url 'login' %}?next=/detectors%3Frecipe%3Daudio" data-testid="landing-outcome-explore">Try this in Studio{% icon "arrow" 16 %}</a>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="lp-mod-gallery lp-reveal" id="lp-modality-gallery" data-testid="landing-modality-gallery" aria-label="Visual glimpse across all six modalities">
+        <div class="lp-mod-gallery lp-reveal" id="lp-modality-gallery" data-testid="landing-modality-gallery" aria-label="Click any data type to preview">
+          <button type="button" class="lp-mod-card" data-jump-outcome="vision" aria-pressed="false">
+            <div class="lp-mini-thumb" data-mini-modality="vision" aria-hidden="true"></div>
+            <strong>Photos &amp; Clips</strong>
+            <span class="lp-mod-detail">Spot parts, rust &amp; hazards</span>
+          </button>
           <button type="button" class="lp-mod-card" data-jump-outcome="audio" aria-pressed="true">
-            <canvas class="lp-mini-canvas" width="320" height="145" data-mini-modality="audio" aria-hidden="true"></canvas>
-            <div class="lp-mod-card-foot"><span class="lp-prio lp-prio--p0">P0</span><strong>Acoustic AI</strong><span>Audio -> Fault alert</span></div>
+            <div class="lp-mini-thumb" data-mini-modality="audio" aria-hidden="true"></div>
+            <strong>Sound Check</strong>
+            <span class="lp-mod-detail">Hear motor &amp; pump wear</span>
           </button>
           <button type="button" class="lp-mod-card" data-jump-outcome="ocr" aria-pressed="false">
-            <canvas class="lp-mini-canvas" width="320" height="145" data-mini-modality="ocr" aria-hidden="true"></canvas>
-            <div class="lp-mod-card-foot"><span class="lp-prio lp-prio--p0">P0</span><strong>Handwriting OCR</strong><span>Ink -> TrOCR fields</span></div>
-          </button>
-          <button type="button" class="lp-mod-card" data-jump-outcome="documents" aria-pressed="false">
-            <canvas class="lp-mini-canvas" width="320" height="145" data-mini-modality="documents" aria-hidden="true"></canvas>
-            <div class="lp-mod-card-foot"><span class="lp-prio lp-prio--p0">P1</span><strong>Documents</strong><span>Spans -> JSON</span></div>
-          </button>
-          <button type="button" class="lp-mod-card" data-jump-outcome="movements" aria-pressed="false">
-            <canvas class="lp-mini-canvas" width="320" height="145" data-mini-modality="movements" aria-hidden="true"></canvas>
-            <div class="lp-mod-card-foot"><span class="lp-prio lp-prio--p2">P2</span><strong>Movements</strong><span>Pose -> Check</span></div>
+            <div class="lp-mini-thumb" data-mini-modality="ocr" aria-hidden="true"></div>
+            <strong>Handwritten Logs</strong>
+            <span class="lp-mod-detail">Turn forms into typed rows</span>
           </button>
           <button type="button" class="lp-mod-card" data-jump-outcome="spreadsheets" aria-pressed="false">
-            <canvas class="lp-mini-canvas" width="320" height="145" data-mini-modality="spreadsheets" aria-hidden="true"></canvas>
-            <div class="lp-mod-card-foot"><span class="lp-prio lp-prio--p0">P0</span><strong>Spreadsheets</strong><span>Rows -> Forecast</span></div>
+            <div class="lp-mini-thumb" data-mini-modality="spreadsheets" aria-hidden="true"></div>
+            <strong>Spreadsheets</strong>
+            <span class="lp-mod-detail">Find risk &amp; cost drivers</span>
           </button>
-          <button type="button" class="lp-mod-card" data-jump-outcome="vision" aria-pressed="false">
-            <canvas class="lp-mini-canvas" width="320" height="145" data-mini-modality="vision" aria-hidden="true"></canvas>
-            <div class="lp-mod-card-foot"><span class="lp-prio lp-prio--p0">P0</span><strong>Vision</strong><span>Boxes -> Inspection</span></div>
+          <button type="button" class="lp-mod-card" data-jump-outcome="documents" aria-pressed="false">
+            <div class="lp-mini-thumb" data-mini-modality="documents" aria-hidden="true"></div>
+            <strong>Shift Notes &amp; Tickets</strong>
+            <span class="lp-mod-detail">Route messages automatically</span>
+          </button>
+          <button type="button" class="lp-mod-card" data-jump-outcome="movements" aria-pressed="false">
+            <div class="lp-mini-thumb" data-mini-modality="movements" aria-hidden="true"></div>
+            <strong>Machine Sensors</strong>
+            <span class="lp-mod-detail">Catch abnormal shaking</span>
           </button>
         </div>
 
-        <ol class="lp-six-steps lp-reveal" data-testid="landing-six-steps" aria-label="Six consistent training steps across all modalities">
-          <li class="lp-six-step"><span class="lp-step-n">01</span><h3>Goal</h3><p>Pick a recipe.</p></li>
-          <li class="lp-six-step"><span class="lp-step-n">02</span><h3>Data</h3><p>Add samples.</p></li>
-          <li class="lp-six-step"><span class="lp-step-n">03</span><h3>Label</h3><p>Mark regions.</p></li>
-          <li class="lp-six-step"><span class="lp-step-n">04</span><h3>Train</h3><p>Tracked runs.</p></li>
-          <li class="lp-six-step"><span class="lp-step-n">05</span><h3>Verify</h3><p>Real errors.</p></li>
-          <li class="lp-six-step"><span class="lp-step-n">06</span><h3>Deploy</h3><p>Approve &amp; retrain.</p></li>
+        <ol class="lp-six-steps lp-reveal" data-testid="landing-six-steps" aria-label="Six simple steps to train your own check">
+          <li class="lp-six-step"><span class="lp-step-n">01</span><h3>Pick a goal</h3><p>Photos, sound, logs, sheets, notes, or sensors.</p></li>
+          <li class="lp-six-step"><span class="lp-step-n">02</span><h3>Add samples</h3><p>Drop files right from your computer.</p></li>
+          <li class="lp-six-step"><span class="lp-step-n">03</span><h3>Show Athena</h3><p>Mark a few examples or review drafts.</p></li>
+          <li class="lp-six-step"><span class="lp-step-n">04</span><h3>Train safely</h3><p>Runs locally on your own server or PC.</p></li>
+          <li class="lp-six-step"><span class="lp-step-n">05</span><h3>Check accuracy</h3><p>See missed spots before anyone goes live.</p></li>
+          <li class="lp-six-step"><span class="lp-step-n">06</span><h3>Use &amp; review</h3><p>Your team approves every uncertain item.</p></li>
         </ol>
       </div>
     </section>
@@ -311,84 +347,74 @@
       <div class="lp-container">
         <div class="lp-head lp-head--split lp-reveal">
           <div>
-            <p class="lp-eyebrow"><b>05</b> Architecture &amp; roadmap</p>
-            <h2 class="lp-h2" id="roadmap-title">One shared engine across <em>six modalities.</em></h2>
+            <p class="lp-eyebrow"><b>05</b> Combined Site Checks &amp; Offline Edge</p>
+            <h2 class="lp-h2" id="roadmap-title">Combine everything.<br>Run <em>right on site.</em></h2>
           </div>
-          <p class="lp-sub">Open-source lifecycle on your CPU/GPU or Athena Nodes.</p>
-        </div>
-
-        <div class="lp-arch lp-reveal" aria-label="Proposed Athena OS architecture">
-          <div class="lp-arch-pillars">
-            <div class="lp-pillar"><span class="lp-prio lp-prio--p0">P0</span><strong>Vision</strong><span>Images &amp; video</span></div>
-            <div class="lp-pillar"><span class="lp-prio lp-prio--p0">P0/P1</span><strong>Audio</strong><span>Sounds &amp; speech</span></div>
-            <div class="lp-pillar"><span class="lp-prio lp-prio--p0">P0/P1</span><strong>Language</strong><span>OCR &amp; text</span></div>
-            <div class="lp-pillar"><span class="lp-prio lp-prio--p2">P2</span><strong>Motion</strong><span>Pose &amp; gestures</span></div>
-            <div class="lp-pillar"><span class="lp-prio lp-prio--p0">P0/P1</span><strong>Signals</strong><span>Tables &amp; sensors</span></div>
-            <div class="lp-pillar"><span class="lp-prio lp-prio--p3">P3</span><strong>Fusion</strong><span>Cross-modal AI</span></div>
-          </div>
-          <div class="lp-arch-layer lp-arch-layer--engine">
-            <p class="lp-arch-label">Shared Lifecycle</p>
-            <div class="lp-lifecycle-chips" aria-label="Shared training lifecycle resources">
-              <span>Project</span><span>Task</span><span>Observation</span><span>Annotation</span><span>Dataset</span><span>Run</span><span>Model</span><span>Eval</span><span>Deploy</span><span>Feedback</span>
-            </div>
-          </div>
-        </div>
-
-        <div class="lp-waves lp-reveal" aria-label="Proposed delivery waves (indicative sequence, not committed dates)">
-          <article class="lp-wave">
-            <div class="lp-wave-top"><span class="lp-wave-tag">Wave 0</span><span class="lp-wave-win">0–6 wks</span></div>
-            <h3>Shared foundation</h3>
-            <p><code>OS-CORE-001</code>–<code>006</code></p>
-          </article>
-          <article class="lp-wave lp-wave--focus">
-            <div class="lp-wave-top"><span class="lp-wave-tag">Wave 1 · MVP</span><span class="lp-wave-win">2–4 mos</span></div>
-            <h3>Multi-task MVP</h3>
-            <p><code>OS-VIS-001</code> <code>OS-AUD-001</code> <code>OS-OCR-001</code> <code>OS-TAB-001</code></p>
-          </article>
-          <article class="lp-wave">
-            <div class="lp-wave-top"><span class="lp-wave-tag">Wave 2</span><span class="lp-wave-win">4–7 mos</span></div>
-            <h3>Language &amp; signals</h3>
-            <p><code>OS-ASR</code> <code>OS-NLP</code> <code>OS-DOC</code> <code>OS-SIG</code> <code>OS-AUD-002</code></p>
-          </article>
-          <article class="lp-wave">
-            <div class="lp-wave-top"><span class="lp-wave-tag">Wave 3</span><span class="lp-wave-win">7–10 mos</span></div>
-            <h3>Motion &amp; packs</h3>
-            <p>Pose, gestures, Domain Packs, Face AI</p>
-          </article>
-          <article class="lp-wave">
-            <div class="lp-wave-top"><span class="lp-wave-tag">Wave 4</span><span class="lp-wave-win">10–15+ mos</span></div>
-            <h3>Fusion &amp; edge</h3>
-            <p>Cross-modal fusion &amp; Athena Nodes</p>
-          </article>
+          <p class="lp-sub">A single camera or sensor can give false alarms. Combining photos, sounds, heat maps, and machine gauges on your own local computer gives your team clear answers — even without internet.</p>
         </div>
 
         <div class="lp-fusion-showcase lp-reveal" id="lp-fusion-showcase" data-testid="landing-fusion-showcase">
           <div class="lp-fusion-head">
             <div>
-              <p class="lp-arch-label">Wave 4 · Cross-modal fusion</p>
-              <h3 class="lp-fusion-title">Multiple streams converge</h3>
+              <p class="lp-arch-label">Example operator screen</p>
+              <h3 class="lp-fusion-title">Pick a real-world site check</h3>
             </div>
-            <div class="lp-fusion-tabs" id="lp-fusion-tabs" role="group" aria-label="Preview Wave 4 multimodal fusion pipelines">
-              <button type="button" class="lp-fusion-tab" data-fusion="motor" aria-pressed="true">Audio + Vibration + Temp</button>
-              <button type="button" class="lp-fusion-tab" data-fusion="safety" aria-pressed="false">Video + Pose + Machine</button>
-              <button type="button" class="lp-fusion-tab" data-fusion="thermal" aria-pressed="false">Thermal + RGB + Asset</button>
+            <div class="lp-fusion-tabs" id="lp-fusion-tabs" role="group" aria-label="Preview combined site checks">
+              <button type="button" class="lp-fusion-tab" data-fusion="motor" aria-pressed="true">Pump &amp; Motor Health</button>
+              <button type="button" class="lp-fusion-tab" data-fusion="thermal" aria-pressed="false">Pipe &amp; Solar Check</button>
+              <button type="button" class="lp-fusion-tab" data-fusion="safety" aria-pressed="false">Yard &amp; Gate Access</button>
             </div>
           </div>
 
-          <div class="lp-fusion-diagram" id="lp-fusion-diagram" aria-live="polite">
-            <div class="lp-vis-stage">
-              <canvas id="lp-fusion-canvas" width="880" height="210" aria-label="Interactive cross-modal fusion signal convergence diagram"></canvas>
+          <div class="lp-site-monitor" id="lp-fusion-diagram" aria-live="polite">
+            <div class="lp-monitor-bar">
+              <strong class="lp-monitor-title" id="lp-monitor-title">Pump Station 04 · Combined Check</strong>
+              <span class="lp-monitor-edge" id="lp-fusion-badge">Runs offline on your plant computer</span>
             </div>
-            <div class="lp-fusion-merge">
-              <span class="lp-fusion-badge" id="lp-fusion-badge">Cross-modal sync · Fallback · Ablation</span>
-              <strong id="lp-fusion-verdict">Joint fault verdict: Bearing wear (inspect)</strong>
+
+            <div class="lp-monitor-grid">
+              <div class="lp-monitor-inputs" id="lp-monitor-inputs" aria-label="What Athena is checking on site"></div>
+              <div class="lp-monitor-decision">
+                <p class="lp-monitor-subhead">2 · Clear answer for your team</p>
+                <div class="lp-monitor-verdict-card">
+                  <span class="lp-verdict" id="lp-monitor-verdict-badge" data-v="attention">Needs attention</span>
+                  <strong class="lp-fusion-verdict" id="lp-fusion-verdict">Bearing wear on Pump 04 — inspect within 48 hours</strong>
+                  <p class="lp-fusion-why" id="lp-monitor-why"></p>
+                  <ul class="lp-monitor-checks" id="lp-monitor-checks"></ul>
+                  <div class="lp-monitor-resilience">
+                    <strong>If a sensor drops out</strong>
+                    <p id="lp-monitor-fallback"></p>
+                  </div>
+                  <div class="lp-monitor-foot">
+                    <span id="lp-monitor-action">Supervisor decides · Schedule check or dismiss</span>
+                  </div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
 
+        <div class="lp-edge-strip lp-reveal">
+          <article class="lp-edge-item">
+            <span>01 · Use what you already have</span>
+            <h3>Normal cameras, mics &amp; spreadsheets</h3>
+            <p>No expensive smart sensors needed. Upload photos, audio clips, Excel files, or connect your existing plant feeds.</p>
+          </article>
+          <article class="lp-edge-item">
+            <span>02 · Keeps working offline</span>
+            <h3>Runs right inside your building</h3>
+            <p>Models run on a normal server or small edge box on site. If your internet drops, checks keep running and files never leave your network.</p>
+          </article>
+          <article class="lp-edge-item">
+            <span>03 · People stay in charge</span>
+            <h3>Clear reasons, never a black box</h3>
+            <p>If one sensor stops working, the others keep watching. Every alert explains what happened in plain English so your team makes the final call.</p>
+          </article>
+        </div>
+
         <div class="lp-roadmap-foot">
-          <p class="lp-roadmap-note">Indicative sequence, not committed release dates.</p>
-          <a class="lp-btn lp-btn--outline lp-btn--sm" href="{% url 'docs-page' %}#multimodal-roadmap">Open Docs wiki{% icon "arrow" 15 %}</a>
+          <p class="lp-roadmap-note">Need technical details on recipes, APIs, or the full engineering roadmap?</p>
+          <a class="lp-btn lp-btn--outline lp-btn--sm" href="{% url 'docs-page' %}#multimodal-roadmap">Open Technical Docs{% icon "arrow" 15 %}</a>
         </div>
       </div>
     </section>
@@ -398,22 +424,22 @@
         <div class="lp-reveal">
           <p class="lp-eyebrow"><b>06</b> Your AI, your rules</p>
           <h2 class="lp-h2" id="ai-title">Run AI where you choose.</h2>
-          <p class="lp-sub">Connect self-hosted Qwen, Ollama, or vLLM for picture reading, and train locally on your own CPU/GPU without cloud lock-in.</p>
-          <ul class="lp-pills" aria-label="Works with">
-            <li>Qwen-VL</li><li>OpenAI</li><li>Google Gemini</li><li>OpenRouter</li><li>vLLM</li><li>Ollama</li><li>LM Studio</li><li>Alibaba Cloud</li>
+          <p class="lp-sub">Keep everything private on your own office computer using built-in open-source AI, or connect an online AI service you already use — with encrypted keys and zero vendor lock-in.</p>
+          <ul class="lp-pills" aria-label="Compatible AI services">
+            <li>Built-in Qwen (Local)</li><li>OpenAI</li><li>Google Gemini</li><li>Local Server</li><li>Ollama</li><li>LM Studio</li>
           </ul>
         </div>
         <div class="lp-ai-cards lp-reveal" aria-hidden="true">
           <div class="lp-ai-card lp-ai-card--on">
-            <div class="lp-ai-top"><strong>Built-in Qwen</strong><span class="lp-ai-badge">Default</span></div>
-            <p>qwen2.5vl:7b · your server</p>
-            <span class="lp-ai-status"><i></i>Connected example</span>
+            <div class="lp-ai-top"><strong>Built-in Local AI</strong><span class="lp-ai-badge">Default</span></div>
+            <p>Runs right on your own computer — nothing leaves your site</p>
+            <span class="lp-ai-status"><i></i>Ready offline</span>
           </div>
           <div class="lp-ai-card">
-            <div class="lp-ai-top"><strong>Your own AI</strong><span class="lp-ai-badge lp-ai-badge--line">Optional</span></div>
-            <div class="lp-ai-field"><span>Address</span><code>https://api.openai.com/v1</code></div>
-            <div class="lp-ai-field"><span>Model</span><code>gpt-4o-mini</code></div>
-            <div class="lp-ai-field"><span>API key</span><code>hidden · 3f9a</code></div>
+            <div class="lp-ai-top"><strong>Connect your own AI</strong><span class="lp-ai-badge lp-ai-badge--line">Optional</span></div>
+            <div class="lp-ai-field"><span>Service</span><code>Cloud or local server address</code></div>
+            <div class="lp-ai-field"><span>Model</span><code>Pick any compatible model</code></div>
+            <div class="lp-ai-field"><span>API key</span><code>Encrypted on your server</code></div>
           </div>
         </div>
       </div>
@@ -423,18 +449,18 @@
       <div class="lp-container">
         <div class="lp-head lp-reveal">
           <p class="lp-eyebrow"><b>07</b> Built to be trusted</p>
-          <h2 class="lp-h2" id="open-title">Open source. Self-hosted. Human-approved.</h2>
+          <h2 class="lp-h2" id="open-title">Private, transparent, and under your control.</h2>
         </div>
         <div class="lp-trust">
-          <div class="lp-trust-item lp-reveal"><span>{% icon "code" 22 %}</span><h3>Open source</h3><p>Apache-2.0 with zero required cloud service.</p></div>
-          <div class="lp-trust-item lp-reveal"><span>{% icon "server" 22 %}</span><h3>Self-hosted</h3><p>One server; images and training data stay yours.</p></div>
-          <div class="lp-trust-item lp-reveal"><span>{% icon "shield" 22 %}</span><h3>Human sign-off</h3><p>No auto-promotion — review evidence and roll back anytime.</p></div>
-          <div class="lp-trust-item lp-reveal"><span>{% icon "detector" 22 %}</span><h3>Real quality gates</h3><p>Task metrics like missed faults, WER, CER, and mAP.</p></div>
+          <div class="lp-trust-item lp-reveal"><span>{% icon "code" 22 %}</span><h3>Open source</h3><p>Free Apache-2.0 software with zero hidden subscriptions or cloud lock-in.</p></div>
+          <div class="lp-trust-item lp-reveal"><span>{% icon "server" 22 %}</span><h3>Runs inside your building</h3><p>Photos, audio recordings, and forms stay safely on your own computer.</p></div>
+          <div class="lp-trust-item lp-reveal"><span>{% icon "shield" 22 %}</span><h3>You stay in charge</h3><p>Nothing goes live without human approval, and you can undo any update.</p></div>
+          <div class="lp-trust-item lp-reveal"><span>{% icon "detector" 22 %}</span><h3>Tested before going live</h3><p>See missed spots, false alarms, and exact test examples in plain English.</p></div>
         </div>
         <section class="lp-advisory" aria-labelledby="security-update-title">
           <div>
             <h3 id="security-update-title">Security update: esbuild advisory</h3>
-            <p>GitHub advisory GHSA-gv7w-rqvm-qjhr (esbuild Deno module) was withdrawn. Athena’s tracked frontend manifest does not list esbuild.</p>
+            <p>GitHub advisory GHSA-gv7w-rqvm-qjhr (esbuild Deno module) was withdrawn. Athena’s tracked dependency lockfile does not include esbuild.</p>
           </div>
           <a class="lp-btn lp-btn--outline lp-btn--sm" href="https://github.com/advisories/GHSA-gv7w-rqvm-qjhr">Read the GitHub advisory{% icon "arrow" 15 %}</a>
         </section>
@@ -443,9 +469,13 @@
 
     <section class="lp-final" aria-labelledby="final-title">
       <div class="lp-container lp-final-inner lp-reveal">
-        <h2 class="lp-h2" id="final-title">Teach AI what matters to your world.</h2>
-        <p class="lp-sub">Start an inspection or explore guided training.</p>
-        <div class="lp-cta-row"><a class="lp-btn lp-btn--primary lp-btn--lg" href="{% url 'login' %}?next=/inspect/new" data-testid="landing-final-cta-button">Start an inspection{% icon "arrow" 18 %}</a><a class="lp-btn lp-btn--line lp-btn--lg" href="{% url 'docs-page' %}#multimodal-roadmap" data-testid="landing-final-roadmap">Multimodal roadmap{% icon "arrow" 16 %}</a><a class="lp-btn lp-btn--outline lp-btn--lg" href="{% url 'login' %}" data-testid="landing-final-signin">Sign in</a></div>
+        <h2 class="lp-h2" id="final-title">Put practical AI to work on your site.</h2>
+        <p class="lp-sub">Start an inspection or explore guided training in the workspace.</p>
+        <div class="lp-cta-row">
+          <a class="lp-btn lp-btn--primary lp-btn--lg" href="{% url 'login' %}?next=/inspect/new" data-testid="landing-final-cta-button">Start an inspection{% icon "arrow" 18 %}</a>
+          <a class="lp-btn lp-btn--line lp-btn--lg" href="{% url 'docs-page' %}#multimodal-roadmap" data-testid="landing-final-roadmap">Technical docs{% icon "arrow" 16 %}</a>
+          <a class="lp-btn lp-btn--outline lp-btn--lg" href="{% url 'login' %}" data-testid="landing-final-signin">Sign in</a>
+        </div>
         <p class="lp-fine">Ask your Athena admin to provision an account.</p>
       </div>
     </section>
@@ -454,7 +484,7 @@
   <footer class="lp-foot">
     <div class="lp-container lp-foot-inner">
       <a class="lp-brand" href="/"><span class="lp-mark" aria-hidden="true"></span><span>Athena<em>OS</em></span></a>
-      <p>Apache-2.0 multimodal AI training and inspection platform.</p>
+      <p>Open-source Apache-2.0 AI workspace by Ts. Dominic Mathew (Stratetics Experts).</p>
     </div>
   </footer>
   {% icon_data %}
