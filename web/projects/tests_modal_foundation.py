@@ -200,12 +200,16 @@ class PluginRegistryTests(SignedInMixin, TestCase):
     def test_register_and_unregister_a_plugin(self) -> None:
         from .modalities import get_plugin, register_plugin, unregister_plugin
 
+        # A modality with no real plugin (speech): unregistering a test plugin for a REAL
+        # modality would delete the builtin for every later test module in the run - the
+        # pollution the tabular merge taught us about, which time_series landing as a real
+        # modality would have triggered had this kept using it.
         class TestPlugin(FakeTablePlugin):
-            modality = "time_series"
+            modality = "speech"
 
         register_plugin(TestPlugin, replace=True)
-        self.addCleanup(unregister_plugin, "time_series")
-        self.assertIsInstance(get_plugin("time_series"), TestPlugin)
+        self.addCleanup(unregister_plugin, "speech")
+        self.assertIsInstance(get_plugin("speech"), TestPlugin)
 
     def test_the_default_annotation_refusal_is_plain_language(self) -> None:
         # A plugin that accepts uploads but has not implemented annotations gets the base's
