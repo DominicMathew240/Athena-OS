@@ -24,7 +24,7 @@ from django.utils import timezone
 
 from .. import source_time
 from ..models import OperationExecution
-from . import inference
+from . import inference, tracking
 from .comparison import Crossing, compare_crossings
 
 logger = logging.getLogger(__name__)
@@ -179,9 +179,14 @@ def run_execution(
     logic. Since T21, when the bundle pins a model binding, the step also runs
     the bound model — re-validating task/label/artifact compatibility at run
     time — on reference frames sampled from the timeline, recording its
-    normalized detections. What the step never claims: this is recorded replay
-    analysis on sampled frames, not a live operation, and it is not tracking
-    (T22) or crossing episodes (T25).
+    normalized detections. Since T22, those detections are associated into
+    per-camera, per-session tracks (greedy motion-compensated IoU, deterministic)
+    whose summaries land in the outcome: occlusions shorter than the gap
+    threshold resume the same id, longer ones end the track, and a session
+    boundary always ends it. What the step never claims: this is recorded replay
+    analysis on sampled frames, not a live operation, and the track ids are
+    per-session bookkeeping, not persistent identities — crossing episodes
+    (T25) are still out of scope.
     """
     owner_key = owner_key or execution.lease_owner or worker_key()
     snapshot = execution.bundle.snapshot or {}
@@ -218,6 +223,7 @@ def run_execution(
         # reference frames, with compatibility re-validated at run time.
         binding = _pinned_binding(execution)
         detector = None
+        tracks = None
         if binding is not None:
             recipe_key = _recipe_key(snapshot)
             report = inference.run_detector(binding, execution.recording, timeline, recipe_key)
@@ -253,6 +259,15 @@ def run_execution(
                     for frame in report.frames
                 ],
             }
+            # T22: associate the ordered detections into per-camera, per-session
+            # tracks. A TrackingError here is a malformed adapter stream — the
+            # honest outcome is a plain failure, never tracks that hide it.
+            tracking_report = tracking.track_detections(
+                report.frames,
+                camera_key=f"recording:{execution.recording_id}",
+                max_gap_seconds=timeline.gap_threshold_seconds,
+            )
+            tracks = _tracks_outcome(tracking_report, report)
         result = {
             "kind": "reference_replay",
             "recording_sha256": digest,
@@ -266,10 +281,12 @@ def run_execution(
                 "missed": len(comparison.missed),
                 "extra": len(comparison.extra),
             },
-            "note": _outcome_note(binding, detector),
+            "note": _outcome_note(binding, detector, tracks),
         }
         if detector is not None:
             result["detector"] = detector
+        if tracks is not None:
+            result["tracks"] = tracks
         _finish(execution, status=OperationExecution.SUCCEEDED, result=result)
     except ExecutionCancelled:
         _finish(execution, status=OperationExecution.CANCELLED, error="Cancelled by request.")
@@ -317,17 +334,43 @@ def _recipe_key(snapshot: dict) -> str:
     return recipe.get("recipe_key") or "people_counting"
 
 
-def _outcome_note(binding, detector: dict | None) -> str:
+def _tracks_outcome(tracking_report, detector_report) -> dict:
+    """The T22 track block for the outcome: summaries plus scope/occlusion stats.
+
+    The detector's per-frame boxes stay in the ``detector`` block untouched;
+    this block carries the track summaries and the numbers an operator reads
+    first — how many sessions the analysed frames spanned, how many tracks,
+    how many ended because a gap closed them, how many resumed across a short
+    occlusion.
+    """
+    summary = tracking_report.summary()
+    summary["sampled_frame_count"] = detector_report.frame_count
+    summary["sessions"] = len({frame.session for frame in detector_report.frames})
+    return summary
+
+
+def _outcome_note(binding, detector: dict | None, tracks: dict | None = None) -> str:
     """The honesty note: exactly what ran, and what this outcome is and is not."""
     if detector is not None:
-        return (
+        note = (
             f"This run read the pinned recording's frame timestamps into an ordered timeline and ran the "
             f"bound approved model (version {detector['model_version_number']}, backend "
             f"'{detector['backend']}') on {detector['frame_count']} sampled reference frames, recording "
             f"{detector['total_detections']} detections with normalized coordinates. Compatibility was "
             "re-verified at run time. This is recorded replay analysis of the pinned recording, not a "
-            "live operation; detections are per-frame and are not tracks or crossing counts."
+            "live operation; detections are per-frame and are not crossing counts."
         )
+        if tracks is not None:
+            note += (
+                f" The run then associated the detections into per-session tracks "
+                f"({tracks['track_count']} tracks across {tracks['sessions']} session(s), "
+                f"{tracks['ended_by_gap']} ended by a gap at or beyond "
+                f"{tracks['max_gap_seconds']} s, {tracks['resumed_tracks']} resumed across a shorter "
+                "occlusion): track ids are per-camera, per-session bookkeeping and are "
+                "not persistent identities — a reacquisition after a longer gap is a new track id, "
+                "and no identity is claimed across gaps or session boundaries."
+            )
+        return note
     if binding is not None:
         # Defensive: a binding existed but produced no detector block; run_detector raises
         # instead of returning nothing, so this branch means an inconsistency upstream.

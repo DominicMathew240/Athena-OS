@@ -586,7 +586,7 @@ class WorkerIntegrationTests(InferenceBase):
         self.assertIn("ran the bound approved model", result["note"])
         self.assertIn("recorded replay analysis", result["note"])
         self.assertIn("not a live operation", result["note"])
-        self.assertIn("not tracks or crossing counts", result["note"])
+        self.assertIn("not crossing counts", result["note"])
         # The rest of the outcome is unchanged.
         self.assertEqual(result["recording_sha256"], self.recording.sha256)
         self.assertTrue(result["duration_check"]["matches"])
