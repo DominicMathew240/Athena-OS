@@ -43,7 +43,7 @@
   </div>
   <div id="recording-saved" hidden>
     <p id="recording-info"></p>
-    <video id="recording-preview" class="recording-preview" controls preload="metadata" aria-label="Test recording preview"></video>
+    {% include "projects/components/_replay_surface.html" with video_id="recording-preview" video_label="Test recording preview" %}
     <p><button class="a-btn" type="button" id="recording-delete" data-needs="label">Remove recording</button></p>
   </div>
   <p id="recording-status" role="status" aria-live="polite"></p>
@@ -163,4 +163,4 @@
   <p><button class="a-btn" type="button" id="preflight-refresh" data-testid="preflight-refresh">Check again</button></p>
 </section>
 {% endblock %}
-{% block scripts %}<script src="{% static 'projects/operation-line.js' %}"></script><script src="{% static 'projects/operation-drafts.js' %}"></script><script src="{% static 'projects/operation-versions.js' %}"></script><script src="{% static 'projects/operation-setup-guide.js' %}"></script><script src="{% static 'projects/operation-preflight.js' %}"></script>{% endblock %}
+{% block scripts %}<script src="{% static 'projects/replay-surface.js' %}"></script><script src="{% static 'projects/operation-line.js' %}"></script><script src="{% static 'projects/operation-drafts.js' %}"></script><script src="{% static 'projects/operation-versions.js' %}"></script><script src="{% static 'projects/operation-setup-guide.js' %}"></script><script src="{% static 'projects/operation-preflight.js' %}"></script>{% endblock %}

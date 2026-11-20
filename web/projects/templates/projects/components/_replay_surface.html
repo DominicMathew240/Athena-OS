@@ -1,0 +1,15 @@
+{# Shared replay surface (T13): video, a scale-correct overlay and plain controls. #}
+{# Expected context: none; the caller wires it up with createReplaySurface({ root, video }). #}
+<div class="replay-surface" data-testid="replay-surface">
+  <div class="replay-stage">
+    <video id="{{ video_id|default:'replay-video' }}" class="replay-video" preload="metadata" playsinline
+           {% if video_label %}aria-label="{{ video_label }}"{% else %}aria-label="Recorded video replay"{% endif %}></video>
+    <canvas class="replay-overlay" aria-hidden="true"></canvas>
+  </div>
+  <div class="replay-controls">
+    <button class="a-btn replay-play" type="button" data-testid="replay-play" aria-label="Play the recording">Play</button>
+    <input class="replay-scrub" type="range" min="0" max="1" step="any" value="0" aria-label="Move through the recording">
+    <p class="replay-clock"><span class="replay-time" data-testid="replay-time">0:00.0</span> / <span class="replay-duration" data-testid="replay-duration">0:00.0</span></p>
+  </div>
+  <div class="replay-toggles" data-testid="replay-toggles" aria-label="Show or hide marked objects" hidden></div>
+</div>

@@ -11,7 +11,9 @@ from .tests import grant
 def make_scope(client, name="Main shop", timezone_name="Asia/Kuala_Lumpur"):
     """Create a site, one recorded-video source, and an operation through the API."""
     site = client.post(
-        "/api/operation-sites", json.dumps({"name": name, "timezone_name": timezone_name}), content_type="application/json"
+        "/api/operation-sites",
+        json.dumps({"name": name, "timezone_name": timezone_name}),
+        content_type="application/json",
     ).json()["site"]
     source = client.post(
         "/api/operation-sources",
@@ -43,16 +45,31 @@ class DraftAttachTests(TestCase):
 
     def test_unbound_draft_can_be_attached_on_save_and_only_once(self):
         draft = self.client.post(
-            "/api/operation-drafts", json.dumps({"name": "Shop door", "line": self.line}), content_type="application/json"
+            "/api/operation-drafts",
+            json.dumps({"name": "Shop door", "line": self.line}),
+            content_type="application/json",
         ).json()["draft"]
         self.assertIsNone(draft["operation_id"])
         url = f"/api/operation-drafts/{draft['id']}"
-        result = self.put(url, {"name": "Shop door", "line": self.line, "revision": draft["revision"], "operation_id": self.operation["id"]})
+        result = self.put(
+            url,
+            {
+                "name": "Shop door",
+                "line": self.line,
+                "revision": draft["revision"],
+                "operation_id": self.operation["id"],
+            },
+        )
         self.assertEqual(result["draft"]["operation_id"], self.operation["id"])
         # The binding is permanent: a second attach attempt is refused, not a rebind.
         self.put(
             url,
-            {"name": "Shop door", "line": self.line, "revision": result["draft"]["revision"], "operation_id": self.operation["id"]},
+            {
+                "name": "Shop door",
+                "line": self.line,
+                "revision": result["draft"]["revision"],
+                "operation_id": self.operation["id"],
+            },
             status=400,
         )
         self.assertEqual(self.client.get(url).json()["draft"]["operation_id"], self.operation["id"])
@@ -64,11 +81,20 @@ class DraftAttachTests(TestCase):
         stranger_client.force_login(stranger)
         _, _, foreign_operation = make_scope(stranger_client, name="Foreign shop")
         draft = self.client.post(
-            "/api/operation-drafts", json.dumps({"name": "Shop door", "line": self.line}), content_type="application/json"
+            "/api/operation-drafts",
+            json.dumps({"name": "Shop door", "line": self.line}),
+            content_type="application/json",
         ).json()["draft"]
         response = self.client.put(
             f"/api/operation-drafts/{draft['id']}",
-            json.dumps({"name": "Shop door", "line": self.line, "revision": draft["revision"], "operation_id": foreign_operation["id"]}),
+            json.dumps(
+                {
+                    "name": "Shop door",
+                    "line": self.line,
+                    "revision": draft["revision"],
+                    "operation_id": foreign_operation["id"],
+                }
+            ),
             content_type="application/json",
         )
         self.assertEqual(response.status_code, 404, response.content)
@@ -118,7 +144,11 @@ class OperationsPageTests(TestCase):
 
     def test_scope_forms_are_gated_to_the_labeler_role(self):
         page = self.client.get("/operations")
-        for needle in ('id="site-create" data-needs="label"', 'id="source-create" data-needs="label"', 'id="operation-create" data-needs="label"'):
+        for needle in (
+            'id="site-create" data-needs="label"',
+            'id="source-create" data-needs="label"',
+            'id="operation-create" data-needs="label"',
+        ):
             with self.subTest(needle=needle):
                 self.assertContains(page, needle)
 
@@ -127,3 +157,39 @@ class OperationsPageTests(TestCase):
         page = self.client.get("/operations")
         self.assertEqual(page.status_code, 200)
         self.assertContains(page, 'id="operation-setup"')
+
+
+class ReplaySurfacePageTests(TestCase):
+    """The shared replay surface (T13) is the only playback control on the recording step."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user("replay-user")
+        grant(self.user, "labeler")
+        self.client.force_login(self.user)
+
+    def test_recording_step_replaces_native_controls_with_the_replay_surface(self):
+        page = self.client.get("/operations")
+        self.assertEqual(page.status_code, 200)
+        for needle in (
+            'data-testid="replay-surface"',
+            'id="recording-preview"',
+            'class="replay-overlay"',
+            'data-testid="replay-play"',
+            'data-testid="replay-time"',
+            'data-testid="replay-duration"',
+            'data-testid="replay-toggles"',
+            'class="replay-scrub"',
+            'aria-label="Move through the recording"',
+            "replay-surface.js",
+        ):
+            with self.subTest(needle=needle):
+                self.assertContains(page, needle)
+        # The preview video must not carry native controls; the surface owns play, pause and seeking.
+        self.assertNotContains(page, 'id="recording-preview" class="recording-preview" controls')
+
+    def test_replay_surface_script_loads_before_the_draft_editor_uses_it(self):
+        page = self.client.get("/operations")
+        body = page.content.decode()
+        self.assertIn("replay-surface.js", body)
+        self.assertIn("operation-drafts.js", body)
+        self.assertLess(body.index("replay-surface.js"), body.index("operation-drafts.js"))

@@ -30,6 +30,13 @@
   let current = null;
   let savedName = "";
   let busy = false;
+  /* The shared replay surface (T13) is what the saved recording plays on: pause it at a clear
+     frame for the line editor, and show the saved line over the moving picture. Playback is this
+     screen's only job; visibility toggles are view state and are never sent anywhere. */
+  const replay = window.createReplaySurface({
+    root: document.querySelector(".replay-surface"),
+    video: recordingPreview
+  });
   const lineEditor = window.createOperationLineEditor({
     video: recordingPreview,
     canEdit: () => !busy && window.Athena.can("label"),
@@ -73,6 +80,17 @@
     keepLabel: "Keep editing", confirmLabel: "Discard changes"
   });
 
+  /* Show the saved line as a replay overlay object. The editor edits the draft's line; the replay
+     surface shows whatever is saved on the server, so an unsaved edit does not redraw the replay
+     until it is saved. Reference marks draw as vertical ticks at their saved times on the scrub bar. */
+  function syncReplay(draft) {
+    const line = draft?.line;
+    replay.show(
+      line ? [{ id: "line", label: `${line.positive_label} / ${line.negative_label} line`, kind: "line", start: line.start, end: line.end, positive_label: line.positive_label, negative_label: line.negative_label }] : [],
+      draft?.reference_events || []
+    );
+  }
+
   function showDraft(draft, keepFile = false) {
     current = draft;
     name.value = draft ? draft.name : "";
@@ -96,6 +114,7 @@
     referenceEvents = (draft?.reference_events || []).map(event => ({ time: Number(event.time), direction: event.direction }));
     savedReferenceEvents = JSON.stringify(referenceEvents);
     renderReferenceEvents();
+    syncReplay(draft);
     status.textContent = draft ? "Saved draft. Changes are saved when you select Save draft." : "New draft — not saved yet.";
     error.textContent = "";
     document.dispatchEvent(new CustomEvent("athena:draft-shown", { detail: draft }));
