@@ -121,6 +121,10 @@ contracts stabilise.
 - **Dataset versioning and export (JSON API plus a "Make a training set" console panel)**: immutable numbered versions of the
   accepted boxes, deterministic train/val/test splits, a hashed manifest, and COCO or YOLO zip export.
   See [`docs/guides/data-export.md`](docs/guides/data-export.md).
+- **Extension contracts (plugin-author guides, M1)**: the modality-plugin, task-recipe and training-backend
+  interfaces every data kind runs through, documented for plugin authors — including the honest limits (no payload
+  versioning policy yet, no community plugin yet). Start at
+  [`docs/guides/extension-overview.md`](docs/guides/extension-overview.md).
 - **Teaching, models and check screens (prototype)**: a one-button "Teach the computer" part that trains a CPU detector from a
   ready-made starting model (`torchvision-fasterrcnn` by default; a `dfine-coco` backend is opt-in), a picture check,
   plain-language results, model stages with an approval note, check screens that run an
