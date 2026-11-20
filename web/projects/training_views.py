@@ -28,6 +28,7 @@ RECIPE_DEFAULT_BACKENDS = {
     "handwriting-ocr": OCR_BACKEND,
     "audio-classification": "audio-wav-cnn",
     "text-classification": "text-sklearn",
+    "signal-classification": "signal-sklearn",
 }
 
 

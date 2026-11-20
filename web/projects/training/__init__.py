@@ -29,6 +29,7 @@ BUILTIN_BACKENDS = (
     "projects.training.audio_wav:AudioWavBackend",
     "projects.training.tabular_sklearn:TabularSklearnBackend",
     "projects.training.text_sklearn:TextSklearnBackend",
+    "projects.training.signal_sklearn:SignalSklearnBackend",
 )
 DEFAULT_BACKEND = "torchvision-fasterrcnn"
 NAME_PATTERN = re.compile(r"^[a-z0-9][a-z0-9_-]{0,78}$")
