@@ -6,11 +6,11 @@ import json
 import os
 import tempfile
 import uuid
-from unittest import mock
 import zipfile
 from decimal import Decimal
 from pathlib import Path
 from types import SimpleNamespace
+from unittest import mock
 
 from django.contrib.auth import get_user_model
 from django.core.files.storage import default_storage
@@ -18,7 +18,8 @@ from django.db import IntegrityError
 from django.test import Client, TestCase, override_settings
 from PIL import Image
 
-from .datasets import service as dataset_service, splits, validation
+from .datasets import service as dataset_service
+from .datasets import splits, validation
 from .models import Asset, BoxAnnotation, DatasetBox, DatasetImage, DatasetVersion, ExportEvent, Project
 from .tests import SignedInMixin
 
@@ -149,8 +150,10 @@ class AccessTests(DatasetBase):
         missing = f"/api/projects/{uuid.uuid4()}/datasets"
         self.assertEqual(self.client.get(missing).status_code, 404)
         self.assertEqual(self.client.get(missing + "/readiness").status_code, 404)
-        text = Project.objects.create(name="Docs", modality="text", task="Tag", labels=["a"])
-        self.assertEqual(self.client.get(self.url(project=text)).status_code, 404)
+        # "text" is a supported generic-dataset modality now; a modality no plugin
+        # registers keeps proving the 404 path for a non-image project.
+        alien = Project.objects.create(name="Docs", modality="alien", task="Tag", labels=["a"])
+        self.assertEqual(self.client.get(self.url(project=alien)).status_code, 404)
 
     def test_unsupported_methods_are_rejected(self) -> None:
         self.labelled_asset()

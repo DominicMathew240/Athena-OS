@@ -447,6 +447,7 @@ class LifecycleTests(TextTestBase):
             self.skipTest(REASON)
         from .training import runner
 
+        self.make_run()
         claimed = runner.claim_next_run()
         self.assertIsNotNone(claimed)
         finished = runner.run_training(claimed)
