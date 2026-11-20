@@ -93,6 +93,9 @@ class DurableExecutionBase(TestCase):
         self.body = _clip_bytes()
         self.key = default_storage.save(f"operation-source-recordings/{self.source.id}/rec.mp4", _NamedBytes(self.body))
         self.addCleanup(default_storage.delete, self.key)
+        # The real 5 fps 1 s clip's duration; without ffmpeg (tests that never run
+        # executions) the placeholder value is never cross-checked.
+        self.duration = 1.0 if REQUIRE_FFMPEG else 60.0
         self.recording = OperationSourceRecording.objects.create(
             source=self.source,
             created_by=self.user,
@@ -102,7 +105,7 @@ class DurableExecutionBase(TestCase):
             size_bytes=len(self.body),
             width=64,
             height=48,
-            duration_seconds=60.0,
+            duration_seconds=self.duration,
         )
         self.bundle = self._bundle()
 
@@ -151,7 +154,7 @@ class DurableExecutionBase(TestCase):
                     "sha256": "3" * 64,
                     "configuration": {"comparison_tolerance_seconds": 0.5},
                 },
-                "model": {"id": "mdl", "version": 1, "model_version_id": str(model.id), "sha256": "4" * 64},
+                "model": None,  # no model binding pinned: the honest no-model run
                 "screen": {"id": "scr", "version": 1, "sha256": "5" * 64},
                 "policy": {"id": "pol", "version": 1, "sha256": "6" * 64},
             },
@@ -160,7 +163,7 @@ class DurableExecutionBase(TestCase):
                 "size_bytes": self.recording.size_bytes,
                 "width": 64,
                 "height": 48,
-                "duration_seconds": 60.0,
+                "duration_seconds": self.duration,
             },
             "reference_events": [
                 {"time": 1.0, "direction": "negative_to_positive"},
@@ -310,7 +313,9 @@ class RunTests(DurableExecutionBase):
         self.assertEqual(result["comparison"]["matched"], 2)
         self.assertEqual(result["comparison"]["missed"], 0)
         self.assertEqual(result["pins"]["bundle_sha256"], self.bundle.snapshot_sha256)
-        self.assertIn("did not watch", result["note"])
+        # T21: no model is bound in this fixture's bundle, so no model ran and the note says so.
+        self.assertIn("No model is bound", result["note"])
+        self.assertNotIn("detector", result)
 
     def test_changed_recording_fails_with_plain_message(self) -> None:
         execution = self.enqueue_and_claim("worker-a")

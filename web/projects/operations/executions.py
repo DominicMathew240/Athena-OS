@@ -24,6 +24,7 @@ from django.utils import timezone
 
 from .. import source_time
 from ..models import OperationExecution
+from . import inference
 from .comparison import Crossing, compare_crossings
 
 logger = logging.getLogger(__name__)
@@ -170,15 +171,17 @@ def run_execution(
 ) -> OperationExecution:
     """Run a claimed execution to completion. Never raises; outcomes land on the row.
 
-    The current execution step is deliberately honest: it proves the pinned
-    recording is still the byte-identical file the bundle was assembled from,
-    reads that recording's frame timestamps into the ordered, reproducible
-    timeline (T20's ``source_time``), replays the recorded human reference
-    events through the operation domain's comparison logic, and stores the
-    plain-language outcome. Reading timestamps is not watching video: no pixel
-    content is analysed and no detector runs. Real inference is T21; it plugs in
-    where the reference replay stands, on top of the lease/claim/recovery layer
-    this module is.
+    The execution step proves the pinned recording is still the byte-identical
+    file the bundle was assembled from, reads that recording's frame timestamps
+    into the ordered, reproducible timeline (T20's ``source_time``), cross-checks
+    the recording's stored duration against that timeline, and replays the
+    recorded human reference events through the operation domain's comparison
+    logic. Since T21, when the bundle pins a model binding, the step also runs
+    the bound model — re-validating task/label/artifact compatibility at run
+    time — on reference frames sampled from the timeline, recording its
+    normalized detections. What the step never claims: this is recorded replay
+    analysis on sampled frames, not a live operation, and it is not tracking
+    (T22) or crossing episodes (T25).
     """
     owner_key = owner_key or execution.lease_owner or worker_key()
     snapshot = execution.bundle.snapshot or {}
@@ -196,9 +199,10 @@ def run_execution(
         if _cancelled(execution):
             raise ExecutionCancelled("Cancelled by request.")
         # T20: read the pinned recording's frame timestamps and derive the
-        # ordered processing timeline (frame count, gaps, sessions). This reads
-        # timestamps only — it is still not watching pixel content.
+        # ordered processing timeline (frame count, gaps, sessions), then close
+        # T20's known gap: the stored duration must match the timeline's span.
         timeline = source_time.build_timeline(execution.recording)
+        duration_check = inference.crosscheck_duration(execution.recording, timeline)
         _beat(execution, owner_key, lease_seconds)
         if _cancelled(execution):
             raise ExecutionCancelled("Cancelled by request.")
@@ -208,24 +212,64 @@ def run_execution(
         # placeholder that exercises the pinned recipe's comparison semantics end to end.
         comparison = compare_crossings(reference, reference, tolerance=tolerance)
         _beat(execution, owner_key, lease_seconds)
+        if _cancelled(execution):
+            raise ExecutionCancelled("Cancelled by request.")
+        # T21: a pinned model binding means real detector inference on sampled
+        # reference frames, with compatibility re-validated at run time.
+        binding = _pinned_binding(execution)
+        detector = None
+        if binding is not None:
+            recipe_key = _recipe_key(snapshot)
+            report = inference.run_detector(binding, execution.recording, timeline, recipe_key)
+            _beat(execution, owner_key, lease_seconds)
+            detector = {
+                "model_version_id": report.model_version_id,
+                "model_version_number": report.model_version_number,
+                "backend": report.backend,
+                "artifact_sha256": report.artifact_sha256,
+                "recipe_key": report.recipe_key,
+                "expected_labels": list(report.expected_labels),
+                "model_labels": list(report.model_labels),
+                "frame_count": report.frame_count,
+                "total_detections": sum(len(frame.detections) for frame in report.frames),
+                "frames": [
+                    {
+                        "frame_index": frame.frame_index,
+                        "pts": frame.pts,
+                        "session": frame.session,
+                        "wall_clock": frame.wall_clock,
+                        "detections": [
+                            {
+                                "label": box["label"],
+                                "x": box["x"],
+                                "y": box["y"],
+                                "width": box["width"],
+                                "height": box["height"],
+                                "score": box["score"],
+                            }
+                            for box in frame.detections
+                        ],
+                    }
+                    for frame in report.frames
+                ],
+            }
         result = {
             "kind": "reference_replay",
             "recording_sha256": digest,
             "pins": _pins(execution),
             "frame_timeline": timeline.summary(),
             "timeline_sha256": timeline.timeline_sha256(),
+            "duration_check": duration_check,
             "comparison": {
                 "tolerance_seconds": tolerance,
                 "matched": len(comparison.matches),
                 "missed": len(comparison.missed),
                 "extra": len(comparison.extra),
             },
-            "note": (
-                "This run read the pinned recording's frame timestamps into an ordered timeline "
-                "and replayed the recorded human reference events through the pinned comparison "
-                "rules. It did not watch the video's pictures or run a model; that is later work."
-            ),
+            "note": _outcome_note(binding, detector),
         }
+        if detector is not None:
+            result["detector"] = detector
         _finish(execution, status=OperationExecution.SUCCEEDED, result=result)
     except ExecutionCancelled:
         _finish(execution, status=OperationExecution.CANCELLED, error="Cancelled by request.")
@@ -233,6 +277,72 @@ def run_execution(
         logger.exception("Operation execution %s failed", execution.pk)
         _finish(execution, status=OperationExecution.FAILED, error=str(exc) or exc.__class__.__name__)
     return OperationExecution.objects.get(pk=execution.pk)
+
+
+def _pinned_binding(execution):
+    """The real OperationModelBinding the bundle's snapshot pinned, or None.
+
+    The snapshot's model pin names the binding's id; the row is fetched from the
+    database so inference re-validates the *current* model version it points at
+    (the pin's recorded checks are never trusted). A pin whose id is not a real
+    binding (a malformed snapshot) is a plain failure, not a silent no-model run:
+    the bundle claims a model that cannot be found.
+    """
+    pin = (execution.bundle.snapshot or {}).get("component_pins", {}).get("model") or {}
+    binding_id = pin.get("id")
+    if not binding_id:
+        return None
+    import uuid as _uuid
+
+    from ..models import OperationModelBinding
+
+    try:
+        binding_uuid = _uuid.UUID(str(binding_id))
+    except (ValueError, AttributeError, TypeError):
+        raise ValueError(
+            "The bundle's model pin does not name a valid model binding. Rebuild the release bundle."
+        ) from None
+    binding = (
+        OperationModelBinding.objects.select_related("model_version").filter(id=binding_uuid).first()
+    )
+    if binding is None:
+        raise ValueError(
+            "The model binding this bundle pinned no longer exists. Rebuild the release bundle with a "
+            "current model binding."
+        )
+    return binding
+
+
+def _recipe_key(snapshot: dict) -> str:
+    """The recipe key the bundle's snapshot pinned (the operation domain's one recipe)."""
+    recipe = (snapshot.get("component_pins") or {}).get("recipe") or {}
+    return recipe.get("recipe_key") or "people_counting"
+
+
+def _outcome_note(binding, detector: dict | None) -> str:
+    """The honesty note: exactly what ran, and what this outcome is and is not."""
+    if detector is not None:
+        return (
+            f"This run read the pinned recording's frame timestamps into an ordered timeline and ran the "
+            f"bound approved model (version {detector['model_version_number']}, backend "
+            f"'{detector['backend']}') on {detector['frame_count']} sampled reference frames, recording "
+            f"{detector['total_detections']} detections with normalized coordinates. Compatibility was "
+            "re-verified at run time. This is recorded replay analysis of the pinned recording, not a "
+            "live operation; detections are per-frame and are not tracks or crossing counts."
+        )
+    if binding is not None:
+        # Defensive: a binding existed but produced no detector block; run_detector raises
+        # instead of returning nothing, so this branch means an inconsistency upstream.
+        return (
+            "This run read the pinned recording's frame timestamps into an ordered timeline and replayed "
+            "the recorded human reference events through the pinned comparison rules. The pinned model "
+            "binding could not be resolved to a model, so no model ran."
+        )
+    return (
+        "This run read the pinned recording's frame timestamps into an ordered timeline and replayed the "
+        "recorded human reference events through the pinned comparison rules. No model is bound to this "
+        "operation, so none ran; binding an approved detector is what makes inference happen."
+    )
 
 
 def _comparison_tolerance(snapshot: dict) -> float:

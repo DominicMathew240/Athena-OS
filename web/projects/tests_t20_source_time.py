@@ -124,7 +124,7 @@ class SourceTimeBase(TestCase):
         site = Site.objects.create(created_by=self.user, name="Depot")
         self.source = OperationSource.objects.create(site=site, name="Gate", kind="recorded_video")
 
-    def store_recording(self, body: bytes, *, creation_time=None) -> OperationSourceRecording:
+    def store_recording(self, body: bytes, *, creation_time=None, duration=None) -> OperationSourceRecording:
         key = default_storage.save(f"operation-source-recordings/{self.source.id}/rec.mp4", _NamedBytes(body))
         self.addCleanup(default_storage.delete, key)
         return OperationSourceRecording.objects.create(
@@ -136,7 +136,9 @@ class SourceTimeBase(TestCase):
             size_bytes=len(body),
             width=64,
             height=48,
-            duration_seconds=float(len(body)),  # not used by the timeline; honest placeholder
+            # The real container duration when known (T21 cross-checks this against the
+            # timeline); a placeholder is only used where the timeline is never built.
+            duration_seconds=float(duration if duration is not None else len(body)),
             captured_at=(
                 datetime.fromisoformat(creation_time.replace("Z", "+00:00")) if creation_time else None
             ),
@@ -378,7 +380,12 @@ class ExecutionTimelineTests(SourceTimeBase):
         self.tmp = tempfile.mkdtemp(prefix="t20-fixture-")
         self.addCleanup(shutil.rmtree, self.tmp, ignore_errors=True)
         self.body = make_clip(self.tmp, seconds=3, drop_between=(1.0, 2.0), creation_time="2026-11-01T09:30:00Z")
-        self.recording = self.store_recording(self.body, creation_time="2026-11-01T09:30:00Z")
+        # The clip's real duration: the last kept frame's span, as the T21 duration
+        # cross-check requires (source frames 1.0-2.0 s were dropped, so the span is
+        # the last frame's PTS plus one frame).
+        self.recording = self.store_recording(
+            self.body, creation_time="2026-11-01T09:30:00Z", duration=3.0
+        )
         self.bundle = self._bundle()
 
     def _bundle(self):
@@ -432,7 +439,7 @@ class ExecutionTimelineTests(SourceTimeBase):
                     "sha256": "3" * 64,
                     "configuration": {"comparison_tolerance_seconds": 0.5},
                 },
-                "model": {"id": "mdl", "version": 1, "model_version_id": str(model.id), "sha256": "4" * 64},
+                "model": None,  # no model binding pinned: the honest no-model run
                 "screen": {"id": "scr", "version": 1, "sha256": "5" * 64},
                 "policy": {"id": "pol", "version": 1, "sha256": "6" * 64},
             },
@@ -441,7 +448,7 @@ class ExecutionTimelineTests(SourceTimeBase):
                 "size_bytes": self.recording.size_bytes,
                 "width": 64,
                 "height": 48,
-                "duration_seconds": 3.0,
+                "duration_seconds": self.recording.duration_seconds,
             },
             "reference_events": [
                 {"time": 0.5, "direction": "negative_to_positive"},
@@ -482,9 +489,12 @@ class ExecutionTimelineTests(SourceTimeBase):
         self.assertEqual(len(timeline["sessions"]), 2)
         self.assertEqual(timeline["captured_at"], "2026-11-01T09:30:00+00:00")
         self.assertEqual(result["timeline_sha256"], build_timeline(self.recording).timeline_sha256())
-        # The honesty rule is unchanged and explicit.
-        self.assertIn("did not watch the video's pictures or run a model", result["note"])
-        self.assertNotIn("watched", result["note"].split("did not watch")[0])
+        # T21: the stored duration is now cross-checked against the timeline span.
+        self.assertTrue(result["duration_check"]["matches"])
+        self.assertAlmostEqual(result["duration_check"]["timeline_span_seconds"], 3.0, places=5)
+        # The honesty rule is unchanged for a bundle without a model pin.
+        self.assertIn("No model is bound", result["note"])
+        self.assertNotIn("detector", result)
 
     def test_execution_of_a_corrupt_recording_fails_with_a_plain_message(self):
         execution = self._enqueue_and_claim()
