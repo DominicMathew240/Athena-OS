@@ -24,12 +24,20 @@ LIST_LIMIT = 100
 OCR_BACKEND = "ocr-trocr"
 #: The backend each recipe runs on when the caller did not pick one (the Teach panel's one-click
 #: start never names a backend). Only recipes whose backend is not the box default need an entry.
+#: A recipe with NO entry has no teaching backend of its own (document-fields: rule-based
+#: extraction, no training), so it must not be defaulted onto the console's box backend - see
+#: ``_default_backend_for``.
 RECIPE_DEFAULT_BACKENDS = {
     "handwriting-ocr": OCR_BACKEND,
     "audio-classification": "audio-wav-cnn",
     "text-classification": "text-sklearn",
     "signal-classification": "signal-sklearn",
 }
+
+#: Recipes that never train (document-fields: rule-based field validation plus the
+#: version-to-version table comparison, no model). A training run on such a project is refused
+#: plainly at the door rather than routed to some unrelated backend.
+NON_TRAINING_RECIPES = ("document-fields",)
 
 
 def _default_backend_for(project: Project, payload: dict) -> str:
@@ -65,7 +73,11 @@ def teachable_project(project_id) -> Project:
     "not available yet" refusal instead of an error. Image projects whose recipe is not
     box-shaped (handwriting-OCR transcripts) train through the generic-snapshot path with
     their own backend; the API stays honest: a run on an OCR project must use its recipe's
-    backend (``ocr-trocr``), not a box backend."""
+    backend (``ocr-trocr``), not a box backend.
+
+    A recipe that never trains (document-fields, whose work is rule-based field validation
+    and the version-to-version comparison) is treated as unteachable here: its runs/models
+    endpoints answer the same honest 404, because there is genuinely nothing to run."""
     project = get_object_or_404(Project, id=project_id)
     if project.modality == "image":
         return project
@@ -75,7 +87,7 @@ def teachable_project(project_id) -> Project:
     if getattr(get_plugin(project.modality), "annotation_kind", ""):
         return project
     recipe = recipe_for_project(project)
-    if recipe is not None and recipe.available:
+    if recipe is not None and recipe.available and recipe.key not in NON_TRAINING_RECIPES:
         return project
     raise Http404("This project's task has no teaching tools yet.")
 
@@ -289,7 +301,8 @@ def training_readiness(request: HttpRequest, project_id) -> JsonResponse:
         from .tasks import recipe_for_project
 
         recipe = recipe_for_project(project)
-        if project.modality == "image" or (recipe is not None and recipe.available):
+        teachable = recipe is not None and recipe.available and recipe.key not in NON_TRAINING_RECIPES
+        if project.modality == "image" or teachable:
             return no_store(JsonResponse(lifecycle.readiness(project, request.GET.get("backend") or None)))
         return no_store(JsonResponse(_task_unavailable_readiness(project)))
     return no_store(JsonResponse(lifecycle.readiness(project, request.GET.get("backend") or None)))
@@ -300,16 +313,24 @@ def _task_unavailable_readiness(project) -> dict[str, Any]:
 
     Shape-compatible with ``lifecycle.readiness`` so the console's Teach panel renders the same
     refusal it shows for any other blocker, instead of crashing on a data kind it does not know.
+    A recipe that is available but never trains (document-fields) gets its own honest sentence:
+    there is nothing to teach, not a missing tool.
     """
     from .tasks import recipe_for_project
 
     recipe = recipe_for_project(project)
     what = recipe.title if recipe else project.get_modality_display()
-    reason = (
-        recipe.unavailable_reason
-        if recipe and recipe.unavailable_reason
-        else f"Teaching {what.lower()} models is not available yet."
-    )
+    if recipe is not None and recipe.key in NON_TRAINING_RECIPES:
+        reason = (
+            "This project checks document fields with fixed rules (text, number and date), so there is "
+            "no model to teach. Compare two saved versions of its table to score the fields instead."
+        )
+    else:
+        reason = (
+            recipe.unavailable_reason
+            if recipe and recipe.unavailable_reason
+            else f"Teaching {what.lower()} models is not available yet."
+        )
     return {
         "ready": False,
         "blockers": [reason],

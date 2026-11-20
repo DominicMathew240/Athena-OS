@@ -1818,6 +1818,14 @@ const PROJECT_RECIPES = {
     recipeKey: "text-classification",
     available: true
   },
+  fields: {
+    modality: "text",
+    task: "Check fields in document tables",
+    labelsPlaceholder: "One field per line, as name:type - the type is text, number or date",
+    note: "Available today · Data needed: one CSV (or Excel) file with a header row of field names · Athena validates every cell against its field type and can compare two saved versions field by field. PDF and scanned documents are not part of this yet.",
+    recipeKey: "document-fields",
+    available: true
+  },
   movements: {
     modality: "video",
     task: "Recognize postures and working movements",

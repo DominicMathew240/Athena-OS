@@ -36,6 +36,7 @@ BUILTIN_PLUGINS = (
 #: register the same modality twice (and register_plugin would need replace=True to win).
 BUILTIN_ANNOTATION_PLUGINS = (
     "projects.modalities.ocr",  # importing it registers OcrImagePlugin and the OCR recipe
+    "projects.modalities.document",  # importing it registers DocumentModalityPlugin by kind
 )
 
 #: Plugins looked up by *annotation kind* instead of modality. A recipe may ask an image

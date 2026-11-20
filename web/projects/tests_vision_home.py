@@ -218,6 +218,7 @@ class LandingCoversOnFrontViewTests(TestCase):
             'data-testid="console-recipe-vision"',
             'data-testid="console-recipe-audio"',
             'data-testid="console-recipe-ocr"',
+            'data-testid="console-recipe-fields"',
             'data-testid="console-recipe-spreadsheets"',
             'data-testid="console-recipe-signals"',
         ):

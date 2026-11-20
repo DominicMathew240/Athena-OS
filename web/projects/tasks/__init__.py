@@ -139,6 +139,35 @@ BUILTIN_RECIPES = (
     TEXT_CLASSIFICATION, SIGNAL_CLASSIFICATION,
 )
 
+#: Document fields (Wave 2, OS-DOC-001 - table/CSV only; no PDF, no OCR, no layout analysis,
+#: and no model training: extraction here is rule-based validation and normalization, and the
+#: slice's "evaluation" is the version-to-version table comparison in
+#: ``projects.training.document_eval``, not a trained model). The recipe shares the ``text``
+#: modality with text classification (the console's "Text / documents" kind): its plugin is
+#: registered by annotation kind (``document_fields``) and dispatches through the recipe, the
+#: OCR pattern, so text classification keeps its own plugin untouched.
+DOCUMENT_FIELDS = TaskRecipe(
+    key="document-fields",
+    title="Check fields in document tables",
+    modality="text",
+    summary=(
+        "Upload one CSV (or Excel) file of structured records, define the fields it must carry "
+        "(text, number or date), and Athena validates every cell. Two saved versions can be "
+        "compared field by field to score extraction accuracy."
+    ),
+    annotation_kind="document_fields",
+    labels_help=(
+        "For documents, each label is one field to check, written as name:type - the type is "
+        "text, number or date. A label without a type is a text field."
+    ),
+    available=True,
+)
+
+BUILTIN_RECIPES = (
+    VISION_DETECTION, AUDIO_CLASSIFICATION, HANDWRITING_OCR, TABULAR_PREDICTION,
+    TEXT_CLASSIFICATION, SIGNAL_CLASSIFICATION, DOCUMENT_FIELDS,
+)
+
 #: The recipe assumed for image projects created before recipes existed, and for any image
 #: project whose caller did not pick one.
 DEFAULT_RECIPE_KEY = "vision-detection"
