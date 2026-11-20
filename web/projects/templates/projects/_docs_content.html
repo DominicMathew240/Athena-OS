@@ -330,7 +330,7 @@
           </thead>
           <tbody>
             <tr><td><strong>Athena OS Core</strong></td><td>Wave 0 complete and merged: task/recipe registry, modality plugin interface, generic annotations and frozen dataset snapshots shared by every modality</td><td>Reuse and generalize</td></tr>
-            <tr><td><strong>Vision workflows</strong></td><td>18 of 65 tasks locally verified (T01–T14, T19–T22): private drafts and versioned release bundles, guided setup, durable supervised execution workers, reproducible frame timelines, bound-detector inference with per-session tracking, view health, accessible geometry editing. Live cameras (T10), crossing events (T25) and operator boards (T41+) remain open</td><td>Keep as a vision-specific workstream</td></tr>
+            <tr><td><strong>Vision workflows</strong></td><td>16 of 65 tasks locally verified (T01–T09, T11–T14, T19–T21): private drafts and versioned release bundles, guided setup, durable supervised execution workers, reproducible frame timelines, bound-detector inference, view health, credential protection. Live cameras (T10), accessible geometry editing (T15), scale calibration (T16), crossing events (T25) and operator boards (T41+) remain open</td><td>Keep as a vision-specific workstream</td></tr>
             <tr><td><strong>Vision detection (OS-VIS-001)</strong></td><td>Merged end to end: image projects, SAM+CLIP-assisted labeling, snapshots, real CPU training, evaluation, approval and check screens</td><td>Extend to segmentation (later)</td></tr>
             <tr><td><strong>Audio classification (OS-AUD-001)</strong></td><td>Merged: WAV import, clip labels, <span class="a-mono">audio-wav-cnn</span> training with ONNX-or-torch artifacts, through the shared lifecycle</td><td>Industrial acoustic recipes later</td></tr>
             <tr><td><strong>Handwriting OCR (OS-OCR-001)</strong></td><td>Merged: transcript annotations, <span class="a-mono">ocr-trocr</span> fine-tuning with CER/word-accuracy evaluation. Serving is backend-level; base-weight licensing is an open owner decision</td><td>Complete serving path</td></tr>
@@ -400,7 +400,7 @@
             <tr><th scope="col">Existing tasks</th><th scope="col">Updated placement</th></tr>
           </thead>
           <tbody>
-            <tr><td><span class="a-mono">T01–T14, T19–T22</span></td><td>Locally verified vision foundations (18 of 65): drafts, release bundles, guided setup, preflight, recordings, view health, accessible geometry, durable workers, timelines, inference and tracking.</td></tr>
+            <tr><td><span class="a-mono">T01–T09, T11–T14, T19–T21</span></td><td>Locally verified vision foundations (16 of 65): drafts, release bundles, guided setup, preflight, recordings, view health, durable workers, timelines and inference.</td></tr>
             <tr><td><span class="a-mono">T10, T15–T18, T23–T31</span></td><td>Video Operations / Vision Domain Pack — open (live cameras, remaining geometry/calibration work, event ledger, crossings, aggregates, parking).</td></tr>
             <tr><td><span class="a-mono">T32–T40</span></td><td>Extract shared review, training, comparison and approval logic (including T19 durable worker design).</td></tr>
             <tr><td><span class="a-mono">T41–T50</span></td><td>Industry-specific operations and visual dashboards.</td></tr>

@@ -57,7 +57,7 @@
       href: "/detectors?recipe=vision"
     },
     audio: {
-      status: "Wave 1 roadmap (coming soon)",
+      status: "Available now in custom projects",
       title: "Acoustic Event Detection",
       summary: "Upload recordings of a healthy motor and known faults. Athena learns to classify characteristic sounds or flag unusual sounds against a normal baseline.",
       data: "WAV recordings + event labels",
@@ -66,7 +66,7 @@
       href: "/detectors?recipe=audio"
     },
     ocr: {
-      status: "Wave 1 roadmap (coming soon)",
+      status: "Available now in custom projects",
       title: "Handwriting & Form Reading",
       summary: "Upload handwritten forms or line crops, correct recognized text and fine-tune a reader for your handwriting style or document type.",
       data: "Handwritten forms or line pictures + corrected transcripts",
@@ -93,13 +93,22 @@
       href: "/detectors?recipe=movements"
     },
     spreadsheets: {
-      status: "Wave 1 roadmap (coming soon)",
+      status: "Available now in custom projects",
       title: "Spreadsheet Prediction",
       summary: "Upload an Excel or CSV table, pick the target column you want to predict, train a model and check it against unseen rows.",
       data: "Excel or CSV spreadsheets + chosen target column",
       quality: "Prediction errors on unseen rows",
       steps: "Choose a goal · Upload spreadsheet · Pick target column · Train · Check unseen rows · Use and improve",
       href: "/detectors?recipe=spreadsheets"
+    },
+    signals: {
+      status: "Available now in custom projects",
+      title: "Signal Pattern Classification",
+      summary: "Upload one CSV of labelled measurement series (a series column, one value column per time step, a label column). Athena learns to sort new series into those labels and is checked on series it has never seen. Forecasting and anomaly detection are not part of this yet.",
+      data: "One wide CSV: series name, time-step value columns + label column",
+      quality: "Classification accuracy and per-class precision/recall on held-out series",
+      steps: "Choose a goal · Upload signal CSV · Confirm the labels · Train · Check unseen series · Use and improve",
+      href: "/detectors?recipe=signals"
     }
   };
 
