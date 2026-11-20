@@ -15,6 +15,7 @@ from django.conf import settings
 from .audio import AudioModalityPlugin
 from .base import ModalityPlugin, UnsupportedModalityError
 from .image import ImageModalityPlugin
+from .signal import SignalModalityPlugin
 from .table import TableModalityPlugin
 from .text import TextModalityPlugin
 
@@ -25,6 +26,7 @@ BUILTIN_PLUGINS = (
     "projects.modalities.audio:AudioModalityPlugin",
     "projects.modalities.table:TableModalityPlugin",
     "projects.modalities.text:TextModalityPlugin",
+    "projects.modalities.signal:SignalModalityPlugin",
 )
 
 #: Recipe-dispatched plugins that no modality loads on its own: importing the module registers

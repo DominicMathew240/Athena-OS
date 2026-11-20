@@ -219,6 +219,7 @@ class LandingCoversOnFrontViewTests(TestCase):
             'data-testid="console-recipe-audio"',
             'data-testid="console-recipe-ocr"',
             'data-testid="console-recipe-spreadsheets"',
+            'data-testid="console-recipe-signals"',
         ):
             with self.subTest(console=expected):
                 self.assertIn(expected, console_html)

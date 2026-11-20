@@ -1833,6 +1833,14 @@ const PROJECT_RECIPES = {
     note: "Available today · Data needed: one Excel (.xlsx) or CSV file with at least 2 columns and 3 rows · You choose which column to predict and Athena is tested on rows it has not seen.",
     recipeKey: "tabular-prediction",
     available: true
+  },
+  signals: {
+    modality: "time_series",
+    task: "Tell signal patterns apart",
+    labelsPlaceholder: "e.g. sine, square, noise",
+    note: "Available today · Data needed: one CSV file with a series column, one value column per time step and a label column · Athena is tested on series it has not seen. Forecasting and anomaly detection are not part of this yet.",
+    recipeKey: "signal-classification",
+    available: true
   }
 };
 

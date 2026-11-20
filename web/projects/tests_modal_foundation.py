@@ -200,12 +200,16 @@ class PluginRegistryTests(SignedInMixin, TestCase):
     def test_register_and_unregister_a_plugin(self) -> None:
         from .modalities import get_plugin, register_plugin, unregister_plugin
 
+        # A modality with no real plugin (speech): unregistering a test plugin for a REAL
+        # modality would delete the builtin for every later test module in the run - the
+        # pollution the tabular merge taught us about, which time_series landing as a real
+        # modality would have triggered had this kept using it.
         class TestPlugin(FakeTablePlugin):
-            modality = "time_series"
+            modality = "speech"
 
         register_plugin(TestPlugin, replace=True)
-        self.addCleanup(unregister_plugin, "time_series")
-        self.assertIsInstance(get_plugin("time_series"), TestPlugin)
+        self.addCleanup(unregister_plugin, "speech")
+        self.assertIsInstance(get_plugin("speech"), TestPlugin)
 
     def test_the_default_annotation_refusal_is_plain_language(self) -> None:
         # A plugin that accepts uploads but has not implemented annotations gets the base's
@@ -219,9 +223,10 @@ class ImagePluginParityTests(DatasetBase):
     """An upload through the plugin must produce exactly what the old inline validation did."""
 
     def test_validate_upload_returns_the_same_metadata_shape(self) -> None:
-        from django.core.files.uploadedfile import SimpleUploadedFile
-        from io import BytesIO
         import hashlib
+        from io import BytesIO
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
         from PIL import Image
 
         from .modalities.image import ImageModalityPlugin
@@ -256,8 +261,9 @@ class ImagePluginParityTests(DatasetBase):
         self.assertEqual(raised.exception.messages[0], "The uploaded file is not a valid supported image.")
 
     def test_upload_endpoint_still_works_and_stores_no_extra_metadata(self) -> None:
-        from django.core.files.uploadedfile import SimpleUploadedFile
         from io import BytesIO
+
+        from django.core.files.uploadedfile import SimpleUploadedFile
         from PIL import Image
 
         buffer = BytesIO()
@@ -532,7 +538,8 @@ class TrainingTaskFieldTests(ModalFoundationBase):
         self.addCleanup(override.disable)
 
     def _make_run(self, project) -> TrainingRun:
-        from .datasets import service as dataset_service, splits
+        from .datasets import service as dataset_service
+        from .datasets import splits
         from .training import lifecycle
 
         for seed in range(50):
@@ -554,7 +561,7 @@ class TrainingTaskFieldTests(ModalFoundationBase):
     def test_a_run_from_a_recipe_project_carries_its_task(self) -> None:
         # The fake dataset machinery is image-only, so stamp a table project's recipe and read
         # the fields create_run derives from it (they come from the project, not the dataset).
-        from .training.lifecycle import create_run, run_task_fields
+        from .training.lifecycle import run_task_fields
 
         project = self.make_table_project()
         project.recipe = "tabular-prediction"
