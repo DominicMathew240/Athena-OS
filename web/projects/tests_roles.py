@@ -577,6 +577,7 @@ class EveryRouteDeclaresItsRole(RoleBase):
         "api/operation-drafts/<uuid:draft_id>/recording/content": {},
         "api/operation-sources/<uuid:source_id>/recordings": {"POST": LABEL},
         "api/operation-sources/<uuid:source_id>/recordings/<uuid:recording_id>/content": {},
+        "api/operation-sources/<uuid:source_id>/view-estimate": {"PUT": LABEL, "DELETE": LABEL},
         "api/inspections": {"POST": LABEL},
         "api/inspections/summary": {},
         "api/inspections/<uuid:inspection_id>": {"DELETE": LABEL},
