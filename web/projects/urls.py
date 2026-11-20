@@ -46,6 +46,16 @@ urlpatterns = [
     path("api/operation-sites", operation_views.operation_sites, name="operation-sites"),
     path("api/operation-sources", operation_views.operation_sources, name="operation-sources"),
     path(
+        "api/operation-sources/<uuid:source_id>/credential",
+        operation_views.source_credential,
+        name="source-credential",
+    ),
+    path(
+        "api/approved-destinations",
+        operation_views.approved_destinations,
+        name="approved-destinations",
+    ),
+    path(
         "api/operation-sources/<uuid:source_id>/recordings",
         source_recording_views.source_recordings,
         name="source-recordings",

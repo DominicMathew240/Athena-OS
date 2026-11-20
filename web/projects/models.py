@@ -1323,3 +1323,28 @@ class InspectionImage(models.Model):
     class Meta:
         ordering = ("position",)
         constraints = (models.UniqueConstraint(fields=("inspection", "position"), name="inspection_image_position"),)
+
+
+class SourceCredential(models.Model):
+    """One encrypted credential attached to an operation source (T11).
+
+    The secret is Fernet-encrypted with the key file under the private data home
+    (``projects.credentials``) and is never returned by any API. Read paths expose
+    only whether a credential is set, a non-secret hint, and when it was last
+    rotated. Rotation replaces the ciphertext in place — there is deliberately no
+    history table that could resurrect an old secret.
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    source = models.OneToOneField(OperationSource, on_delete=models.CASCADE, related_name="credential")
+    secret_encrypted = models.TextField()
+    key_hint = models.CharField(max_length=8, blank=True)
+    set_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("created_at",)
+
+    def __str__(self) -> str:
+        return f"credential for {self.source_id}"
