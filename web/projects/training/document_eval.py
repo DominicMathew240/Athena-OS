@@ -42,10 +42,8 @@ from decimal import Decimal, InvalidOperation
 from fractions import Fraction
 from typing import Any
 
-from django.core.exceptions import ValidationError
-
-from ..models import DatasetVersion, Project
 from ..modalities.document import normalize_cell, parse_fields
+from ..models import DatasetVersion, Project
 
 SCHEMA = "athena.document-comparison/1"
 #: Two numbers closer than one part in ten thousand are the same number (float noise, not a

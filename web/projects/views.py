@@ -509,7 +509,13 @@ def _update_project_labels(request: HttpRequest, project_id) -> JsonResponse:
 @require_http_methods(["GET", "POST"])
 def project_assets(request: HttpRequest, project_id) -> JsonResponse:
     project = get_object_or_404(Project, id=project_id)
-    plugin = get_plugin(project.modality)
+    # Uploads follow the modality's own plugin, EXCEPT when the project's recipe asks for a
+    # different annotation style on the same modality (document-fields on text: a document
+    # table is not a text,label CSV); then the recipe's plugin validates the file instead,
+    # the same dispatch annotations use (see projects.annotations.annotation_plugin).
+    from .annotations import annotation_plugin
+
+    plugin = annotation_plugin(project) or get_plugin(project.modality)
     if plugin is None:
         # A data kind with no registered plugin. The refusal is plain language on purpose.
         return JsonResponse({"error": UnsupportedModalityError(project.modality).message}, status=400)
