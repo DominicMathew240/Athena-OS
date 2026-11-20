@@ -1,16 +1,14 @@
 import { useRef, useState } from "react";
 import { Icon } from "./icons.jsx";
 import {
+  EDGE_BENEFITS,
   FUSION_SCENARIOS,
   GALLERY_ITEMS,
   LIFECYCLE_RESOURCES,
   OUTCOMES,
   OUTCOME_TABS,
-  PILLARS,
   STAGES,
   STAGE_LIST,
-  VISION_WORKFLOW_HIGHLIGHTS,
-  WAVES,
 } from "./studioData.js";
 import { StudioPreview } from "./StudioPreview.jsx";
 import { FusionSchematic } from "./FusionSchematic.jsx";
@@ -58,17 +56,17 @@ export function MultimodalStudio({ portfolioUrl }) {
           <div className="lp-head lp-head--split lp-reveal">
             <div>
               <p className="lp-eyebrow">
-                <b>04</b> Console recipes · 6 merged
+                <b>04</b> Training studio
               </p>
               <h2 className="lp-h2" id="teach-title">
                 What do you want Athena to <em>learn?</em>
               </h2>
             </div>
-            <p className="lp-sub">One guided Project to Approve lifecycle across Vision, Audio, Handwriting, Spreadsheets, Text, and Signals — all synthetic-verified on main.</p>
+            <p className="lp-sub">One guided workflow across photos, audio clips, handwriting, spreadsheets, text logs, and sensor signals — no coding required.</p>
           </div>
 
           <div className="lp-outcome-shell lp-reveal" id="lp-outcome-shell" ref={shellRef}>
-            <div className="lp-outcome-tabs" id="lp-outcome-tabs" role="tablist" aria-label="Training recipes">
+            <div className="lp-outcome-tabs" id="lp-outcome-tabs" role="tablist" aria-label="Training data types">
               {OUTCOME_TABS.map((t, i) => (
                 <button
                   key={t.key}
@@ -118,7 +116,7 @@ export function MultimodalStudio({ portfolioUrl }) {
               <div className="lp-studio-visualizer" id="lp-studio-visualizer">
                 <div className="lp-vis-bar">
                   <span className="lp-vis-mode" id="lp-vis-mode">{STAGES[stage]}</span>
-                  <span className="lp-vis-recipe-id">{data.recipeKey}</span>
+                  <span className="lp-vis-recipe-id">{data.backend}</span>
                   <span className="lp-vis-split-pill">{data.split}</span>
                 </div>
                 <StudioPreview
@@ -144,12 +142,12 @@ export function MultimodalStudio({ portfolioUrl }) {
                     <dd id="lp-outcome-quality">{data.quality}</dd>
                   </div>
                   <div>
-                    <dt>Recipe &amp; backend</dt>
+                    <dt>How it works</dt>
                     <dd id="lp-outcome-recipe">{data.recipe}</dd>
                   </div>
                 </dl>
                 <div className="lp-outcome-foot">
-                  <span className="lp-vis-split" id="lp-vis-split">Synthetic-verified · Real-world quality unmeasured</span>
+                  <span className="lp-vis-split" id="lp-vis-split">Tested on synthetic data · Human approval before live use</span>
                   <a className="lp-btn lp-btn--primary" id="lp-outcome-cta" href={portfolioUrl} data-testid="landing-outcome-explore">
                     Explore on portfolio
                     <Icon name="arrow" size={16} />
@@ -159,7 +157,7 @@ export function MultimodalStudio({ portfolioUrl }) {
             </div>
           </div>
 
-          <div className="lp-mod-gallery lp-reveal" id="lp-modality-gallery" data-testid="landing-modality-gallery" aria-label="Merged training recipes in Athena console">
+          <div className="lp-mod-gallery lp-reveal" id="lp-modality-gallery" data-testid="landing-modality-gallery" aria-label="All six training workflows in Athena OS">
             {GALLERY_ITEMS.map((item) => (
               <button
                 key={item.key}
@@ -183,13 +181,13 @@ export function MultimodalStudio({ portfolioUrl }) {
             ))}
           </div>
 
-          <ol className="lp-six-steps lp-reveal" data-testid="landing-six-steps" aria-label="Six consistent training steps across all modalities">
-            <li className="lp-six-step"><span className="lp-step-n">01</span><h3>Goal</h3><p>Pick a TaskRecipe.</p></li>
-            <li className="lp-six-step"><span className="lp-step-n">02</span><h3>Data</h3><p>Upload &amp; SHA-256 check.</p></li>
-            <li className="lp-six-step"><span className="lp-step-n">03</span><h3>Label</h3><p>Review before freeze.</p></li>
-            <li className="lp-six-step"><span className="lp-step-n">04</span><h3>Snapshot</h3><p>Immutable 80/10/10.</p></li>
-            <li className="lp-six-step"><span className="lp-step-n">05</span><h3>Train</h3><p>Worker + held-out eval.</p></li>
-            <li className="lp-six-step"><span className="lp-step-n">06</span><h3>Approve</h3><p>Gate, check &amp; rollback.</p></li>
+          <ol className="lp-six-steps lp-reveal" data-testid="landing-six-steps" aria-label="Consistent training steps across all data types">
+            <li className="lp-six-step"><span className="lp-step-n">01</span><h3>Goal</h3><p>Pick a workflow.</p></li>
+            <li className="lp-six-step"><span className="lp-step-n">02</span><h3>Data</h3><p>Add &amp; verify files.</p></li>
+            <li className="lp-six-step"><span className="lp-step-n">03</span><h3>Review</h3><p>Accept labels first.</p></li>
+            <li className="lp-six-step"><span className="lp-step-n">04</span><h3>Snapshot</h3><p>Lock 80/10/10 split.</p></li>
+            <li className="lp-six-step"><span className="lp-step-n">05</span><h3>Train</h3><p>Check real errors.</p></li>
+            <li className="lp-six-step"><span className="lp-step-n">06</span><h3>Approve</h3><p>Sign off or roll back.</p></li>
           </ol>
         </div>
       </section>
@@ -199,90 +197,32 @@ export function MultimodalStudio({ portfolioUrl }) {
           <div className="lp-head lp-head--split lp-reveal">
             <div>
               <p className="lp-eyebrow">
-                <b>05</b> Architecture &amp; roadmap
+                <b>05</b> Multi-signal fusion &amp; edge
               </p>
               <h2 className="lp-h2" id="roadmap-title">
-                One shared engine across <em>every modality.</em>
+                Combine sensors. Run <em>right on site.</em>
               </h2>
             </div>
-            <p className="lp-sub">Registry-driven recipes and modality plugins share one frozen snapshot, worker contract, and approval lifecycle.</p>
-          </div>
-
-          <div className="lp-arch lp-reveal" aria-label="Athena OS multimodal architecture">
-            <div className="lp-arch-pillars">
-              {PILLARS.map((p) => (
-                <div key={p.title} className="lp-pillar">
-                  <span className={`lp-prio lp-prio--${p.tone}`}>{p.prio}</span>
-                  <strong>{p.title}</strong>
-                  <span>{p.sub}</span>
-                </div>
-              ))}
-            </div>
-            <div className="lp-arch-layer lp-arch-layer--engine">
-              <p className="lp-arch-label">Shared Lifecycle Contract (Wave 0 Complete)</p>
-              <div className="lp-lifecycle-chips" aria-label="Shared training lifecycle resources">
-                {LIFECYCLE_RESOURCES.map((res) => (
-                  <span key={res}>{res}</span>
-                ))}
-              </div>
-            </div>
-          </div>
-
-          <div className="lp-waves lp-reveal" aria-label="Delivery waves and current merge status">
-            {WAVES.map((w) => (
-              <article key={w.tag} className={`lp-wave${w.focus ? " lp-wave--focus" : ""}`}>
-                <div className="lp-wave-top">
-                  <span className="lp-wave-tag">{w.tag}</span>
-                  <span className={`lp-prio lp-prio--${w.tone}`}>{w.state}</span>
-                </div>
-                <h3>{w.title}</h3>
-                <p><code>{w.code}</code></p>
-              </article>
-            ))}
-          </div>
-
-          <div className="lp-vision-ops lp-reveal" aria-label="Vision operations workflow status">
-            <div className="lp-vision-ops-head">
-              <div>
-                <p className="lp-arch-label">Vision operations workstream · 18 of 65 tasks locally verified</p>
-                <h3>Guided setup, view health, frame replay &amp; bound tracking</h3>
-              </div>
-              <span className="lp-outcome-status" data-tone="warn">Live cameras (T10) &amp; crossings (T25) remain open</span>
-            </div>
-            <div className="lp-vision-ops-grid">
-              {VISION_WORKFLOW_HIGHLIGHTS.map((item) => (
-                <div key={item.id} className="lp-vision-op-item">
-                  <div className="lp-vision-op-top">
-                    <code>{item.id}</code>
-                    <span>{item.state}</span>
-                  </div>
-                  <p>{item.label}</p>
-                </div>
-              ))}
-            </div>
+            <p className="lp-sub">A single camera or sensor can cry wolf. Combining audio, thermal, vision, and machine telemetry at your local edge box cuts false alarms and keeps working offline.</p>
           </div>
 
           <div className="lp-fusion-showcase lp-reveal" id="lp-fusion-showcase" data-testid="landing-fusion-showcase">
             <div className="lp-fusion-head">
               <div>
-                <p className="lp-arch-label">Wave 4 · Architecture concept</p>
-                <h3 className="lp-fusion-title">Cross-modal stream convergence</h3>
+                <p className="lp-arch-label">How end-product fusion &amp; edge helps teams</p>
+                <h3 className="lp-fusion-title">Pick an industrial scenario</h3>
               </div>
-              <div className="lp-fusion-tabs" id="lp-fusion-tabs" role="group" aria-label="Preview Wave 4 multimodal fusion pipelines">
-                {[
-                  ["motor", "Audio + Signal + Table"],
-                  ["safety", "Video + Pose + PLC"],
-                  ["thermal", "Thermal + RGB + Log"],
-                ].map(([k, lbl]) => (
+              <div className="lp-fusion-tabs" id="lp-fusion-tabs" role="group" aria-label="Preview real-world fusion and edge scenarios">
+                {Object.values(FUSION_SCENARIOS).map((sc) => (
                   <button
-                    key={k}
+                    key={sc.id}
                     type="button"
                     className="lp-fusion-tab"
-                    data-fusion={k}
-                    aria-pressed={fusion === k}
-                    onClick={() => setFusion(k)}
+                    data-fusion={sc.id}
+                    aria-pressed={fusion === sc.id}
+                    onClick={() => setFusion(sc.id)}
                   >
-                    {lbl}
+                    {sc.tab}
                   </button>
                 ))}
               </div>
@@ -291,10 +231,31 @@ export function MultimodalStudio({ portfolioUrl }) {
             <FusionSchematic scenario={fusionData} />
           </div>
 
+          <div className="lp-edge-strip lp-reveal" aria-label="How edge deployment works on site">
+            {EDGE_BENEFITS.map((item) => (
+              <article key={item.step} className="lp-edge-card">
+                <span className="lp-edge-step">{item.step}</span>
+                <h3>{item.title}</h3>
+                <p>{item.detail}</p>
+              </article>
+            ))}
+          </div>
+
+          <div className="lp-arch lp-reveal" aria-label="Shared lifecycle from upload to field deployment">
+            <div className="lp-arch-layer lp-arch-layer--engine">
+              <p className="lp-arch-label">One simple lifecycle across every data type</p>
+              <div className="lp-lifecycle-chips" aria-label="Shared training and deployment steps">
+                {LIFECYCLE_RESOURCES.map((res) => (
+                  <span key={res}>{res}</span>
+                ))}
+              </div>
+            </div>
+          </div>
+
           <div className="lp-roadmap-foot">
-            <p className="lp-roadmap-note">Merged status reflects main on 20 November 2026 (synthetic-verified; real-data vertical &amp; usability checks pending).</p>
+            <p className="lp-roadmap-note">Multi-sensor fusion &amp; edge node bundles are in active development on top of the merged single-modality models.</p>
             <a className="lp-btn lp-btn--outline lp-btn--sm" href="#docs">
-              Open Docs reference
+              View technical docs
               <Icon name="arrow" size={15} />
             </a>
           </div>

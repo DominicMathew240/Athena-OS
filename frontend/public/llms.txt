@@ -6,11 +6,10 @@
 - [Portfolio](https://dominic.strateticsxp.com/): Ts. Dominic Mathew, Co-Founder and CTO of Stratetics Experts
 - [Inspec-Ther](https://inspec-ther.com/): AI-driven thermal inspection of solar PV assets
 
-## Capabilities & Roadmap (20 November 2026)
-- Merged in console (synthetic-verified): plain-language inspection of photos and 6-frame video clips, plus six training recipes — Vision Detection (`torchvision-fasterrcnn` / `dfine-coco`), Acoustic Classification (`audio-wav-cnn`), Handwriting OCR (`ocr-trocr`, serving backend-level), Tabular Prediction (`tabular-sklearn`), Text Classification (`text-sklearn`), and Signal Classification (`signal-sklearn`)
-- Vision workflows: 18 of 65 tasks locally verified (`T01–T14`, `T19–T22`) including T06 guided setup, T12 view health, T13 reproducible replay, T14 line direction, and T21–T22 bound detector + per-session tracking
-- Multimodal Roadmap (Waves 0–4): Wave 0 complete, Wave 1 all 4 slices merged (gate open), Wave 2 text & signal classification halves merged, Wave 3 Pose & Gestures, and Wave 4 Cross-modal Fusion
-- Shared Resource Lifecycle: Project -> Task -> Observation -> Annotation -> Dataset Version -> Training Run -> Model Version -> Evaluation -> Deployment -> Feedback
+## Capabilities & Edge Deployment
+- Ready to train & inspect: plain-language inspection of photos and 6-frame video clips, plus six training workflows — Vision Detection, Acoustic Clip Classification, Handwriting OCR, Tabular Spreadsheet Prediction, Text Classification, and Sensor Signal Classification
+- Multi-Signal Fusion & Edge Deployment: combine audio, thermal IR, RGB photos, PLC state, and telemetry on local plant servers or edge boxes with missing-sensor fallback and human sign-off
+- Shared Lifecycle: Create Project -> Add Data -> Label & Review -> Freeze Snapshot -> Train -> Approve & Deploy
 - Built-in open Qwen vision model or any OpenAI-compatible endpoint, running on local CPU/GPU or optional Athena Nodes
 
 ## Athena Vision

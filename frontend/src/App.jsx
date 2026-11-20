@@ -15,14 +15,14 @@ import welding from "./assets/landing/welding.jpg";
 const PORTFOLIO = site.founder.url;
 const STORAGE_KEY = "color-scheme";
 const TICKER = [
-  "Vision detection (OS-VIS-001)",
-  "Acoustic WAV clips (OS-AUD-001)",
-  "Handwriting OCR (TrOCR)",
-  "Tabular prediction (CSV/XLSX)",
-  "Text classification (OS-NLP-001)",
-  "Signal windows (OS-SIG-001)",
-  "Vision ops · 18 of 65 verified",
-  "Frozen 80/10/10 snapshots",
+  "Corrosion & defect checks",
+  "Motor fault acoustics",
+  "Handwritten maintenance logs",
+  "Spreadsheet predictions",
+  "Work-order sorting",
+  "Sensor signal monitoring",
+  "Multi-signal fusion",
+  "Offline edge deployment",
   "Human approval gates",
   "Self-hosted Qwen or BYO AI",
 ];
@@ -441,7 +441,7 @@ export default function App() {
               <li><a href="#use-cases" data-testid="landing-nav-use-cases" onClick={closeMenu}>Use cases</a></li>
               <li><a href="#how" data-testid="landing-nav-how" onClick={closeMenu}>Workflow</a></li>
               <li><a href="#teach-workflow" data-testid="landing-nav-teach" onClick={closeMenu}>Studio</a></li>
-              <li><a href="#roadmap" data-testid="landing-nav-roadmap" onClick={closeMenu}>Roadmap</a></li>
+              <li><a href="#roadmap" data-testid="landing-nav-roadmap" onClick={closeMenu}>Fusion &amp; Edge</a></li>
               <li><a href="#docs" data-testid="landing-nav-docs" onClick={closeMenu}>Docs</a></li>
               <li><a href="#founder" onClick={closeMenu}>Founder</a></li>
               <li><a href="#faq" onClick={closeMenu}>FAQ</a></li>
@@ -475,22 +475,22 @@ export default function App() {
                 Build, review, test, and approve models across photos, audio clips, handwriting, spreadsheets, text, and signals — no coding required.
               </p>
               <p className="lp-lead-note">
-                Inspect photos or 6-frame clips today (not a complete crossing count or live monitor). Six training recipes merged on synthetic data; vision workflows at 18 of 65 tasks.
+                Inspect photos or 6-frame clips today (not a complete crossing count or live monitor), and train custom models across six data types on your own hardware.
               </p>
               <div className="lp-cta-row">
                 <a className="lp-btn lp-btn--primary lp-btn--lg" href="#teach-workflow" data-testid="landing-hero-cta-button">
-                  Explore 6 merged recipes
+                  Explore the studio
                   <Icon name="arrow" size={18} />
                 </a>
-                <a className="lp-btn lp-btn--line lp-btn--lg" href="#docs" data-testid="landing-hero-secondary-button">
-                  Read current docs
+                <a className="lp-btn lp-btn--line lp-btn--lg" href="#roadmap" data-testid="landing-hero-secondary-button">
+                  See fusion &amp; edge
                   <Icon name="arrow" size={16} />
                 </a>
               </div>
               <ul className="lp-proof" aria-label="At a glance">
-                <li><Icon name="layers" size={16} /><strong>6 recipes</strong> merged (Waves 0–2)</li>
+                <li><Icon name="layers" size={16} /><strong>6 data types</strong> ready to train</li>
                 <li><Icon name="cpu" size={16} /><strong>Qwen</strong> or your own AI</li>
-                <li><Icon name="server" size={16} />Self-hosted · Apache-2.0</li>
+                <li><Icon name="server" size={16} />Offline edge · Apache-2.0</li>
               </ul>
             </div>
             <Demo />

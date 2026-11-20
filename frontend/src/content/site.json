@@ -31,7 +31,7 @@
   "faq": [
     {
       "q": "What is Athena OS?",
-      "a": "Athena OS is an open-source, self-hosted AI training and inspection platform. Today you can inspect photos or 6-frame clips in plain words and train across six merged recipes on synthetic data — vision detection, audio classification, handwriting OCR, spreadsheets, text classification, and signal classification — while Wave 3–4 motion and fusion expand the roadmap."
+      "a": "Athena OS is an open-source, self-hosted AI training and inspection platform. Today you can inspect photos or 6-frame clips in plain words and train custom models across images, audio clips, handwriting, spreadsheets, text, and sensor signals — with multi-sensor fusion and edge deployment designed to run right on your site."
     },
     {
       "q": "Do I need to write code?",
