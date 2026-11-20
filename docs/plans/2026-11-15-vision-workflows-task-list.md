@@ -1,6 +1,6 @@
 # Athena OS computer vision implementation task list
 
-Date: 15 November 2026. Status: proposed backlog under implementation; **18 of 65 tasks are locally verified (T01–T14, T19–T21)**, but release publication, the runtime execution of live video (T10) and release gates remain incomplete. Under the [17 November 2026 Multimodal Platform Roadmap](2026-11-17-multimodal-platform-roadmap.md), T01–T65 remain preserved and are placed into OS Core (`T06–T08`, `T32–T40`, `T51–T65`), the Video Operations / Vision Domain Pack (`T09–T31`), and industry operations (`T41–T50`). Read the [workflow and build plan](2026-11-15-vision-workflows-build-plan.md) for evidence, screen layouts, scenario details and release criteria.
+Date: 15 November 2026. Status: proposed backlog under implementation; **16 of 65 tasks are locally verified (T01–T09, T11–T14, T19–T21)**, but release publication, the runtime execution of live video (T10) and release gates remain incomplete. Under the [17 November 2026 Multimodal Platform Roadmap](2026-11-17-multimodal-platform-roadmap.md), T01–T65 remain preserved and are placed into OS Core (`T06–T08`, `T32–T40`, `T51–T65`), the Video Operations / Vision Domain Pack (`T09–T31`), and industry operations (`T41–T50`). Read the [workflow and build plan](2026-11-15-vision-workflows-build-plan.md) for evidence, screen layouts, scenario details and release criteria.
 
 ## Implementation checkpoint — 16 November 2026
 

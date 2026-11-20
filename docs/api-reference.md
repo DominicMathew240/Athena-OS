@@ -757,9 +757,10 @@ View: `api_recipes` (`web/projects/views.py`); registry: `web/projects/tasks/__i
 registry that drives the guided new-project form: `{"recipes": [recipe.as_dict(), …]}` with `Cache-Control: no-store`.
 Each recipe carries `key`, `title`, `modality`, `summary`, `annotation_kind`, `labels_help`, `available` and
 `unavailable_reason`. Unavailable recipes are listed too (the console shows them as "Coming soon"). On this tree there
-are four: `vision-detection` (image, boxes), `audio-classification` (audio, `clip_labels`), `handwriting-ocr`
-(image, `transcripts`) — all three `available: true` — and `tabular-prediction` (table, `available: false`, "coming
-soon"; its slice is in flight). The registry is extensible without touching core: `settings.RECIPES`
+are six, all `available: true`: `vision-detection` (image, boxes), `audio-classification` (audio, `clip_labels`),
+`handwriting-ocr` (image, `transcripts`), `tabular-prediction` (table, `table_target`), `text-classification`
+(text, `text_dataset`) and `signal-classification` (time series, `signal_dataset`). The registry is extensible
+without touching core: `settings.RECIPES`
 (`"module:attribute"` strings) or `register_recipe()`.
 
 ### `POST /api/projects`: the `recipe` field
