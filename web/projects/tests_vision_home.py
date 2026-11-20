@@ -246,7 +246,7 @@ class LandingCoversOnFrontViewTests(TestCase):
                     "Athena Forge",
                     "Athena Lab",
                     "Athena Nodes",
-                    "16 of 65 tasks locally verified",
+                    "19 of 65 tasks locally verified",
                     "Text classification and signal classification merged",
                     "Event F1, missed events, false alarms per hour",
                 ):
