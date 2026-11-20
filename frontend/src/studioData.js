@@ -9,7 +9,7 @@ export const OUTCOMES = {
   vision: {
     badge: "P0 · Locally verified slice + Wave 1 MVP",
     title: "Object & Defect Detection",
-    status: "Verified core + prototype training",
+    status: "Merged end to end (synthetic-verified)",
     filename: "weld-seam-station04.jpg · 1920 × 1080",
     split: "80% Train · 10% Val · 10% Held-out",
     data: "JPEG, PNG or WebP pictures + boxes",
@@ -30,7 +30,7 @@ export const OUTCOMES = {
   audio: {
     badge: "P0 · Wave 1 Multi-task MVP",
     title: "Acoustic Event Detection",
-    status: "Proposed roadmap recipe",
+    status: "Merged in console (synthetic-verified)",
     filename: "pump-bearing-line4.wav · 48 kHz · 12.0s",
     split: "80% Train · 10% Val · 10% Held-out",
     data: "WAV recordings + event labels",
@@ -51,7 +51,7 @@ export const OUTCOMES = {
   ocr: {
     badge: "P0 · Wave 1 Multi-task MVP",
     title: "Handwriting & Document OCR",
-    status: "Proposed roadmap recipe (Forge TrOCR)",
+    status: "Merged in console (training verified; serving is backend-level)",
     filename: "maintenance-log-408B.png · Handwritten form",
     split: "80% Train · 10% Val · 10% Held-out",
     data: "Scanned forms + corrected transcripts",
@@ -72,12 +72,12 @@ export const OUTCOMES = {
   documents: {
     badge: "P1 · Wave 2 Language & Documents",
     title: "Document Classification & Extraction",
-    status: "Proposed Wave 2 recipe",
+    status: "Text classification merged; field extraction in progress",
     filename: "shift-incident-2026-11.txt · Work order",
     split: "80% Train · 10% Val · 10% Held-out",
     data: "Text documents + spans, tags or fields",
     quality: "Class F1, confusion analysis and field accuracy",
-    recipe: "OS-NLP-001 / OS-DOC-001 · Classification, NER & fields",
+    recipe: "OS-NLP-001 classification merged · NER & fields to come",
     stageMetrics: {
       raw: [["1,450", "Shift records"], ["4", "Doc categories"], ["Deduped", "Split safe"]],
       label: [["3,120", "Entity spans"], ["4", "Field schemas"], ["100%", "Human verified"]],
@@ -114,7 +114,7 @@ export const OUTCOMES = {
   spreadsheets: {
     badge: "P0 · Wave 1 Multi-task MVP",
     title: "Tabular Prediction from Spreadsheets",
-    status: "Proposed roadmap recipe (Forge PR #79)",
+    status: "Merged in console (synthetic-verified)",
     filename: "compressor-telemetry-q3.csv · 12 columns",
     split: "80% Train · 10% Val · 10% Held-out",
     data: "Excel (.xlsx) or CSV rows + target column",
