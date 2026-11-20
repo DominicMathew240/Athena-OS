@@ -112,8 +112,14 @@
 
     /* --- Undo/redo (T15) --------------------------------------------------
        Every deliberate geometry change (a reversal, a run of nudges, a settled
-       field edit, clearing) pushes one snapshot; free typing alone does not, so
-       the stack mirrors the actions a person would name, not every keystroke. */
+       editing run in the fields, clearing) pushes one snapshot; free typing
+       alone does not, so the stack mirrors the actions a person would name,
+       not every keystroke. An "editing run" is the field edits and nudges made
+       between two explicit actions; it settles when focus leaves the line
+       editor's own controls, when Enter is pressed, or when the next explicit
+       action begins. */
+    const editorControls = new Set([...inputs, undoButton, redoButton, selectStart, selectEnd, ...Object.values(moveButtons), canvas].filter(Boolean));
+
     function endBatch() {
       if (history.batchTimer) { clearTimeout(history.batchTimer); history.batchTimer = null; }
       history.batchFrom = null;
@@ -124,6 +130,11 @@
       if (history.undo.length > 100) history.undo.shift();
       history.redo = [];
       renderHistoryButtons();
+    }
+
+    function settleRun() {
+      if (history.editFrom != null && !sameValues(history.editFrom, values())) pushHistory(history.editFrom);
+      history.editFrom = null;
     }
 
     function rememberBase() {
@@ -159,14 +170,18 @@
     }
 
     function doUndo() {
-      if (busy || !canEdit() || !canUndo()) return;
+      if (busy || !canEdit()) return;
+      settleRun();
+      if (!canUndo()) return;
       history.redo.push(values());
       restoreGeometry(history.undo.pop());
       status.textContent = "Undone. " + (dirty() ? "The line now differs from what is saved." : "The line is back to what is saved.");
     }
 
     function doRedo() {
-      if (busy || !canEdit() || !canRedo()) return;
+      if (busy || !canEdit()) return;
+      settleRun();
+      if (!canRedo()) return;
       history.undo.push(values());
       restoreGeometry(history.redo.pop());
       status.textContent = "Redone. " + (dirty() ? "The line now differs from what is saved." : "The line is back to what is saved.");
@@ -192,8 +207,8 @@
         + (validPoint(x, y) ? ` at ${Number(x.toFixed(3))}% from the left, ${Number(y.toFixed(3))}% from the top.` : " is not placed yet. Enter its position in the fields first.");
     }
 
-    if (selectStart) selectStart.addEventListener("click", () => chooseEndpoint(0));
-    if (selectEnd) selectEnd.addEventListener("click", () => chooseEndpoint(1));
+    if (selectStart) selectStart.addEventListener("click", () => { settleRun(); chooseEndpoint(0); });
+    if (selectEnd) selectEnd.addEventListener("click", () => { settleRun(); chooseEndpoint(1); });
 
     /* Nudge the chosen endpoint by a step, clamped to the picture. Presses
        close together collapse into one undo entry, so undo means "back before
@@ -206,6 +221,7 @@
         error.textContent = `Place the ${chosen === 0 ? "start" : "end"} point first: enter both of its position fields before nudging.`;
         return;
       }
+      settleRun();
       if (!history.batchFrom) {
         history.batchFrom = values();
         pushHistory(history.batchFrom);
@@ -224,13 +240,12 @@
     for (const [name, button] of Object.entries(moveButtons)) {
       if (!button) continue;
       button.addEventListener("click", () => { const [dx, dy] = NUDGE[name]; nudge(dx * NUDGE_FINE, dy * NUDGE_FINE); });
-      button.addEventListener("keydown", event => { arrowNudge(event); });
-      button.addEventListener("blur", endBatch);
+      button.addEventListener("keydown", arrowNudge);
     }
 
     /* Arrow keys nudge from three places: the nudge buttons and the canvas
        (where Shift chooses the coarse step), and the coordinate fields
-       themselves. */
+       themselves, nudging whichever endpoint the field belongs to. */
     function arrowNudge(event) {
       const map = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
       const step = map[event.key];
@@ -242,22 +257,53 @@
     }
 
     canvas.addEventListener("keydown", arrowNudge);
+    inputs.slice(0, 4).forEach((input, index) => {
+      input.addEventListener("keydown", event => {
+        const map = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+        if (!map[event.key]) return;
+        event.preventDefault();
+        const size = event.shiftKey ? NUDGE_COARSE : NUDGE_FINE;
+        nudgeInField(index, map[event.key][0] * size, map[event.key][1] * size);
+      });
+    });
+    /* Nudging inside a field moves that field's endpoint through the same
+       clamped path as the buttons and the canvas, so all three entry points
+       round-trip. */
+    function nudgeInField(index, dx, dy) {
+      chosen = index < 2 ? 0 : 1;
+      renderChosenButtons();
+      const x = coords()[index], y = coords()[index + 1];
+      if (!validPoint(x, y)) {
+        error.textContent = "Enter both position fields of this endpoint before nudging with the arrow keys.";
+        return;
+      }
+      if (history.editFrom == null) history.editFrom = values();
+      inputs[index].value = NUDGE_ROUNDED(Math.max(0, Math.min(100, x + dx)));
+      inputs[index + 1].value = NUDGE_ROUNDED(Math.max(0, Math.min(100, y + dy)));
+      error.textContent = "";
+      status.textContent = `${chosen === 0 ? "Start" : "End"} point moved to ${Number(inputs[index].value)}% from the left, ${Number(inputs[index + 1].value)}% from the top.`;
+      paint();
+      paintPreview();
+      refreshSummary();
+    }
 
-    /* Field edits become one undo entry each: entering a field remembers the
-       state before it, leaving it (or pressing Enter) commits the change. */
+    /* Editing runs: entering a field (or the canvas) opens one, leaving the
+       line editor's controls settles it into a single undo entry. Enter settles
+       immediately too. */
     inputs.forEach((input, index) => {
       input.addEventListener("focus", () => {
         if (index < 4) { chosen = index < 2 ? 0 : 1; renderChosenButtons(); }
         if (history.editFrom == null) history.editFrom = values();
       });
-      const settle = () => {
-        if (history.editFrom != null && !sameValues(history.editFrom, values())) pushHistory(history.editFrom);
-        history.editFrom = null;
-      };
-      input.addEventListener("blur", settle);
-      input.addEventListener("keydown", event => {
-        if (event.key === "Enter") { event.preventDefault(); settle(); }
-      });
+    });
+    canvas.addEventListener("focus", () => { if (history.editFrom == null) history.editFrom = values(); });
+    canvas.addEventListener("blur", settleRun);
+    for (const control of editorControls) control.addEventListener("blur", event => {
+      // Only settle when focus is actually leaving the editor's controls.
+      if (!event.relatedTarget || !editorControls.has(event.relatedTarget)) settleRun();
+    });
+    for (const input of inputs) input.addEventListener("keydown", event => {
+      if (event.key === "Enter") { event.preventDefault(); settleRun(); }
     });
 
     /* Plain-message validation for the numeric fields, on blur: the browser's
@@ -409,6 +455,7 @@
     }
 
     function load(nextDraft) {
+      const savingSameDraft = draft && nextDraft && draft.id === nextDraft.id;
       draft = nextDraft;
       section.hidden = !draft?.recording;
       const line = draft?.line;
@@ -426,7 +473,18 @@
       previewState.t = 0;
       paint();
       paintPreview();
-      rememberBase();
+      if (savingSameDraft) {
+        // A save of the draft we are already editing: the history base moves to
+        // the newly saved state, but the session's own edits stay undoable —
+        // undo after a save says "the line now differs", never claims to reach
+        // before this session, and redo of the session's work still exists.
+        history.baseState = values();
+        history.editFrom = null;
+        endBatch();
+        renderHistoryButtons();
+      } else {
+        rememberBase();
+      }
       refreshSummary();
     }
 
@@ -514,6 +572,8 @@
             ? "Editor cleared. The saved line stays saved until you save the draft without one."
             : "Line cleared; save the draft to apply.";
         paint(); paintPreview();
+        history.editFrom = null;
+        endBatch();
         if (before.some(value => value !== "")) pushHistory(before);
         refreshSummary();
         if (clear) clear.dispatchEvent(new CustomEvent("athena:line-cleared", { bubbles: true }));
@@ -550,6 +610,7 @@
       inputs[5].value = negative; inputs[6].value = positive;
       dragging = null; error.textContent = "";
       previewState.t = 0;
+      settleRun();
       pushHistory(before);
       status.textContent = "Direction reversed: the start and end points swapped, and the side labels moved with them. Save the draft to keep this change.";
       paint(); paintPreview(); refreshSummary();
