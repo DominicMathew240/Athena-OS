@@ -113,6 +113,32 @@ TEXT_CLASSIFICATION = TaskRecipe(
 
 BUILTIN_RECIPES = (VISION_DETECTION, AUDIO_CLASSIFICATION, HANDWRITING_OCR, TABULAR_PREDICTION, TEXT_CLASSIFICATION)
 
+#: Signal classification (Wave 2, OS-SIG-001 - classification only; forecasting and anomaly
+#: detection are future work): one CSV of labelled series (wide format: a series column, one
+#: value column per time step, a label column), taught by the signal-sklearn backend (window
+#: statistics + a linear classifier). A project created with it can upload its CSV, confirm
+#: the label list, freeze dataset versions and train today.
+SIGNAL_CLASSIFICATION = TaskRecipe(
+    key="signal-classification",
+    title="Tell signal patterns apart",
+    modality="time_series",
+    summary=(
+        "Upload one CSV file of measurement series and their labels, and Athena learns to sort "
+        "new series into those labels. It is checked on series it has never seen."
+    ),
+    annotation_kind="signal_dataset",
+    labels_help=(
+        "For signals, the labels are the values of the file's label column - the kinds of "
+        "series to tell apart. Confirm them after you upload the file."
+    ),
+    available=True,
+)
+
+BUILTIN_RECIPES = (
+    VISION_DETECTION, AUDIO_CLASSIFICATION, HANDWRITING_OCR, TABULAR_PREDICTION,
+    TEXT_CLASSIFICATION, SIGNAL_CLASSIFICATION,
+)
+
 #: The recipe assumed for image projects created before recipes existed, and for any image
 #: project whose caller did not pick one.
 DEFAULT_RECIPE_KEY = "vision-detection"
