@@ -14,7 +14,13 @@ class OperationDraftTests(TestCase):
         self.client.force_login(self.user)
         self.payload = {
             "name": "Shop door",
-            "line": {"start": [0.1, 0.5], "end": [0.9, 0.5], "positive_label": "Entering", "negative_label": "Leaving"},
+            "line": {
+                "start": [0.1, 0.5],
+                "end": [0.9, 0.5],
+                "name": "Front door line",
+                "positive_label": "Entering",
+                "negative_label": "Leaving",
+            },
         }
 
     def test_create_resume_update_and_discard(self):
@@ -273,6 +279,167 @@ class OperationDraftTests(TestCase):
         )
 
 
+class LineDirectionTests(TestCase):
+    """T14: named lines, side labels, explicit reversal and degenerate-line refusal."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user("liner")
+        self.client.force_login(self.user)
+        self.line = {
+            "start": [0.2, 0.5],
+            "end": [0.8, 0.5],
+            "name": "Front door line",
+            "positive_label": "Shop",
+            "negative_label": "Street",
+        }
+
+    def _create(self):
+        response = self.client.post(
+            "/api/operation-drafts", json.dumps({"name": "Shop door", "line": self.line}), content_type="application/json"
+        )
+        self.assertEqual(response.status_code, 201, response.content)
+        return response.json()["draft"]
+
+    def test_degenerate_lines_are_refused_with_plain_messages(self):
+        cases = [
+            ("identical endpoints", [0.5, 0.5], [0.5, 0.5]),
+            ("below the length epsilon", [0.3, 0.3], [0.3, 0.3 + 1e-9]),
+            ("still below, diagonal", [0.2, 0.2], [0.2 + 1e-12, 0.2 + 1e-12]),
+            ("above one end of the frame", [0.0, 0.5], [0.0, 0.5]),
+        ]
+        for label, start, end in cases:
+            with self.subTest(case=label):
+                payload = {"name": "Shop door", "line": {**self.line, "start": start, "end": end}}
+                response = self.client.post(
+                    "/api/operation-drafts", json.dumps(payload), content_type="application/json"
+                )
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(b"too close together", response.content)
+
+    def test_vertical_and_horizontal_lines_are_accepted(self):
+        """Only truly degenerate geometry is refused; axis-aligned lines are fine."""
+        for start, end in ([[0.5, 0.1], [0.5, 0.9]], [[0.1, 0.5], [0.9, 0.5]], [[0.0, 0.0], [0.0, 1.0]]):
+            with self.subTest(start=start, end=end):
+                payload = {"name": "Shop door", "line": {**self.line, "start": start, "end": end}}
+                response = self.client.post(
+                    "/api/operation-drafts", json.dumps(payload), content_type="application/json"
+                )
+                self.assertEqual(response.status_code, 201, response.content)
+                self.assertEqual(response.json()["draft"]["line"]["start"], start)
+                self.assertEqual(response.json()["draft"]["line"]["end"], end)
+
+    def test_line_name_and_side_labels_are_validated_as_names(self):
+        bad_lines = [
+            ("missing name", {k: v for k, v in self.line.items() if k != "name"}),
+            ("blank name", {**self.line, "name": "   "}),
+            ("name too long", {**self.line, "name": "x" * 81}),
+            ("name wrong type", {**self.line, "name": 42}),
+            ("blank side label", {**self.line, "positive_label": " "}),
+            ("side label too long", {**self.line, "negative_label": "y" * 41}),
+            ("side label wrong type", {**self.line, "positive_label": ["Shop"]}),
+        ]
+        for label, line in bad_lines:
+            with self.subTest(case=label):
+                response = self.client.post(
+                    "/api/operation-drafts", json.dumps({"name": "Shop door", "line": line}), content_type="application/json"
+                )
+                self.assertEqual(response.status_code, 400, label)
+        # The schema itself is closed: unknown keys are refused.
+        response = self.client.post(
+            "/api/operation-drafts",
+            json.dumps({"name": "Shop door", "line": {**self.line, "in_side": "Shop"}}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 400)
+        # Existing drafts are updated with the same rules, and labels are trimmed.
+        draft = self._create()
+        trimmed = self.client.put(
+            f"/api/operation-drafts/{draft['id']}",
+            json.dumps(
+                {"name": "Shop door", "line": {**self.line, "name": "  Side door  ", "positive_label": " Shop "}, "revision": draft["revision"]}
+            ),
+            content_type="application/json",
+        )
+        self.assertEqual(trimmed.status_code, 200, trimmed.content)
+        saved = trimmed.json()["draft"]["line"]
+        self.assertEqual(saved["name"], "Side door")
+        self.assertEqual(saved["positive_label"], "Shop")
+
+    def test_reversing_the_direction_persists_and_creates_a_new_draft_version(self):
+        draft = self._create()
+        url = f"/api/operation-drafts/{draft['id']}"
+        versions_url = f"{url}/versions"
+        first = self.client.get(versions_url).json()["versions"][0]
+        self.assertEqual(first["snapshot"]["geometry"]["line"], self.line)
+        # Reversal is a client-side operation that saves the swapped endpoints and
+        # swapped side labels; the stored line is the new ordered pair.
+        reversed_line = {
+            "start": self.line["end"],
+            "end": self.line["start"],
+            "name": self.line["name"],
+            "positive_label": self.line["negative_label"],
+            "negative_label": self.line["positive_label"],
+        }
+        response = self.client.put(
+            url,
+            json.dumps({"name": "Shop door", "line": reversed_line, "revision": draft["revision"]}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        reloaded = self.client.get(url).json()["draft"]
+        self.assertEqual(reloaded["line"], reversed_line)
+        self.assertEqual(reloaded["revision"], draft["revision"] + 1)
+        # The change survives reload by design: the saved row is the reversed pair,
+        # and the immutable history keeps the original direction too.
+        versions = self.client.get(versions_url).json()["versions"]
+        self.assertEqual([item["revision"] for item in versions], [2, 1])
+        self.assertEqual(versions[0]["snapshot"]["geometry"]["line"], reversed_line)
+        self.assertEqual(versions[1]["snapshot"]["geometry"]["line"], self.line)
+
+    def test_reversing_direction_invalidates_the_kept_geometry_pin_and_clears_marks(self):
+        from .models import OperationRecording
+
+        draft = self._create()
+        OperationRecording.objects.create(
+            draft_id=draft["id"],
+            storage_key="operation-recordings/clip.mp4",
+            filename="clip.mp4",
+            sha256="a" * 64,
+            size_bytes=100,
+            width=640,
+            height=480,
+            duration_seconds=12.5,
+        )
+        url = f"/api/operation-drafts/{draft['id']}"
+        events = [{"time": 1.25, "direction": "negative_to_positive"}]
+        with_events = self.client.put(
+            url,
+            json.dumps({"name": "Shop door", "line": self.line, "revision": draft["revision"], "reference_events": events}),
+            content_type="application/json",
+        )
+        self.assertEqual(with_events.status_code, 200, with_events.content)
+        revision = with_events.json()["draft"]["revision"]
+        reversed_line = {
+            "start": self.line["end"],
+            "end": self.line["start"],
+            "name": self.line["name"],
+            "positive_label": self.line["negative_label"],
+            "negative_label": self.line["positive_label"],
+        }
+        response = self.client.put(
+            url,
+            json.dumps({"name": "Shop door", "line": reversed_line, "revision": revision}),
+            content_type="application/json",
+        )
+        self.assertEqual(response.status_code, 200, response.content)
+        # The reversed direction is new geometry: reference crossings against the old
+        # direction do not survive, and the saved row no longer claims the old line.
+        saved = response.json()["draft"]
+        self.assertEqual(saved["line"], reversed_line)
+        self.assertEqual(saved["reference_events"], [])
+        self.assertEqual(self.client.get(url).json()["draft"]["reference_events"], [])
+
+
 class OperationDraftPinTests(TestCase):
     """Component-version pins on drafts: coherent, owner-scoped, frozen into snapshots."""
 
@@ -284,7 +451,13 @@ class OperationDraftPinTests(TestCase):
         self.site = Site.objects.create(created_by=self.user, name="Shop")
         self.source = OperationSource.objects.create(site=self.site, name="Front", kind="recorded_video")
         self.operation = Operation.objects.create(created_by=self.user, site=self.site, source=self.source, name="Door")
-        self.line = {"start": [0.1, 0.5], "end": [0.9, 0.5], "positive_label": "Entering", "negative_label": "Leaving"}
+        self.line = {
+            "start": [0.1, 0.5],
+            "end": [0.9, 0.5],
+            "name": "Front door line",
+            "positive_label": "Entering",
+            "negative_label": "Leaving",
+        }
         self.source_view = self._post(
             f"/api/operations/{self.operation.id}/source-views",
             {

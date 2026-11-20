@@ -90,7 +90,7 @@ class ModelBindingBase(TestCase):
         self.site = Site.objects.create(created_by=self.user, name="Shop")
         self.source = OperationSource.objects.create(site=self.site, name="Front", kind="recorded_video")
         self.operation = Operation.objects.create(created_by=self.user, site=self.site, source=self.source, name="Door")
-        self.line = {"start": [0.1, 0.5], "end": [0.9, 0.5], "positive_label": "Entering", "negative_label": "Leaving"}
+        self.line = {"start": [0.1, 0.5], "end": [0.9, 0.5], "name": "Front door line", "positive_label": "Entering", "negative_label": "Leaving"}
 
     def _url(self, operation=None):
         return f"/api/operations/{(operation or self.operation).id}/model-bindings"

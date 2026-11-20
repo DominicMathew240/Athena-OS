@@ -10,6 +10,12 @@
 .replay-toggle { display: inline-flex; align-items: center; gap: .45rem; font-size: 14px; color: var(--c-text-2); cursor: pointer; }
 .line-canvas { display: block; width: 100%; max-width: 48rem; height: auto; margin: 1rem 0; cursor: crosshair; background: #17202a; }
 .line-fields { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 12rem), 1fr)); gap: .75rem; }
+/* Line direction and crossing preview (T14). */
+.line-direction { margin: 1rem 0; padding: 1rem; border: 1px solid var(--c-line-strong); border-radius: .75rem; }
+.line-direction .a-h3, .line-preview .a-h3 { margin-top: 0; }
+.line-preview { margin: 1rem 0; padding: 1rem; border: 1px solid var(--c-line-strong); border-radius: .75rem; }
+.line-preview-canvas { display: block; width: 100%; max-width: 24rem; height: auto; background: #17202a; border-radius: .5rem; }
+.line-preview-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0 0; }
 .reference-event-editor { margin: 1rem 0; padding: 1rem; border: 1px solid var(--c-line-strong); border-radius: .75rem; }
 .reference-event-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 #reference-event-list { display: grid; gap: .5rem; padding-left: 1.5rem; }
