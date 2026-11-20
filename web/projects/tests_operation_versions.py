@@ -85,7 +85,13 @@ class OperationComponentVersionTests(TestCase):
                 }
             },
         ).json()["source_view"]
-        line = {"start": [0.1, 0.5], "end": [0.9, 0.5], "positive_label": "In", "negative_label": "Out"}
+        line = {
+            "start": [0.1, 0.5],
+            "end": [0.9, 0.5],
+            "name": "Front door line",
+            "positive_label": "In",
+            "negative_label": "Out",
+        }
         url = f"/api/operations/{self.operation.id}/geometry-versions"
         response = self.post(url, {"source_view_version_id": source_view["id"], "geometry": {"line": line}})
         self.assertEqual(response.status_code, 201, response.content)
@@ -94,9 +100,85 @@ class OperationComponentVersionTests(TestCase):
         self.assertEqual(str(saved.source_view_version_id), source_view["id"])
         self.assertEqual(geometry["source_view_version_id"], source_view["id"])
         self.assertEqual(geometry["version"], 1)
+        self.assertEqual(saved.geometry["line"]["name"], "Front door line")
         saved.geometry["line"]["positive_label"] = "Changed"
         with self.assertRaises(ValueError):
             saved.save()
+
+    def test_reversing_the_line_direction_creates_a_new_geometry_version(self):
+        source_view = self.post(
+            f"/api/operations/{self.operation.id}/source-views",
+            {
+                "configuration": {
+                    "width": 640,
+                    "height": 480,
+                    "rotation": 0,
+                    "horizontal_flip": False,
+                    "vertical_flip": False,
+                }
+            },
+        ).json()["source_view"]
+        url = f"/api/operations/{self.operation.id}/geometry-versions"
+        line = {
+            "start": [0.1, 0.5],
+            "end": [0.9, 0.5],
+            "name": "Front door line",
+            "positive_label": "In",
+            "negative_label": "Out",
+        }
+        first = self.post(url, {"source_view_version_id": source_view["id"], "geometry": {"line": line}}).json()[
+            "geometry_version"
+        ]
+        # The reversed direction is the same physical line with the ordered pair and the
+        # side labels swapped; freezing it again must be a NEW immutable version, never an
+        # edit of the first.
+        reversed_line = {
+            "start": line["end"],
+            "end": line["start"],
+            "name": line["name"],
+            "positive_label": line["negative_label"],
+            "negative_label": line["positive_label"],
+        }
+        second = self.post(url, {"source_view_version_id": source_view["id"], "geometry": {"line": reversed_line}}).json()[
+            "geometry_version"
+        ]
+        self.assertNotEqual(second["id"], first["id"])
+        self.assertEqual(second["version"], 2)
+        self.assertNotEqual(second["sha256"], first["sha256"])
+        old = GeometryVersion.objects.get(pk=first["id"])
+        self.assertEqual(old.geometry["line"]["positive_label"], "In", "the first version is immutable")
+        self.assertEqual(GeometryVersion.objects.filter(operation_id=self.operation.id).count(), 2)
+
+    def test_degenerate_geometry_lines_are_refused(self):
+        source_view = self.post(
+            f"/api/operations/{self.operation.id}/source-views",
+            {
+                "configuration": {
+                    "width": 640,
+                    "height": 480,
+                    "rotation": 0,
+                    "horizontal_flip": False,
+                    "vertical_flip": False,
+                }
+            },
+        ).json()["source_view"]
+        url = f"/api/operations/{self.operation.id}/geometry-versions"
+        for label, start, end in [
+            ("identical", [0.5, 0.5], [0.5, 0.5]),
+            ("epsilon", [0.25, 0.25], [0.25, 0.25 + 1e-9]),
+        ]:
+            with self.subTest(case=label):
+                line = {
+                    "start": start,
+                    "end": end,
+                    "name": "Front door line",
+                    "positive_label": "In",
+                    "negative_label": "Out",
+                }
+                response = self.post(url, {"source_view_version_id": source_view["id"], "geometry": {"line": line}})
+                self.assertEqual(response.status_code, 400)
+                self.assertIn(b"too close together", response.content)
+        self.assertFalse(GeometryVersion.objects.exists())
 
     def test_geometry_rejects_foreign_or_incompatible_source_view(self):
         foreign = get_user_model().objects.create_user("foreign-version-owner")
@@ -120,7 +202,13 @@ class OperationComponentVersionTests(TestCase):
             },
             foreign_client,
         ).json()["source_view"]
-        line = {"start": [0, 0], "end": [1, 1], "positive_label": "In", "negative_label": "Out"}
+        line = {
+            "start": [0, 0],
+            "end": [1, 1],
+            "name": "Front door line",
+            "positive_label": "In",
+            "negative_label": "Out",
+        }
         url = f"/api/operations/{self.operation.id}/geometry-versions"
         self.assertEqual(
             self.post(url, {"source_view_version_id": foreign_view["id"], "geometry": {"line": line}}).status_code, 404

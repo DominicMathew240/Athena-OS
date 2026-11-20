@@ -282,10 +282,29 @@ def _policy_configuration(value):
     return value
 
 
-def _operation_line(value):
-    fields = {"start", "end", "positive_label", "negative_label"}
-    if not isinstance(value, dict) or value.keys() != fields:
-        raise ValueError("Provide line endpoints and both direction labels.")
+LINE_MIN_LENGTH = 1e-6
+"""A counting line shorter than this fraction of the picture is degenerate.
+
+Perfectly horizontal and perfectly vertical lines are fine — only a line whose two
+endpoints are so close together that it has no measurable direction is refused."""
+
+
+def _line_labels(value):
+    for key in ("positive_label", "negative_label"):
+        label = value[key]
+        if not isinstance(label, str) or not label.strip() or len(label.strip()) > 40:
+            raise ValueError("Side labels must contain 1 to 40 characters.")
+    name = value.get("name")
+    if not isinstance(name, str) or not name.strip() or len(name.strip()) > 80:
+        raise ValueError("Name the line using up to 80 characters.")
+    return {
+        "name": name.strip(),
+        "positive_label": value["positive_label"].strip(),
+        "negative_label": value["negative_label"].strip(),
+    }
+
+
+def _line_points(value):
     points = []
     for key in ("start", "end"):
         point = value[key]
@@ -302,17 +321,16 @@ def _operation_line(value):
         ):
             raise ValueError("Geometry coordinates must be finite numbers between 0 and 1.")
         points.append(point)
-    if points[0] == points[1]:
-        raise ValueError("The geometry line must have two different endpoints.")
-    for key in ("positive_label", "negative_label"):
-        label = value[key]
-        if not isinstance(label, str) or not label.strip() or len(label.strip()) > 40:
-            raise ValueError("Direction labels must contain 1 to 40 characters.")
-    return {
-        **value,
-        "positive_label": value["positive_label"].strip(),
-        "negative_label": value["negative_label"].strip(),
-    }
+    if math.hypot(points[1][0] - points[0][0], points[1][1] - points[0][1]) < LINE_MIN_LENGTH:
+        raise ValueError("The two line endpoints are too close together to give the line a direction.")
+    return {"start": points[0], "end": points[1]}
+
+
+def _operation_line(value):
+    fields = {"start", "end", "name", "positive_label", "negative_label"}
+    if not isinstance(value, dict) or value.keys() != fields:
+        raise ValueError("Provide the line name, both endpoints and both side labels.")
+    return {**value, **_line_points(value), **_line_labels(value)}
 
 
 def _record_draft_version(row):
@@ -347,32 +365,9 @@ def _validate(payload, *, update=False, recording_duration=None, existing_events
         raise ValueError("Enter a name of up to 120 characters.")
     line = payload.get("line")
     if line is not None:
-        if not isinstance(line, dict) or set(line) != {"start", "end", "positive_label", "negative_label"}:
-            raise ValueError("Provide the line endpoints and both direction labels.")
-        points = []
-        for key in ("start", "end"):
-            point = line[key]
-            if (
-                not isinstance(point, list)
-                or len(point) != 2
-                or any(
-                    isinstance(v, bool) or not isinstance(v, (int, float)) or not 0 <= v <= 1 or not math.isfinite(v)
-                    for v in point
-                )
-            ):
-                raise ValueError("Line coordinates must be numbers between 0 and 1.")
-            points.append(point)
-        if points[0] == points[1]:
-            raise ValueError("The line must have two different endpoints.")
-        for key in ("positive_label", "negative_label"):
-            value = line[key]
-            if not isinstance(value, str) or not value.strip() or len(value.strip()) > 40:
-                raise ValueError("Enter both direction labels, up to 40 characters each.")
-        line = {
-            **line,
-            "positive_label": line["positive_label"].strip(),
-            "negative_label": line["negative_label"].strip(),
-        }
+        # The same geometry rules as a frozen geometry version, including the
+        # degenerate-line refusal; the messages are plain on purpose.
+        line = _operation_line(line)
     line_changed = update and line != existing_line
     if line_changed and existing_line is not None and line is None and payload.get("reference_events"):
         raise ValueError("Save the changed line before clearing its reference crossings.")

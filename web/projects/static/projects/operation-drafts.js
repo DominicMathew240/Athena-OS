@@ -86,7 +86,7 @@
   function syncReplay(draft) {
     const line = draft?.line;
     replay.show(
-      line ? [{ id: "line", label: `${line.positive_label} / ${line.negative_label} line`, kind: "line", start: line.start, end: line.end, positive_label: line.positive_label, negative_label: line.negative_label }] : [],
+      line ? [{ id: "line", label: `${line.name} — ${line.positive_label} / ${line.negative_label} line`, kind: "line", start: line.start, end: line.end, name: line.name, positive_label: line.positive_label, negative_label: line.negative_label }] : [],
       draft?.reference_events || []
     );
   }
@@ -156,7 +156,14 @@
     let line;
     try { line = lineEditor.read(); lineEditor.setError(""); }
     catch (problem) { lineEditor.setError(problem.message); return; }
-    const referenceEventsInvalidated = !!current && JSON.stringify(line) !== JSON.stringify(current.line) && referenceEvents.length > 0;
+    /* Field-order-independent copy of the editor's line, for comparing against the
+     saved one; both sides of the comparison come from read()/the server, which
+     produce the same five keys. */
+  const normalizedLine = line => line && {
+    start: line.start, end: line.end, name: line.name,
+    positive_label: line.positive_label, negative_label: line.negative_label
+  };
+  const referenceEventsInvalidated = !!current && JSON.stringify(normalizedLine(line)) !== JSON.stringify(normalizedLine(current.line)) && referenceEvents.length > 0;
     setBusy(true);
     save.disabled = true;
     name.disabled = true;

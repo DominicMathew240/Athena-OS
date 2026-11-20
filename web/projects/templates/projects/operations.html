@@ -50,17 +50,33 @@
   <p id="recording-error" class="a-error" role="alert"></p>
 </section>
 <section class="a-card step" id="line-section" aria-labelledby="line-heading" hidden>
-  <h2 class="a-h2" id="line-heading">Mark a counting line</h2>
-  <p class="a-help">Pause the recording at a clear view, then choose two points on the picture. The arrow points towards one side of the line; name movement towards and against it. You can also enter the point positions below using percentages from the top-left corner.</p>
+  <h2 class="a-h2" id="line-heading">Draw and name the counting line</h2>
+  <p class="a-help">Pause the recording at a clear view, then choose two points on the picture. Name the line and label the two sides of it — your own names for the sides, like "Street" and "Shop"; Athena does not decide which side means what. The arrow points towards the side you name in "Movement towards the arrow". You can also enter point positions below using percentages from the top-left corner.</p>
   <button class="a-btn" id="line-frame" type="button">Use current video frame</button>
-  <canvas id="line-canvas" class="line-canvas" width="640" height="360" aria-label="Video frame for choosing two line endpoints; use the position fields below for keyboard entry"></canvas>
+  <canvas id="line-canvas" class="line-canvas" width="640" height="360" aria-label="Video frame for choosing two line endpoints; drag either endpoint to move it, or use the position fields below for keyboard entry"></canvas>
   <div class="line-fields">
+    <div class="a-field"><label class="a-label" for="line-name">Line name</label><input class="a-input" id="line-name" maxlength="80" data-needs="label" placeholder="e.g. Front door line"></div>
     <div class="a-field"><label class="a-label" for="line-start-x">Start: left to right (%)</label><input class="a-input" type="number" id="line-start-x" min="0" max="100" step="any" data-needs="label"></div>
     <div class="a-field"><label class="a-label" for="line-start-y">Start: top to bottom (%)</label><input class="a-input" type="number" id="line-start-y" min="0" max="100" step="any" data-needs="label"></div>
     <div class="a-field"><label class="a-label" for="line-end-x">End: left to right (%)</label><input class="a-input" type="number" id="line-end-x" min="0" max="100" step="any" data-needs="label"></div>
     <div class="a-field"><label class="a-label" for="line-end-y">End: top to bottom (%)</label><input class="a-input" type="number" id="line-end-y" min="0" max="100" step="any" data-needs="label"></div>
     <div class="a-field"><label class="a-label" for="line-positive">Movement towards the arrow</label><input class="a-input" id="line-positive" maxlength="40" data-needs="label" placeholder="e.g. Entering"></div>
     <div class="a-field"><label class="a-label" for="line-negative">Movement against the arrow</label><input class="a-input" id="line-negative" maxlength="40" data-needs="label" placeholder="e.g. Leaving"></div>
+  </div>
+  <div class="line-direction" id="line-direction">
+    <h3 class="a-h3">Direction</h3>
+    <p class="a-help">The direction runs from the start point to the end point. Reversing it is one explicit action: the two endpoints swap and your side labels move with them, so the names keep pointing at the same physical sides while the arrow flips.</p>
+    <button class="a-btn" id="line-reverse" type="button" data-needs="label" data-testid="line-reverse">Reverse direction</button>
+  </div>
+  <div class="line-preview" id="line-preview">
+    <h3 class="a-h3">Check the direction with an example</h3>
+    <p class="a-help">This example shows a person walking from the side you named against the arrow, across the line, to the side you named towards the arrow. It is an illustration of your own labelling — not a detection and not a promise about counts.</p>
+    <canvas id="line-preview-canvas" class="line-preview-canvas" width="320" height="180" aria-label="Crossing example: a stepped person walks across the line so you can check which direction the arrow names" data-testid="line-preview-canvas"></canvas>
+    <div class="line-preview-actions">
+      <button class="a-btn" id="line-preview-step" type="button" data-testid="line-preview-step">Step the example</button>
+      <button class="a-btn" id="line-preview-play" type="button" data-testid="line-preview-play">Play the example</button>
+    </div>
+    <p id="line-preview-text" class="a-help" role="status" aria-live="polite"></p>
   </div>
   <div class="reference-event-editor" id="reference-events" aria-labelledby="reference-events-heading">
     <h3 id="reference-events-heading">Mark expected crossings</h3>

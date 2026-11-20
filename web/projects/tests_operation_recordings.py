@@ -117,7 +117,7 @@ class OperationRecordingTests(TransactionTestCase):
     def test_line_is_bound_to_recording_revision_and_cleared_when_removed(self):
         self.assertEqual(self.upload().status_code, 201)
         draft_url = "/api/operation-drafts/" + self.draft["id"]
-        line = {"start": [0.2, 0.5], "end": [0.8, 0.5], "positive_label": "Entering", "negative_label": "Leaving"}
+        line = {"start": [0.2, 0.5], "end": [0.8, 0.5], "name": "Front door line", "positive_label": "Entering", "negative_label": "Leaving"}
         events = [{"time": 0.9, "direction": "negative_to_positive"}]
         response = self.client.put(
             draft_url,

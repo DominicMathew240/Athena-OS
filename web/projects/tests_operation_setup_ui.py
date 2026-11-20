@@ -35,7 +35,7 @@ class DraftAttachTests(TestCase):
         self.user = get_user_model().objects.create_user("attacher")
         grant(self.user, "labeler")
         self.client.force_login(self.user)
-        self.line = {"start": [0.1, 0.5], "end": [0.9, 0.5], "positive_label": "Entering", "negative_label": "Leaving"}
+        self.line = {"start": [0.1, 0.5], "end": [0.9, 0.5], "name": "Front door line", "positive_label": "Entering", "negative_label": "Leaving"}
         _, _, self.operation = make_scope(self.client)
 
     def put(self, path, payload, status=200):
@@ -193,3 +193,37 @@ class ReplaySurfacePageTests(TestCase):
         self.assertIn("replay-surface.js", body)
         self.assertIn("operation-drafts.js", body)
         self.assertLess(body.index("replay-surface.js"), body.index("operation-drafts.js"))
+
+
+class LineDirectionSurfaceTests(TestCase):
+    """T14: the line step names the line, labels its sides, reverses by button and shows a crossing example."""
+
+    def setUp(self):
+        self.user = get_user_model().objects.create_user("line-direction-user")
+        grant(self.user, "labeler")
+        self.client.force_login(self.user)
+
+    def test_line_step_includes_naming_direction_and_crossing_example_surfaces(self):
+        page = self.client.get("/operations")
+        self.assertEqual(page.status_code, 200)
+        for needle in (
+            'id="line-name"',
+            'id="line-reverse"',
+            'data-testid="line-reverse"',
+            'id="line-direction"',
+            'id="line-preview"',
+            'data-testid="line-preview-canvas"',
+            'data-testid="line-preview-step"',
+            'data-testid="line-preview-play"',
+            'id="line-preview-text"',
+            'for="line-positive">Movement towards the arrow',
+            'for="line-negative">Movement against the arrow',
+        ):
+            with self.subTest(needle=needle):
+                self.assertContains(page, needle)
+        # The copy must present side labels as the user's own names, not a promise
+        # about which side is "in".
+        self.assertContains(page, "Athena does not decide which side means what")
+        self.assertContains(page, "not a detection and not a promise about counts")
+        # Reversal stays a labeler-gated action like every other mutation on this page.
+        self.assertContains(page, 'id="line-reverse" type="button" data-needs="label"')
