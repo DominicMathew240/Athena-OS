@@ -1812,11 +1812,11 @@ const PROJECT_RECIPES = {
   },
   documents: {
     modality: "text",
-    task: "Sort documents and pull out key fields",
-    labelsPlaceholder: "e.g. invoice, safety_report, supplier_name",
-    note: "Coming soon (Wave 2) · Data needed: text documents + category tags or spans · Quality check: wrongly grouped files and missed fields. Saving now keeps your project name and labels.",
-    recipeKey: "",
-    available: false
+    task: "Sort text by topic or outcome",
+    labelsPlaceholder: "e.g. request, incident",
+    note: "Available today · Data needed: one CSV file with text and label columns · Athena is tested on texts it has not seen. Named-entity recognition is not part of this yet.",
+    recipeKey: "text-classification",
+    available: true
   },
   movements: {
     modality: "video",

@@ -24,7 +24,8 @@ from django.utils import timezone
 from PIL import Image, ImageDraw
 
 from . import training
-from .datasets import service as dataset_service, splits
+from .datasets import service as dataset_service
+from .datasets import splits
 from .models import (
     DatasetVersion,
     InferenceApp,
@@ -34,7 +35,9 @@ from .models import (
     TrainingRun,
 )
 from .tests_datasets import DatasetBase, png_bytes
-from .training import evaluation as ev, lifecycle, report, runner, torchvision_frcnn as tv
+from .training import evaluation as ev
+from .training import lifecycle, report, runner
+from .training import torchvision_frcnn as tv
 from .training.base import Availability, BoxPrediction, TrainingBackend, TrainingCancelled, TrainResult
 
 TORCH_INSTALLED = (
@@ -367,13 +370,15 @@ class AccessTests(TrainingBase):
         self.start_run(dataset)
         run = TrainingRun.objects.get()
         other = Project.objects.create(name="Other", modality="image", task="Detect", labels=["damaged"])
-        text = Project.objects.create(name="Docs", modality="text", task="Tag", labels=["a"])
-        for project_id in (uuid.uuid4(), text.id):
+        # "text" is a supported generic modality now; a modality no plugin registers keeps
+        # proving the 404 path for a non-image project.
+        alien = Project.objects.create(name="Docs", modality="alien", task="Tag", labels=["a"])
+        for project_id in (uuid.uuid4(), alien.id):
             for suffix in ("/training/runs", "/training/backends", "/models"):
                 self.assertEqual(self.client.get(f"/api/projects/{project_id}{suffix}").status_code, 404, suffix)
         # Wave 0: readiness answers 200 with a "not available yet" state instead of 404 for a
         # non-image project, so the Teach panel can render the refusal; unknown ids still 404.
-        response = self.client.get(f"/api/projects/{text.id}/training/readiness")
+        response = self.client.get(f"/api/projects/{alien.id}/training/readiness")
         self.assertEqual(response.status_code, 200)
         self.assertFalse(response.json()["ready"])
         self.assertEqual(self.client.get(f"/api/projects/{uuid.uuid4()}/training/readiness").status_code, 404)

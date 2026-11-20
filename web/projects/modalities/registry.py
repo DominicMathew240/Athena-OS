@@ -16,6 +16,7 @@ from .audio import AudioModalityPlugin
 from .base import ModalityPlugin, UnsupportedModalityError
 from .image import ImageModalityPlugin
 from .table import TableModalityPlugin
+from .text import TextModalityPlugin
 
 logger = logging.getLogger(__name__)
 
@@ -23,6 +24,7 @@ BUILTIN_PLUGINS = (
     "projects.modalities.image:ImageModalityPlugin",
     "projects.modalities.audio:AudioModalityPlugin",
     "projects.modalities.table:TableModalityPlugin",
+    "projects.modalities.text:TextModalityPlugin",
 )
 
 #: Recipe-dispatched plugins that no modality loads on its own: importing the module registers

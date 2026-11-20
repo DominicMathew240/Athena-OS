@@ -23,10 +23,10 @@ from django.db.models import QuerySet
 from .datasets import generic as generic_service
 from .datasets import manifest as manifest_lib
 from .datasets import splits
-from .models import Asset, AssetAnnotation, DatasetEntry, DatasetVersion, Project, TrainingRun
-from .modalities import register_plugin, unregister_plugin
+from .modalities import register_plugin
+from .modalities import registry as modality_registry
 from .modalities.base import ModalityPlugin
-from .tests import SignedInMixin
+from .models import Asset, AssetAnnotation, DatasetEntry, DatasetVersion, Project, TrainingRun
 from .tests_datasets import DatasetBase
 
 
@@ -64,8 +64,22 @@ class GenericDatasetBase(DatasetBase):
 
     def setUp(self) -> None:
         super().setUp()
+        # Replace the builtin text plugin for these tests, but RESTORE the original on
+        # cleanup — unregistering here would delete the real text plugin for every later
+        # test module in the run (the pollution the tabular merge taught us about).
+        # get_plugin() first so the builtins are actually loaded before we snapshot.
+        original = type(modality_registry.get_plugin("text"))
         register_plugin(FakeClipPlugin, replace=True)
-        self.addCleanup(unregister_plugin, "text")
+
+        def _restore():
+            modality_registry._registry["text"] = original
+            modality_registry._instances.pop("text", None)
+            # The fake's by-kind entry must go too; the real plugin's own kind entry is
+            # refreshed lazily by _load_all/get_annotation_plugin on next use.
+            modality_registry._annotation_registry.pop("clip_labels", None)
+            modality_registry._annotation_instances.pop("clip_labels", None)
+
+        self.addCleanup(_restore)
         self.text_project = Project.objects.create(
             name="Sound clips", modality="text", task="Tell sounds apart", labels=["healthy", "faulty"]
         )

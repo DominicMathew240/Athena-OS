@@ -91,6 +91,28 @@ TABULAR_PREDICTION = TaskRecipe(
 
 BUILTIN_RECIPES = (VISION_DETECTION, AUDIO_CLASSIFICATION, HANDWRITING_OCR, TABULAR_PREDICTION)
 
+#: Text classification (Wave 2, OS-NLP-001 - classification only; NER is future work): one
+#: CSV of {text, label} rows, taught by the text-sklearn backend (bag-of-words/TF-IDF + a
+#: linear classifier). A project created with it can upload its CSV, confirm the label list,
+#: freeze dataset versions and train today.
+TEXT_CLASSIFICATION = TaskRecipe(
+    key="text-classification",
+    title="Sort text by topic or outcome",
+    modality="text",
+    summary=(
+        "Upload one CSV file of short texts and their labels, and Athena learns to sort new "
+        "texts into those labels. It is checked on texts it has never seen."
+    ),
+    annotation_kind="text_dataset",
+    labels_help=(
+        "For text, the labels are the values of the file's label column - the categories to "
+        "sort texts into. Confirm them after you upload the file."
+    ),
+    available=True,
+)
+
+BUILTIN_RECIPES = (VISION_DETECTION, AUDIO_CLASSIFICATION, HANDWRITING_OCR, TABULAR_PREDICTION, TEXT_CLASSIFICATION)
+
 #: The recipe assumed for image projects created before recipes existed, and for any image
 #: project whose caller did not pick one.
 DEFAULT_RECIPE_KEY = "vision-detection"

@@ -212,8 +212,10 @@ class AccessTests(HealthBase):
         import uuid
 
         self.assertEqual(self.client.get(f"/api/projects/{uuid.uuid4()}/datasets/health").status_code, 404)
-        text = Project.objects.create(name="Notes", modality="text", task="Classify", labels=["a"])
-        self.assertEqual(self.client.get(self.health_url(text)).status_code, 404)
+        # "text" is a real generic modality now (health answers its plain 400); use a
+        # modality no plugin will ever register to keep proving the 404 path.
+        alien = Project.objects.create(name="Notes", modality="alien", task="Classify", labels=["a"])
+        self.assertEqual(self.client.get(self.health_url(alien)).status_code, 404)
 
     def test_a_bad_query_is_a_400_with_a_plain_message(self) -> None:
         response = self.client.get(self.health_url(query="?seed=abc"))

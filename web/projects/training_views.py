@@ -24,7 +24,11 @@ LIST_LIMIT = 100
 OCR_BACKEND = "ocr-trocr"
 #: The backend each recipe runs on when the caller did not pick one (the Teach panel's one-click
 #: start never names a backend). Only recipes whose backend is not the box default need an entry.
-RECIPE_DEFAULT_BACKENDS = {"handwriting-ocr": OCR_BACKEND, "audio-classification": "audio-wav-cnn"}
+RECIPE_DEFAULT_BACKENDS = {
+    "handwriting-ocr": OCR_BACKEND,
+    "audio-classification": "audio-wav-cnn",
+    "text-classification": "text-sklearn",
+}
 
 
 def _default_backend_for(project: Project, payload: dict) -> str:
