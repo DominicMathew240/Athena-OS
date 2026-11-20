@@ -302,6 +302,12 @@
       // Only settle when focus is actually leaving the editor's controls.
       if (!event.relatedTarget || !editorControls.has(event.relatedTarget)) settleRun();
     });
+    // Reaching for a button ends the field-editing run: the undo/redo buttons
+    // must already tell the truth (enabled with something to undo) by the time
+    // focus arrives, not only after the button is pressed.
+    for (const control of [selectStart, selectEnd, undoButton, redoButton, ...Object.values(moveButtons)]) {
+      if (control) control.addEventListener("focus", settleRun);
+    }
     for (const input of inputs) input.addEventListener("keydown", event => {
       if (event.key === "Enter") { event.preventDefault(); settleRun(); }
     });
@@ -509,6 +515,7 @@
       if (!value) renderHistoryButtons();
     }
     inputs.forEach(input => input.addEventListener("input", () => { error.textContent = ""; paint(); paintPreview(); refreshSummary(); }));
+    save.addEventListener("click", () => settleRun());
     canvas.addEventListener("pointerdown", event => {
       if (busy || !canEdit() || !hasFrame || event.button !== 0) return;
       const box = canvas.getBoundingClientRect();
@@ -556,6 +563,7 @@
     video.addEventListener("loadeddata", () => { if (!section.hidden) capture(); });
     clear.addEventListener("click", () => {
       if (busy || !canEdit()) return;
+      settleRun();
       /* Clearing distinguishes unsaved edits from the saved state (T15): when
          there are unsaved edits, ask before throwing them away and say exactly
          what would be lost and what would be left. */
