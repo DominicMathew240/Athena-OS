@@ -5,23 +5,36 @@ kept privately with its checksum, dimensions, duration, the container's own
 creation time and the ingestion moment. Failed checks are reported at import
 time; a rejected file is never stored. Nothing extracts stills — the recording
 is preserved as-is, and producing events from it is later, separate work.
+
+T12 adds the source's view health to this endpoint's GET: each recording's
+suitability (coverage, day/night mix, frame age and gaps, obstruction proxy,
+object-size estimate) is measured from the actual stored bytes, and the
+user-entered object-size estimate can be saved here. No recording yet is a
+plain "record a test clip" answer, never an error.
 """
 
 from __future__ import annotations
 
+import math
 import re
 import uuid
 
 from django.core.files.storage import default_storage
+from django.db import transaction
 from django.http import FileResponse, Http404, HttpResponse, JsonResponse, StreamingHttpResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_http_methods
 
-from .models import OperationSource, OperationSourceRecording
+from .models import OperationSource, OperationSourceRecording, SourceViewEstimate
 from .operations import recordings
 from .permissions import access
+from .view_health import ViewHealthError, plain_recording_missing, recording_health
 from .views import _safe_filename
-from .vision_views import _error, _no_store
+from .vision_views import _error, _json_body, _no_store
+
+# The plain limits the object-size estimate is checked against, mirrored from
+# view_health's verdict boundaries so validation and verdicts never disagree.
+ESTIMATE_MIN_PERCENT, ESTIMATE_MAX_PERCENT = 1, 100
 
 
 def _recording_data(row: OperationSourceRecording) -> dict:
@@ -43,8 +56,53 @@ def _recording_data(row: OperationSourceRecording) -> dict:
     }
 
 
+def _estimate_data(estimate) -> dict | None:
+    """The source's current object-size estimate as plain JSON; None when not entered."""
+    if estimate is None:
+        return None
+    return {
+        "person_height_percent": estimate.person_height_percent,
+        "notes": estimate.notes,
+        "updated_at": estimate.updated_at.isoformat(),
+    }
+
+
 def _owned_source(source_id, user):
     return get_object_or_404(OperationSource, id=source_id, site__created_by=user)
+
+
+def _view_health(source):
+    """The latest recording's measured view health, or the honest no-recording answer.
+
+    Measuring reads the stored bytes and builds the T20 timeline, so it is only
+    done for the newest recording; older recordings stay listed as files.
+    """
+    recording = source.recordings.first()
+    if recording is None:
+        return plain_recording_missing()
+    estimate = source.view_estimates.first()
+    try:
+        return recording_health(recording, estimate=estimate)
+    except ViewHealthError as error:
+        return {
+            "schema_version": 1,
+            "recording_id": str(recording.id),
+            "recording_sha256": recording.sha256,
+            "recorded_at": recording.captured_at.isoformat() if recording.captured_at else None,
+            "ingested_at": recording.created_at.isoformat(),
+            "verdict": "review",
+            "dimensions": [
+                {
+                    "id": "measurement",
+                    "title": "View health measurement",
+                    "verdict": "review",
+                    "detail": str(error),
+                    "next_step": "Re-import this recording, or record a new test clip from this source.",
+                }
+            ],
+            "unsuitable": [],
+            "measurements": None,
+        }
 
 
 @access(POST="label", GET="view")
@@ -53,7 +111,15 @@ def source_recordings(request, source_id):
     source = _owned_source(source_id, request.user)
     if request.method == "GET":
         rows = source.recordings.all()
-        return _no_store(JsonResponse({"recordings": [_recording_data(row) for row in rows]}))
+        try:
+            health = _view_health(source)
+        except Exception:  # a measurement bug must never hide the file list
+            health = None
+        return _no_store(JsonResponse({
+            "recordings": [_recording_data(row) for row in rows],
+            "view_health": health,
+            "object_size_estimate": _estimate_data(source.view_estimates.first()),
+        }))
     if source.kind != "recorded_video":
         return _error("Only recorded-video sources can hold recordings.")
     uploads = request.FILES.getlist("video")
@@ -132,3 +198,59 @@ def _invalid_range(file, size):
     response["Content-Range"] = f"bytes */{size}"
     response["Cache-Control"] = "no-store"
     return response
+
+
+@access(PUT="label", DELETE="label")
+@require_http_methods(["GET", "PUT", "DELETE"])
+def source_view_estimate(request, source_id):
+    """The user-entered object-size estimate for one source's view (T12).
+
+    Object size is never measured — it depends on scene depth no recording can
+    reveal — so the person who knows the view states it. One current estimate
+    per source: PUT replaces it, DELETE clears it. The guidance text the UI
+    shows is served here so the words cannot drift from the limits.
+    """
+    source = _owned_source(source_id, request.user)
+    if request.method == "GET":
+        return _no_store(JsonResponse({
+            "object_size_estimate": _estimate_data(source.view_estimates.first()),
+            "guidance": (
+                "Stand where people will pass and compare: does a person roughly fill the "
+                "picture top to bottom (about 90%), reach from the floor to mid-picture "
+                "(about 50%), or stand smaller (about 20% or less)? Enter your best guess "
+                "as a percentage of the picture height. Athena cannot measure this: how tall "
+                "people look depends on how far they are from the camera."
+            ),
+        }))
+    if request.method == "DELETE":
+        with transaction.atomic():
+            source.view_estimates.all().delete()
+        return _no_store(JsonResponse({"object_size_estimate": None}))
+    try:
+        payload = _json_body(request)
+        if not payload.keys() <= {"person_height_percent", "notes"}:
+            raise ValueError("Provide only the person-height estimate and optional notes.")
+        if "person_height_percent" not in payload:
+            raise ValueError("Provide the person-height estimate.")
+        percent = payload["person_height_percent"]
+        if isinstance(percent, bool) or not isinstance(percent, (int, float)) or not math.isfinite(percent):
+            raise ValueError("The person-height estimate must be a number.")
+        if not ESTIMATE_MIN_PERCENT <= percent <= ESTIMATE_MAX_PERCENT:
+            raise ValueError(
+                f"The person-height estimate must be between {ESTIMATE_MIN_PERCENT} and "
+                f"{ESTIMATE_MAX_PERCENT} percent of the picture height."
+            )
+        notes = payload.get("notes", "")
+        if not isinstance(notes, str) or len(notes) > 2000:
+            raise ValueError("Notes must be text of at most 2,000 characters.")
+    except ValueError as error:
+        return _error(str(error))
+    with transaction.atomic():
+        source.view_estimates.all().delete()
+        estimate = SourceViewEstimate.objects.create(
+            source=source,
+            created_by=request.user,
+            person_height_percent=float(percent),
+            notes=notes,
+        )
+    return _no_store(JsonResponse({"object_size_estimate": _estimate_data(estimate)}, status=201))

@@ -4,6 +4,7 @@ import uuid
 
 from django.conf import settings
 from django.db import models
+from django.db.models import Q
 from django.utils import timezone
 
 MODALITY_CHOICES = [
@@ -961,6 +962,39 @@ class OperationSource(models.Model):
 
     class Meta:
         ordering = ("name", "id")
+
+
+class SourceViewEstimate(models.Model):
+    """The user-entered object-size estimate for one source's view (T12).
+
+    How tall a person stands in the picture depends on scene depth no recording
+    can reveal, so this is deliberately an *estimate the person who knows the
+    view enters* — never something Athena claims to measure. Stored per source
+    (editable, current-value, unlike the frozen view versions) with optional
+    notes; view-health verdicts check it against plain limits and always show
+    it as "entered by you".
+    """
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    source = models.ForeignKey(OperationSource, on_delete=models.CASCADE, related_name="view_estimates")
+    # Typical person height as a share of the picture height, 1–100 percent.
+    person_height_percent = models.FloatField(
+        help_text="How tall a person stands in this view, as a share of the picture height "
+        "(a user-entered estimate; Athena cannot measure it)."
+    )
+    notes = models.TextField(blank=True, default="")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    created_at = models.DateTimeField(auto_now_add=True)
+    updated_at = models.DateTimeField(auto_now=True)
+
+    class Meta:
+        ordering = ("-updated_at", "-id")
+        constraints = (
+            models.CheckConstraint(
+                condition=Q(person_height_percent__gte=1) & Q(person_height_percent__lte=100),
+                name="sourceviewestimate_percent_range",
+            ),
+        )
 
 
 class Operation(models.Model):

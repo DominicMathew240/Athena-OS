@@ -65,6 +65,13 @@ urlpatterns = [
         source_recording_views.source_recording_content,
         name="source-recording-content",
     ),
+    # The user-entered object-size estimate for one source's view (T12); the
+    # guidance text is served with it so the UI's words cannot drift.
+    path(
+        "api/operation-sources/<uuid:source_id>/view-estimate",
+        source_recording_views.source_view_estimate,
+        name="source-view-estimate",
+    ),
     path("api/operations", operation_views.operations, name="operations"),
     path("api/operations/<uuid:operation_id>", operation_views.operation_detail, name="operation-detail"),
     path(
