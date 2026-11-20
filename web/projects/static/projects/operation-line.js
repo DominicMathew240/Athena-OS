@@ -101,7 +101,7 @@
       }
       const length = Math.hypot(dx, dy) || 1;
       const ux = dx / length, uy = dy / length;      /* along the line */
-      const nx = -uy, ny = ux;                        /* positive side (left of start→end) */
+      const nx = -uy, ny = ux;                        /* positive side (left of the start-to-end direction) */
       const span = Math.min(width, height) * 0.4;
       const cx = width / 2, cy = height / 2;
       const x1 = cx - ux * span, y1 = cy - uy * span;
