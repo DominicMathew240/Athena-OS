@@ -19,6 +19,16 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from . import credentials as credential_store
+from .calibration import (
+    SCALE_LIMIT_NOTE,
+    CalibrationError,
+    moved_view_diff,
+    pixels_per_unit,
+    remap_change_reason,
+    remap_line,
+    scale_reference_payload,
+    view_format,
+)
 from .models import (
     GeometryVersion,
     ModelVersion,
@@ -32,13 +42,14 @@ from .models import (
     RecipeVersion,
     Site,
     SourceCredential,
+    SourceScaleReference,
     SourceViewVersion,
 )
 from .permissions import access
 from .vision_views import _error, _json_body, _no_store
 
 
-def _data(row):
+def _data(row, view_reviews=None):
     recording = getattr(row, "recording", None)
     video = (
         None
@@ -54,6 +65,26 @@ def _data(row):
             "content_url": f"/api/operation-drafts/{row.id}/recording/content",
         }
     )
+    # T16 moved-view review: when the operation's latest source-view version and
+    # the source's newest recording disagree materially, the draft carries the
+    # review request with the diff — the saved line is never silently kept.
+    # ``view_reviews`` caches the per-operation answer for listings.
+    view_review = None
+    if row.operation_id is not None:
+        if view_reviews is not None:
+            if row.operation_id not in view_reviews:
+                try:
+                    view_reviews[row.operation_id] = _view_review(
+                        row.operation, row.operation.source.view_versions.first()
+                    )
+                except Exception:  # a review bug must never break reading a draft
+                    view_reviews[row.operation_id] = None
+            view_review = view_reviews[row.operation_id]
+        else:
+            try:
+                view_review = _view_review(row.operation, row.operation.source.view_versions.first())
+            except Exception:
+                view_review = None
     return {
         "id": str(row.id),
         "operation_id": None if row.operation_id is None else str(row.operation_id),
@@ -65,6 +96,7 @@ def _data(row):
         "status": "draft",
         "updated_at": row.updated_at.isoformat(),
         "recording": video,
+        "view_review": view_review,
         "pins": {
             "geometry_version_id": None if row.geometry_version_id is None else str(row.geometry_version_id),
             "recipe_version_id": None if row.recipe_version_id is None else str(row.recipe_version_id),
@@ -181,6 +213,53 @@ def _component_sha256(payload):
     return hashlib.sha256(encoded).hexdigest()
 
 
+def _scale_reference_data(reference, configuration):
+    """One stored scale reference with its derived pixels-per-unit and its stated limit.
+
+    The limit travels with the number on purpose: a linear scale is an
+    approximation valid near the reference line on a plane roughly
+    perpendicular to the camera, and nothing here is a homography.
+    """
+    try:
+        per_unit = pixels_per_unit(
+            {
+                "point_a": reference.point_a,
+                "point_b": reference.point_b,
+                "real_world_distance": reference.real_world_distance,
+            },
+            configuration["width"],
+            configuration["height"],
+        )
+    except CalibrationError:
+        raise ValueError("A source-view version failed its integrity check.") from None
+    return {
+        "point_a": reference.point_a,
+        "point_b": reference.point_b,
+        "real_world_distance": reference.real_world_distance,
+        "real_world_unit": reference.real_world_unit,
+        "provenance": reference.provenance,
+        "pixels_per_unit": per_unit,
+        "limit": SCALE_LIMIT_NOTE,
+        "sha256": reference.reference_sha256,
+        "created_at": reference.created_at.isoformat(),
+    }
+
+
+def _source_view_calibration(version):
+    """The calibration summary of one view version: pixel aspect and optional scale reference."""
+    configuration = version.configuration
+    scale_reference = version.scale_references.first()
+    return {
+        "rotation_degrees": configuration["rotation"],
+        "pixel_aspect_ratio": configuration["width"] / configuration["height"],
+        "format": view_format(configuration),
+        "scale_reference": (
+            None if scale_reference is None else _scale_reference_data(scale_reference, configuration)
+        ),
+        "scale_limit": SCALE_LIMIT_NOTE,
+    }
+
+
 def _source_view_data(version):
     if _component_sha256(version.configuration) != version.configuration_sha256:
         raise ValueError("A source-view version failed its integrity check.")
@@ -189,6 +268,7 @@ def _source_view_data(version):
         "source_id": str(version.source_id),
         "version": version.version,
         "configuration": version.configuration,
+        "calibration": _source_view_calibration(version),
         "sha256": version.configuration_sha256,
         "created_at": version.created_at.isoformat(),
     }
@@ -618,6 +698,43 @@ def operation_detail(request: HttpRequest, operation_id):
     return _no_store(JsonResponse({"operation": _operation_data(operation)}))
 
 
+def _view_review(operation, latest_view):
+    """The moved-view review for the source's newest recording against the latest view version.
+
+    When a new recording's dimensions or duration differ materially from the
+    format the view version recorded, the view may have moved: the answer says
+    so, shows the diff, and asks for one next step — review the saved line. It
+    never silently keeps or drops geometry, and a source with no recording gets
+    no review at all (nothing to compare against).
+    """
+    from .models import OperationSourceRecording
+
+    recording = operation.source.recordings.order_by("-created_at", "-id").first()
+    if recording is None or latest_view is None:
+        return None
+    # The view version's recorded duration reference is the duration of the
+    # recording the view was versioned against. SourceViewVersion does not store
+    # duration (it is a capture-format record), so the reference is the earliest
+    # recording on the source — the format the view was drawn up against — and
+    # newer recordings are compared against that. With only one recording the
+    # duration rule cannot fire; the dimension rule is what catches a moved view.
+    first = (
+        OperationSourceRecording.objects.filter(source_id=operation.source_id)
+        .order_by("created_at", "id")
+        .values_list("duration_seconds", flat=True)
+        .first()
+    )
+    recorded_duration = first if first is not None else recording.duration_seconds
+    return moved_view_diff(
+        recorded_width=latest_view.configuration["width"],
+        recorded_height=latest_view.configuration["height"],
+        recorded_duration=recorded_duration,
+        new_width=recording.width,
+        new_height=recording.height,
+        new_duration=recording.duration_seconds,
+    )
+
+
 @access(POST="label")
 @require_http_methods(["GET", "POST"])
 def operation_source_views(request: HttpRequest, operation_id):
@@ -628,13 +745,44 @@ def operation_source_views(request: HttpRequest, operation_id):
             data = [_source_view_data(row) for row in versions]
         except (TypeError, ValueError):
             return _error("A source-view version failed its integrity check.", 500)
-        return _no_store(JsonResponse({"source_views": data}))
+        return _no_store(JsonResponse({"source_views": data, "view_review": _view_review(operation, versions.first())}))
     try:
         payload = _json_body(request)
-        if payload.keys() != {"configuration"}:
-            raise ValueError("Provide only the source-view configuration.")
+        if payload.keys() not in ({"configuration"}, {"configuration", "scale_reference"}):
+            raise ValueError("Provide only the source-view configuration and an optional scale reference.")
         configuration = _source_view_configuration(payload["configuration"])
-    except ValueError as error:
+        scale_reference = None
+        if "scale_reference" in payload:
+            scale_reference = scale_reference_payload(
+                source_view_version_id="pending",
+                point_a=payload["scale_reference"].get("point_a") if isinstance(payload["scale_reference"], dict) else None,
+                point_b=payload["scale_reference"].get("point_b") if isinstance(payload["scale_reference"], dict) else None,
+                real_world_distance=(
+                    payload["scale_reference"].get("real_world_distance")
+                    if isinstance(payload["scale_reference"], dict)
+                    else None
+                ),
+                real_world_unit=(
+                    payload["scale_reference"].get("real_world_unit")
+                    if isinstance(payload["scale_reference"], dict)
+                    else None
+                ),
+                provenance=(
+                    payload["scale_reference"].get("provenance") if isinstance(payload["scale_reference"], dict) else None
+                ),
+            )
+            # Validate the reference is computable against this configuration now,
+            # so an unusable pair of points is refused before anything is stored.
+            pixels_per_unit(
+                {
+                    "point_a": scale_reference["point_a"],
+                    "point_b": scale_reference["point_b"],
+                    "real_world_distance": scale_reference["real_world_distance"],
+                },
+                configuration["width"],
+                configuration["height"],
+            )
+    except (ValueError, CalibrationError, TypeError, KeyError) as error:
         return _error(str(error))
     with transaction.atomic():
         version = (versions.order_by("-version").values_list("version", flat=True).first() or 0) + 1
@@ -645,6 +793,18 @@ def operation_source_views(request: HttpRequest, operation_id):
             configuration=configuration,
             configuration_sha256=_component_sha256(configuration),
         )
+        if scale_reference is not None:
+            reference = {**scale_reference, "source_view_version_id": str(row.id)}
+            SourceScaleReference.objects.create(
+                source_view_version=row,
+                created_by=request.user,
+                point_a=reference["point_a"],
+                point_b=reference["point_b"],
+                real_world_distance=reference["real_world_distance"],
+                real_world_unit=reference["real_world_unit"],
+                provenance=reference["provenance"],
+                reference_sha256=_component_sha256(reference),
+            )
     return _no_store(JsonResponse({"source_view": _source_view_data(row)}, status=201))
 
 
@@ -661,8 +821,10 @@ def operation_geometry_versions(request: HttpRequest, operation_id):
         return _no_store(JsonResponse({"geometry_versions": data}))
     try:
         payload = _json_body(request)
+        if payload.keys() == {"remap"}:
+            return _remap_geometry(request, operation, versions, payload["remap"])
         if payload.keys() != {"source_view_version_id", "geometry"}:
-            raise ValueError("Provide a source-view version and geometry.")
+            raise ValueError("Provide a source-view version and geometry, or an explicit remap.")
         source_view_id = _scope_uuid(payload, "source_view_version_id")
         geometry_payload = payload["geometry"]
         if not isinstance(geometry_payload, dict) or geometry_payload.keys() != {"line"}:
@@ -685,6 +847,70 @@ def operation_geometry_versions(request: HttpRequest, operation_id):
             geometry_sha256=_component_sha256(hash_payload),
         )
     return _no_store(JsonResponse({"geometry_version": _geometry_data(row)}, status=201))
+
+
+def _remap_geometry(request, operation, versions, remap_payload):
+    """Explicitly remap one geometry version onto a newer source-view version (T16).
+
+    Only a pure 90-degree rotation step between otherwise identical formats can
+    be remapped, and only when the person asks for it by name. Anything else —
+    changed dimensions, changed flips, no step at all — is refused with a plain
+    message: the person re-draws. The result is a NEW immutable geometry
+    version pinned to the NEW source-view version; the old one is untouched.
+    """
+    try:
+        if not isinstance(remap_payload, dict) or remap_payload.keys() != {
+            "from_geometry_version_id",
+            "to_source_view_version_id",
+        }:
+            raise ValueError("Provide the geometry version to remap and its new source-view version.")
+        old_geometry = GeometryVersion.objects.select_related("source_view_version").filter(
+            id=_scope_uuid(remap_payload, "from_geometry_version_id"), operation=operation
+        ).first()
+        if old_geometry is None:
+            raise ValueError("Choose a geometry version that belongs to this draft's operation.")
+        new_view = SourceViewVersion.objects.filter(
+            id=_scope_uuid(remap_payload, "to_source_view_version_id"), source=operation.source
+        ).first()
+        if new_view is None:
+            raise ValueError("Choose a source-view version that belongs to this operation's source.")
+        old_view = old_geometry.source_view_version
+        if new_view.id == old_view.id:
+            raise ValueError("The two view versions are the same; there is nothing to remap.")
+        reason = remap_change_reason(old_view.configuration, new_view.configuration)
+        if reason is not None:
+            return _error(reason, 409)
+        remapped_line = remap_line(
+            old_geometry.geometry["line"], old_view.configuration["rotation"], new_view.configuration["rotation"]
+        )
+    except ValueError as error:
+        return _error(str(error))
+    geometry = {"line": _operation_line(remapped_line)}
+    hash_payload = {"source_view_version_id": str(new_view.id), "geometry": geometry}
+    with transaction.atomic():
+        version = (versions.order_by("-version").values_list("version", flat=True).first() or 0) + 1
+        row = GeometryVersion.objects.create(
+            operation=operation,
+            source_view_version=new_view,
+            version=version,
+            created_by=request.user,
+            geometry=geometry,
+            geometry_sha256=_component_sha256(hash_payload),
+        )
+    return _no_store(
+        JsonResponse(
+            {
+                "geometry_version": _geometry_data(row),
+                "remap": {
+                    "from_source_view_version_id": str(old_view.id),
+                    "to_source_view_version_id": str(new_view.id),
+                    "rotation_step": (new_view.configuration["rotation"] - old_view.configuration["rotation"]) % 360,
+                    "note": "Remapped by a pure coordinate transform for the 90-degree rotation step; check both endpoints on the new view before relying on it.",
+                },
+            },
+            status=201,
+        )
+    )
 
 
 @access(POST="label")
@@ -765,7 +991,8 @@ def operation_drafts(request: HttpRequest):
             "model_binding",
             "screen_version",
         )[:200]
-        return _no_store(JsonResponse({"drafts": [_data(row) for row in rows]}))
+        view_reviews = {}  # one moved-view answer per operation, not per draft row
+        return _no_store(JsonResponse({"drafts": [_data(row, view_reviews) for row in rows]}))
     try:
         payload = _json_body(request)
         operation = None

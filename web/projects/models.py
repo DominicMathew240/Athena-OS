@@ -997,6 +997,44 @@ class SourceViewEstimate(models.Model):
         )
 
 
+class SourceScaleReference(models.Model):
+    """The versioned linear scale reference for one source-view version (T16).
+
+    Two calibration points plus a real-world distance, stored against the exact
+    immutable ``SourceViewVersion`` they were measured on, with their provenance
+    (how the person measured it). The pixels-per-unit is derived on read from
+    the view version's dimensions — never stored apart from them.
+
+    Deliberately an approximation, and the limit travels with the number: a
+    linear scale assumes the measured plane is roughly perpendicular to the
+    camera and is only valid near the reference line. A perspective homography
+    is out of scope. Rows follow the immutable-version pattern: changing a
+    reference means recording a new one against the new view version.
+    """
+
+    UNIT_CHOICES = (
+        ("m", "Metres"),
+        ("cm", "Centimetres"),
+        ("ft", "Feet"),
+    )
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    source_view_version = models.ForeignKey(
+        "SourceViewVersion", on_delete=models.CASCADE, related_name="scale_references"
+    )
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    point_a = models.JSONField(help_text="First calibration point, normalized [x, y] in 0-1.")
+    point_b = models.JSONField(help_text="Second calibration point, normalized [x, y] in 0-1.")
+    real_world_distance = models.FloatField(help_text="The real-world distance between the two points.")
+    real_world_unit = models.CharField(max_length=8, choices=UNIT_CHOICES)
+    provenance = models.CharField(max_length=500, help_text="How the reference was measured, in the measurer's words.")
+    reference_sha256 = models.CharField(max_length=64)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+
+
 class Operation(models.Model):
     """A private operation explicitly bound to one site and one source."""
 
