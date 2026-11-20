@@ -23,8 +23,8 @@ from django.db import transaction
 from django.utils import timezone
 
 from .. import source_time
-from ..models import OperationExecution
-from . import inference, tracking
+from ..models import OperationEvent, OperationExecution
+from . import inference, ledger, tracking
 from .comparison import Crossing, compare_crossings
 
 logger = logging.getLogger(__name__)
@@ -158,6 +158,11 @@ def _reference_events(snapshot: dict) -> list[Crossing]:
     return [Crossing(direction=e["direction"], time=float(e["time"])) for e in events]
 
 
+def _ledger_source(execution) -> str:
+    """The event source stream name for one execution: the recording it ran on."""
+    return f"recording:{execution.recording_id}"
+
+
 def _pins(execution) -> dict:
     """The pins frozen at enqueue: bundle snapshot pins, plus digests provenance."""
     pins = dict(execution.pins or {})
@@ -186,7 +191,9 @@ def run_execution(
     boundary always ends it. What the step never claims: this is recorded replay
     analysis on sampled frames, not a live operation, and the track ids are
     per-session bookkeeping, not persistent identities — crossing episodes
-    (T25) are still out of scope.
+    (T25) are still out of scope. Since T23, the recorded human reference
+    events are committed to the durable event ledger before comparison, so a
+    retry or replay of this execution can never double-commit them.
     """
     owner_key = owner_key or execution.lease_owner or worker_key()
     snapshot = execution.bundle.snapshot or {}
@@ -213,6 +220,24 @@ def run_execution(
             raise ExecutionCancelled("Cancelled by request.")
         reference = _reference_events(snapshot)
         tolerance = _comparison_tolerance(snapshot)
+        # T23: the reference events are committed to the durable ledger before
+        # the comparison runs — through the idempotent commit path, so a retry
+        # or replay of this execution can never double-commit them, and with
+        # the execution's pinned versions copied onto every row. The commit is
+        # additive: a committed event can never be edited or deleted.
+        events = ledger.commit_events(
+            execution,
+            [
+                ledger.EventDraft(
+                    kind=OperationEvent.KIND_REFERENCE,
+                    source=_ledger_source(execution),
+                    session=0,  # reference events are recorded against the whole recording
+                    timestamp=crossing.time,
+                    payload={"direction": crossing.direction, "tolerance_seconds": tolerance},
+                )
+                for crossing in reference
+            ],
+        )
         # The stand-in "predicted" stream is the reference itself shifted by zero: an honest
         # placeholder that exercises the pinned recipe's comparison semantics end to end.
         comparison = compare_crossings(reference, reference, tolerance=tolerance)
@@ -281,6 +306,9 @@ def run_execution(
                 "missed": len(comparison.missed),
                 "extra": len(comparison.extra),
             },
+            # T23: the ledger aggregates for THIS execution, recorded from the
+            # committed raw events (a rebuild from the rows must equal this).
+            "event_ledger": ledger.rebuild_aggregates(events).summary(),
             "note": _outcome_note(binding, detector, tracks),
         }
         if detector is not None:

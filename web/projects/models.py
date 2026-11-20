@@ -1320,6 +1320,78 @@ class OperationExecution(models.Model):
         return f"{self.bundle_id}:{self.status}"
 
 
+class OperationEvent(_AppendOnlyModel):
+    """One committed operation event in the durable ledger (T23).
+
+    The ledger is the single place operation events are committed: an immutable,
+    append-only row per event, keyed by the execution that produced it plus a
+    content-addressed identity (SHA-256 over the execution id, source, kind,
+    session, timestamp and the payload's canonical JSON). A retry or replay that
+    recomputes the same event finds the same identity and commits nothing new;
+    two different payloads claiming the same event slot (same execution, source,
+    kind, session and timestamp) are refused by the database, never merged.
+
+    Pinned-version provenance is copied onto every row exactly as the execution
+    froze it at enqueue (T19), so events stay queryable by release bundle
+    digest, recording digest and geometry version even after the components
+    move on: ``OperationEvent.objects.filter(recording_sha256=..., kind=...)``.
+
+    What this model deliberately does NOT do: it stores no aggregates (counts
+    are rebuilt from raw events by :mod:`projects.operations.ledger`), and its
+    identity is scoped to one execution — the same real-world crossing executed
+    by two different executions produces two rows, by design.
+    """
+
+    #: A recorded human reference crossing replayed from the release bundle.
+    KIND_REFERENCE = "reference_crossing"
+    #: A crossing derived from detector output (written by T25's episode work).
+    KIND_DETECTOR = "detector_crossing"
+    KIND_CHOICES = [
+        (KIND_REFERENCE, "Reference crossing"),
+        (KIND_DETECTOR, "Detector crossing"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    execution = models.ForeignKey(OperationExecution, on_delete=models.PROTECT, related_name="events")
+    # Content-addressed identity over execution id, source, kind, session, timestamp and payload.
+    identity_sha256 = models.CharField(max_length=64)
+    kind = models.CharField(max_length=32, choices=KIND_CHOICES)
+    # Which stream the event came from: the execution's recording ("recording:<id>"), a camera key, ...
+    source = models.CharField(max_length=200)
+    # T20 session number (1..N); 0 means "the whole recording", used by reference
+    # events, which a human recorded against the recording as a whole rather
+    # than against one timeline session.
+    session = models.PositiveIntegerField()
+    # The event's source timestamp, quantized to microseconds and zero-padded to
+    # a fixed width so the string column sorts in true time order.
+    timestamp = models.CharField(max_length=32)
+    payload = models.JSONField()
+    payload_sha256 = models.CharField(max_length=64)
+    # Pinned versions, copied from the execution at commit time.
+    bundle_sha256 = models.CharField(max_length=64)
+    recording_sha256 = models.CharField(max_length=64)
+    geometry_sha256 = models.CharField(max_length=64, blank=True, default="")
+    committed_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("session", "timestamp", "identity_sha256")
+        constraints = (
+            models.UniqueConstraint(fields=("execution", "identity_sha256"), name="operationevent_unique_identity"),
+            models.UniqueConstraint(
+                fields=("execution", "source", "kind", "session", "timestamp"),
+                name="operationevent_unique_slot",
+            ),
+        )
+        indexes = (
+            models.Index(fields=("execution", "kind", "session")),
+            models.Index(fields=("recording_sha256", "kind")),
+            models.Index(fields=("geometry_sha256",)),
+        )
+
+    def __str__(self) -> str:
+        return f"{self.kind}:{self.identity_sha256[:12]}"
+
+
 class OperationRecording(models.Model):
     """One private test recording attached to an unpublished draft."""
 
