@@ -248,7 +248,8 @@ class LandingCoversOnFrontViewTests(TestCase):
                     "Athena Forge",
                     "Athena Lab",
                     "Athena Nodes",
-                    "T01–T04",
+                    "18 of 65 tasks locally verified",
+                    "Text classification and signal classification merged",
                     "Event F1, missed events, false alarms per hour",
                 ):
                     self.assertIn(expected, html)

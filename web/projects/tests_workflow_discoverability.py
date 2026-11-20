@@ -105,7 +105,9 @@ class TaskLinkedHelpExplainsOperationsTests(TestCase):
                     "how many people crossed a line",
                     "an approved",  # detector pinning
                     "custom detector",
-                    "cannot yet count people",
+                    "recorded replay analysis, not a live count",
+                    "crossing episodes and operator boards are not built yet",
+                    "encrypted",
                 ):
                     self.assertIn(needle, html)
 

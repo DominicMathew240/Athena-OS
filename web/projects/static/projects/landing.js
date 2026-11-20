@@ -254,7 +254,7 @@
     audio: {
       badge: "P0 · Wave 1 Multi-task MVP",
       title: "Acoustic Event Detection",
-      status: "Proposed roadmap recipe",
+      status: "Merged in console (synthetic-verified)",
       filename: "pump-bearing-line4.wav · 48 kHz · 12.0s",
       split: "80% Train · 10% Val · 10% Held-out",
       scenario: "Healthy motor baseline vs bearing faults.",
@@ -301,7 +301,7 @@
     ocr: {
       badge: "P0 · Wave 1 Multi-task MVP",
       title: "Handwriting & Document OCR",
-      status: "Proposed roadmap recipe (Forge TrOCR)",
+      status: "Merged in console (training verified; serving is backend-level)",
       filename: "maintenance-log-408B.png · Handwritten form",
       split: "80% Train · 10% Val · 10% Held-out",
       scenario: "Correct handwritten forms and fine-tune TrOCR.",
@@ -348,13 +348,13 @@
     documents: {
       badge: "P1 · Wave 2 Language & Documents",
       title: "Document Classification & Extraction",
-      status: "Proposed Wave 2 recipe",
+      status: "Text classification merged; field extraction in progress",
       filename: "shift-incident-2026-11.txt · Work order",
       split: "80% Train · 10% Val · 10% Held-out",
       scenario: "Tag document categories, entities and structured fields.",
       data: "Text documents + spans, tags or fields",
       quality: "Class F1, confusion analysis and field accuracy",
-      recipe: "OS-NLP-001 / OS-DOC-001 · Classification, NER & fields",
+      recipe: "OS-NLP-001 classification merged · NER & fields to come",
       href: "/login/?next=/detectors%3Frecipe%3Ddocuments",
       stageCaptions: {
         raw: "Import work orders and deduplicate near-copies before splitting.",
@@ -442,7 +442,7 @@
     spreadsheets: {
       badge: "P0 · Wave 1 Multi-task MVP",
       title: "Tabular Prediction from Spreadsheets",
-      status: "Proposed roadmap recipe (Forge PR #79)",
+      status: "Merged in console (synthetic-verified)",
       filename: "compressor-telemetry-q3.csv · 12 columns",
       split: "80% Train · 10% Val · 10% Held-out",
       scenario: "Upload Excel/CSV, pick target column and test unseen rows.",

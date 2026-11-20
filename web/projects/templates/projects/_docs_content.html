@@ -180,9 +180,10 @@
       <p>Photo inspections answer “who is visible in these pictures?” from still frames — they cannot tell you how many people entered, because movement between frames is missed. An <strong>operation</strong> is the workflow for that: a private site and camera source, a counting line drawn on the picture, and an immutable, versioned chain of parts that will eventually replay recorded video and count crossings. It is being built in the open, and the console says exactly what works today.</p>
       <ol class="wiki-steps">
         <li><strong>Where it lives:</strong> Open <strong>People counting</strong> in the sidebar (<span class="a-mono">/operations</span>). Every draft is private to its creator.</li>
-        <li><strong>Guided setup:</strong> Name the operation, add one private recording, draw a finite line, mark a few human reference crossings, then pin the parts — the source view, line geometry, counting recipe, policy, screen, and an approved detector model. The guide saves as you go and resumes after a reload.</li>
-        <li><strong>Is this server ready?</strong> The readiness list on the same page checks video decoding, private storage, the teaching and check-screen helpers, and the picture-reading model — each missing part names the person who can fix it and how.</li>
-        <li><strong>Relationship to the rest of Athena:</strong> An approved <a href="{% url 'dashboard' %}">custom detector</a> is one of the parts an operation pins; <a href="{% url 'inspections-page' %}">photo inspections</a> remain the quick, no-training way to ask what is visible. Today an operation draft assembles a release candidate but cannot yet count people — recorded replay, publication and the runtime are not built yet.</li>
+        <li><strong>Guided setup:</strong> Name the operation, add one private recording, draw and name a finite line with its two side labels and an explicit direction, mark a few human reference crossings, then pin the parts — the source view (with calibration), line geometry, counting recipe, policy, screen, and an approved detector model. The guide saves as you go and resumes after a reload, and every geometry action also works from the keyboard.</li>
+        <li><strong>Is this server ready?</strong> The readiness list on the same page checks video decoding, private storage, the teaching and check-screen helpers, and the picture-reading model — each missing part names the person who can fix it and how. A recording with a stored clip also shows a view-health card: measured brightness day/night mix, frame gaps, an obstruction heuristic, and your own object-size estimate, each with an actionable next step.</li>
+        <li><strong>What a run does today:</strong> Launching a release bundle's execution queues a durable, supervised worker job. The worker verifies the pinned recording byte-for-byte, rebuilds a reproducible frame timeline, and — when an approved detector is bound — runs that model on sampled reference frames and tracks per-session objects, recording normalized detections and track summaries in the outcome. The outcome says plainly what ran and what did not: it is recorded replay analysis, not a live count; crossing episodes and operator boards are not built yet, and no identity is claimed across gaps or sessions.</li>
+        <li><strong>Relationship to the rest of Athena:</strong> An approved <a href="{% url 'dashboard' %}">custom detector</a> is one of the parts an operation pins; <a href="{% url 'inspections-page' %}">photo inspections</a> remain the quick, no-training way to ask what is visible. Source credentials, when live cameras arrive, are stored encrypted with a key the server never returns; approved outbound destinations are allow-listed and nothing else is contacted.</li>
       </ol>
     </article>
 
@@ -321,19 +322,22 @@
       </div>
 
       <h3 class="wiki-subhead">Verified development status vs recommendation</h3>
+      <p class="wiki-note">Updated 20 November 2026 after the Wave 0–2 slice merges. “Merged” below means code is on main with its test suite green in both the lean and ML environments — all on synthetic data, with model quality unmeasured and no real-user session run yet.</p>
       <div class="wiki-table-wrap">
         <table class="wiki-table">
           <thead>
             <tr><th scope="col">Component</th><th scope="col">Verified status</th><th scope="col">Recommendation</th></tr>
           </thead>
           <tbody>
-            <tr><td><strong>Athena OS Core</strong></td><td>Django console, projects, auth, image imports, annotation, dataset snapshots and prototype training</td><td>Reuse and generalize</td></tr>
-            <tr><td><strong>Vision workflows</strong></td><td>T01–T04 locally completed; T05 partially completed; T06–T65 remain open</td><td>Keep as a vision-specific workstream</td></tr>
-            <tr><td><strong>OCR</strong></td><td>Handwriting training integrated in Forge (PR #82); document OCR supports inference</td><td>Integrate with OS</td></tr>
-            <tr><td><strong>Audio classification</strong></td><td>Basic WAV classifier and ONNX export exist in Forge</td><td>Extend to industrial acoustic tasks</td></tr>
-            <tr><td><strong>Speech recognition</strong></td><td>Local speech-to-text and Sarawak Malay ASR foundations exist</td><td>Complete validated fine-tuning workflow</td></tr>
-            <tr><td><strong>Spreadsheet AI</strong></td><td>Training workflow merged in Forge PR #79</td><td>Reuse its trainer</td></tr>
-            <tr><td><strong>Text / NLP &amp; Keypoints</strong></td><td>Text category and geometry contracts exist; no verified end-to-end user training yet</td><td>New development</td></tr>
+            <tr><td><strong>Athena OS Core</strong></td><td>Wave 0 complete and merged: task/recipe registry, modality plugin interface, generic annotations and frozen dataset snapshots shared by every modality</td><td>Reuse and generalize</td></tr>
+            <tr><td><strong>Vision workflows</strong></td><td>18 of 65 tasks locally verified (T01–T14, T19–T22): private drafts and versioned release bundles, guided setup, durable supervised execution workers, reproducible frame timelines, bound-detector inference with per-session tracking, view health, accessible geometry editing. Live cameras (T10), crossing events (T25) and operator boards (T41+) remain open</td><td>Keep as a vision-specific workstream</td></tr>
+            <tr><td><strong>Vision detection (OS-VIS-001)</strong></td><td>Merged end to end: image projects, SAM+CLIP-assisted labeling, snapshots, real CPU training, evaluation, approval and check screens</td><td>Extend to segmentation (later)</td></tr>
+            <tr><td><strong>Audio classification (OS-AUD-001)</strong></td><td>Merged: WAV import, clip labels, <span class="a-mono">audio-wav-cnn</span> training with ONNX-or-torch artifacts, through the shared lifecycle</td><td>Industrial acoustic recipes later</td></tr>
+            <tr><td><strong>Handwriting OCR (OS-OCR-001)</strong></td><td>Merged: transcript annotations, <span class="a-mono">ocr-trocr</span> fine-tuning with CER/word-accuracy evaluation. Serving is backend-level; base-weight licensing is an open owner decision</td><td>Complete serving path</td></tr>
+            <tr><td><strong>Spreadsheet AI (OS-TAB-001)</strong></td><td>Merged: CSV/XLSX upload, target choice, <span class="a-mono">tabular-sklearn</span> training, unseen-row testing</td><td>Reuse its trainer</td></tr>
+            <tr><td><strong>Text classification (OS-NLP-001, half)</strong></td><td>Merged: strict CSV text datasets, <span class="a-mono">text-sklearn</span> (TF-IDF + logistic regression) with held-out evaluation. Named-entity recognition is out of scope so far</td><td>NER in a later slice</td></tr>
+            <tr><td><strong>Signal classification (OS-SIG-001, half)</strong></td><td>Merged: windowed time-series CSV, <span class="a-mono">signal-sklearn</span> (16 window statistics + logistic regression). Forecasting and anomaly detection are out of scope so far</td><td>Forecast/anomaly recipes later</td></tr>
+            <tr><td><strong>Speech recognition</strong></td><td>Not started in OS (local speech-to-text and Sarawak Malay ASR foundations exist in Forge)</td><td>Complete validated fine-tuning workflow</td></tr>
             <tr><td><strong>Face recognition</strong></td><td>No verified end-to-end trainable biometric workflow</td><td>New, separately gated with consent &amp; subgroup checks</td></tr>
             <tr><td><strong>Multimodal fusion</strong></td><td>Architecture concepts and contracts exist</td><td>Longer-term development (Wave 4)</td></tr>
           </tbody>
@@ -371,20 +375,20 @@
         </div>
         <span class="a-tag">Waves 0 to 4</span>
       </header>
-      <p>The roadmap organizes delivery into five waves (indicative sequence, not committed release dates). The recommended next milestone is <strong>Athena OS Multimodal MVP</strong>: four real, independently validated training workflows (Vision, Acoustics, Handwriting OCR, and Tabular prediction) sharing one lifecycle.</p>
+      <p>The roadmap organizes delivery into five waves (indicative sequence, not committed release dates). <strong>Where the waves stand today (20 November 2026):</strong> Wave 0 is complete and merged; all four Wave 1 slices are merged with their suites green in two environments — but Wave 1's acceptance gate (clean-install, real-data training tests with nontechnical users) is not met, so no Wave 1 item is ticked; Wave 2 has two of its halves merged (text classification, signal classification) with ASR, document fields and the remaining halves in progress or open.</p>
 
       <h3 class="wiki-subhead">Five delivery waves</h3>
       <div class="wiki-table-wrap">
         <table class="wiki-table">
           <thead>
-            <tr><th scope="col">Wave</th><th scope="col">Horizon</th><th scope="col">Scope &amp; key requirements</th></tr>
+            <tr><th scope="col">Wave</th><th scope="col">Horizon</th><th scope="col">Scope &amp; status</th></tr>
           </thead>
           <tbody>
-            <tr><td><strong>Wave 0 — Shared foundation</strong></td><td>0–6 weeks</td><td><span class="a-mono">OS-CORE-001</span> to <span class="a-mono">006</span>: task/recipe registry, modality plugins, shared observation/dataset/annotation contracts, durable job recovery, model registry, universal guided workflow.</td></tr>
-            <tr><td><strong>Wave 1 — Multi-task MVP</strong></td><td>2–4 months</td><td><span class="a-mono">OS-VIS-001</span> (Vision detection), <span class="a-mono">OS-AUD-001</span> (Acoustic classifier), <span class="a-mono">OS-OCR-001</span> (Handwriting TrOCR), <span class="a-mono">OS-TAB-001</span> (Excel/CSV tabular prediction).</td></tr>
-            <tr><td><strong>Wave 2 — Language &amp; signals</strong></td><td>4–7 months</td><td><span class="a-mono">OS-ASR-001/002</span> (Speech dataset editor &amp; ASR fine-tuning), <span class="a-mono">OS-NLP-001</span> (Text/NER), <span class="a-mono">OS-DOC-001</span> (Document fields/tables), <span class="a-mono">OS-SIG-001</span> (Time-series), <span class="a-mono">OS-AUD-002</span> (Normal-only acoustic anomaly).</td></tr>
-            <tr><td><strong>Wave 3 — Motion &amp; operations</strong></td><td>7–10 months</td><td>Pose/keypoint annotation, gesture/action models, video event labeling, industry Domain Packs, operational dashboards, and consent-gated biometric verification.</td></tr>
-            <tr><td><strong>Wave 4 — Multimodal &amp; edge</strong></td><td>10–15+ months</td><td>Synchronized cross-modal fusion (audio + vibration/temp, video + pose, thermal + RGB), modality ablations, qualified edge deployments and optional Athena Nodes.</td></tr>
+            <tr><td><strong>Wave 0 — Shared foundation</strong></td><td>0–6 weeks</td><td><span class="a-mono">OS-CORE-001</span> to <span class="a-mono">006</span>: task/recipe registry, modality plugins, shared observation/dataset/annotation contracts, durable job recovery, model registry, universal guided workflow. <strong>Complete and merged.</strong></td></tr>
+            <tr><td><strong>Wave 1 — Multi-task MVP</strong></td><td>2–4 months</td><td><span class="a-mono">OS-VIS-001</span> (Vision detection), <span class="a-mono">OS-AUD-001</span> (Acoustic classifier), <span class="a-mono">OS-OCR-001</span> (Handwriting TrOCR), <span class="a-mono">OS-TAB-001</span> (Excel/CSV tabular prediction). <strong>All four slices merged</strong> — verification is synthetic-data only; the real-data + nontechnical-user acceptance gate is not met.</td></tr>
+            <tr><td><strong>Wave 2 — Language &amp; signals</strong></td><td>4–7 months</td><td><span class="a-mono">OS-ASR-001/002</span> (Speech dataset editor &amp; ASR fine-tuning), <span class="a-mono">OS-NLP-001</span> (Text/NER), <span class="a-mono">OS-DOC-001</span> (Document fields/tables), <span class="a-mono">OS-SIG-001</span> (Time-series), <span class="a-mono">OS-AUD-002</span> (Normal-only acoustic anomaly). <strong>Text classification and signal classification merged</strong>; the rest open.</td></tr>
+            <tr><td><strong>Wave 3 — Motion &amp; operations</strong></td><td>7–10 months</td><td>Pose/keypoint annotation, gesture/action models, video event labeling, industry Domain Packs, operational dashboards, and consent-gated biometric verification. Open.</td></tr>
+            <tr><td><strong>Wave 4 — Multimodal &amp; edge</strong></td><td>10–15+ months</td><td>Synchronized cross-modal fusion (audio + vibration/temp, video + pose, thermal + RGB), modality ablations, qualified edge deployments and optional Athena Nodes. Open.</td></tr>
           </tbody>
         </table>
       </div>
@@ -396,10 +400,8 @@
             <tr><th scope="col">Existing tasks</th><th scope="col">Updated placement</th></tr>
           </thead>
           <tbody>
-            <tr><td><span class="a-mono">T01–T04</span></td><td>Keep as verified local vision foundations.</td></tr>
-            <tr><td><span class="a-mono">T05</span></td><td>Complete the missing versioned release-bundle contract.</td></tr>
-            <tr><td><span class="a-mono">T06–T08</span></td><td>Generalize guided setup and preflight into OS Core.</td></tr>
-            <tr><td><span class="a-mono">T09–T31</span></td><td>Video Operations / Vision Domain Pack.</td></tr>
+            <tr><td><span class="a-mono">T01–T14, T19–T22</span></td><td>Locally verified vision foundations (18 of 65): drafts, release bundles, guided setup, preflight, recordings, view health, accessible geometry, durable workers, timelines, inference and tracking.</td></tr>
+            <tr><td><span class="a-mono">T10, T15–T18, T23–T31</span></td><td>Video Operations / Vision Domain Pack — open (live cameras, remaining geometry/calibration work, event ledger, crossings, aggregates, parking).</td></tr>
             <tr><td><span class="a-mono">T32–T40</span></td><td>Extract shared review, training, comparison and approval logic (including T19 durable worker design).</td></tr>
             <tr><td><span class="a-mono">T41–T50</span></td><td>Industry-specific operations and visual dashboards.</td></tr>
             <tr><td><span class="a-mono">T51–T65</span></td><td>Apply reliability, deployment, security and usability gates across all modalities (reconciled with Forge <span class="a-mono">LAB-002/003</span>, <span class="a-mono">LAB-006</span>, <span class="a-mono">LAB-007B</span>, <span class="a-mono">LAB-104</span>, <span class="a-mono">LAB-107</span>, <span class="a-mono">LAB-009</span>).</td></tr>
@@ -429,11 +431,10 @@
 
       <h3 class="wiki-subhead">Immediate execution priorities</h3>
       <ol class="wiki-steps">
-        <li><strong>Reconcile Athena OS and Forge training contracts:</strong> Identify canonical schemas, remove duplication and define adapter boundaries.</li>
-        <li><strong>Finish OS T05 and the shared training-job lifecycle:</strong> Versioned release bundles, durable execution, artifact and model provenance.</li>
-        <li><strong>Create universal task/recipe and annotation plugin interfaces:</strong> Make sound, OCR and spreadsheet tasks first-class without duplicating the platform.</li>
-        <li><strong>Unify the beginner-friendly Teach workflow:</strong> One guided experience with appropriate controls for each task.</li>
-        <li><strong>Validate four real-data vertical slices:</strong> Vision, acoustic classification, handwriting OCR and spreadsheets.</li>
+        <li><strong>Run the Wave 1 acceptance gate:</strong> Clean-install, real-data training tests for the four merged slices with nontechnical users — the code is merged; this gate is what Wave 1 still owes.</li>
+        <li><strong>Continue the vision runtime:</strong> The durable event ledger (T23) and directional crossing episodes (T25) on top of the merged workers, timelines, inference and tracking; live cameras (T10) after recorded semantics are complete.</li>
+        <li><strong>Finish the Wave 2 halves:</strong> Document fields and tables (OS-DOC-001, in progress), NER for text, forecasting/anomaly recipes for signals, ASR.</li>
+        <li><strong>Resolve the OCR base-weight licence:</strong> The TrOCR weights repository currently declares no licence; the in-product wording is unreliable until an owner decides (see the licence audit).</li>
         <li><strong>Complete evaluation, approval, deployment and recovery gates:</strong> End-to-end quality and operational truth before expanding further.</li>
       </ol>
     </article>
