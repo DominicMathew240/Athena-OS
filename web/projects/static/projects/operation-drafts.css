@@ -17,6 +17,17 @@
 .line-preview-canvas { display: block; width: 100%; max-width: 24rem; height: auto; background: #17202a; border-radius: .5rem; }
 .line-preview-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0 0; }
 .reference-event-editor { margin: 1rem 0; padding: 1rem; border: 1px solid var(--c-line-strong); border-radius: .75rem; }
+/* Accessible geometry editing (T15): keyboard endpoint nudging, undo/redo, the
+   text summary, and the action row. The chosen endpoint button carries both a
+   colour change and aria-pressed, so the state never depends on colour alone. */
+.line-nudge, .line-history, .line-summary { margin: 1rem 0; padding: 1rem; border: 1px solid var(--c-line-strong); border-radius: .75rem; }
+.line-nudge .a-h3, .line-history .a-h3, .line-summary .a-h3 { margin-top: 0; }
+.line-nudge-point, .line-nudge-move { display: flex; flex-wrap: wrap; align-items: center; gap: .6rem; margin-top: .6rem; }
+.line-nudge-buttons, .line-history-buttons { display: flex; flex-wrap: wrap; gap: .5rem; }
+.line-nudge-buttons .a-btn[aria-pressed="true"] { border-color: var(--c-accent); background: var(--c-accent-soft); font-weight: 600; }
+.line-nudge-buttons .a-btn[aria-pressed="true"]::after { content: " (chosen)"; font-weight: 400; font-size: 13px; }
+.line-summary-text { margin: .5rem 0 0; padding: .6rem .75rem; border-left: 3px solid var(--c-accent); border-radius: .4rem; background: var(--c-surface-2); overflow-wrap: anywhere; }
+.line-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
 .reference-event-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 #reference-event-list { display: grid; gap: .5rem; padding-left: 1.5rem; }
 #reference-event-list li { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }

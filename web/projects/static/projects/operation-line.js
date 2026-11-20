@@ -3,7 +3,14 @@
    assumptions — Athena does not decide which side is "in"), the direction is an
    explicit ordered pair of endpoints that can only be reversed by button, and a
    stepped preview shows a person crossing so the user can confirm which way
-   counts as moving from the negative side to the positive side. */
+   counts as moving from the negative side to the positive side.
+   T15: every essential action here also works without a mouse and without
+   colour recognition. The endpoints can be nudged with the keyboard (fine
+   0.001 / coarse 0.01 Shift steps, clamped to the picture), each coordinate is
+   an explicit numeric field, the whole geometry is restated as text in an
+   aria-live summary, an in-session undo/redo stack keeps endpoint moves,
+   reversals and label changes, and clearing warns before discarding unsaved
+   work and says what the saved state is. */
 (() => {
   "use strict";
   window.createOperationLineEditor = ({ video, canEdit, onSave }) => {
@@ -21,16 +28,37 @@
     const preview = document.getElementById("line-preview");
     const previewCanvas = document.getElementById("line-preview-canvas");
     const previewText = document.getElementById("line-preview-text");
+    const summary = document.getElementById("line-summary");
+    const undoButton = document.getElementById("line-undo");
+    const redoButton = document.getElementById("line-redo");
+    const selectStart = document.getElementById("line-select-start");
+    const selectEnd = document.getElementById("line-select-end");
+    const moveButtons = {
+      left: document.getElementById("line-move-left"),
+      right: document.getElementById("line-move-right"),
+      up: document.getElementById("line-move-up"),
+      down: document.getElementById("line-move-down")
+    };
     let original = "";
     let draft = null;
     let busy = false;
     let hasFrame = false;
     /* Endpoint dragging: one of 0 (start), 1 (end) or null (no drag in progress). */
     let dragging = null;
+    /* The keyboard-chosen endpoint for arrow nudging: 0 (start) or 1 (end). It
+       follows the last coordinate field the person used, so arrows act on what
+       was just edited, and the two explicit buttons set it too. */
+    let chosen = 0;
+    /* In-session undo/redo (T15). `undo`/`redo` hold whole-geometry snapshots
+       (arrays of the seven field values); `baseState` is the saved or freshly
+       loaded state. Undo never reaches past the last save or load, so after a
+       save the history stays honest about what it can still undo. */
+    const history = { undo: [], redo: [], baseState: null, batchFrom: null, batchTimer: null, editFrom: null };
     /* The preview's stepped person: position along a crossing path, advanced by the
        preview button or the play control. It is view state only, never saved. */
     const previewState = { t: 0, forward: true, playing: false, timer: null };
     const values = () => inputs.map(input => input.value);
+    const sameValues = (a, b) => a.join("\u0000") === b.join("\u0000");
     const dirty = () => !!draft?.recording && JSON.stringify(values()) !== original;
     const coords = () => inputs.slice(0, 4).map(input => input.value === "" ? null : Number(input.value));
     const validPoint = (x, y) => x !== null && y !== null && Number.isFinite(x) && Number.isFinite(y) && x >= 0 && x <= 100 && y >= 0 && y <= 100;
@@ -38,6 +66,10 @@
      * measurable direction. Vertical and horizontal lines are fine. The server
      * refuses the same geometry with LINE_MIN_LENGTH = 1e-6 in normalized units. */
     const MIN_LENGTH_PERCENT = 1e-4;
+    /* Keyboard nudge steps, in percent of the picture: fine, and Shift-coarse. */
+    const NUDGE_FINE = 0.1;
+    const NUDGE_COARSE = 1;
+    const NUDGE_ROUNDED = value => String(Math.round(value * 1000) / 1000);
 
     function setPreviewText(message) {
       if (previewText) previewText.textContent = message;
@@ -46,6 +78,252 @@
     function lineLength([sx, sy, ex, ey]) {
       return Math.hypot(ex - sx, ey - sy);
     }
+
+    /* --- Selected-shape text (T15) ---------------------------------------
+       The whole geometry restated as plain text and announced on change
+       (aria-live): the state of the shape never depends on the picture or on
+       colour. Coordinates are plain numbers (percent from the top-left). */
+    function describeGeometry() {
+      const [sx, sy, ex, ey] = coords();
+      const name = inputs[4].value.trim() || "an unnamed line";
+      const positive = inputs[5].value.trim();
+      const negative = inputs[6].value.trim();
+      if ([sx, sy, ex, ey].every(value => value === null)) {
+        return "No line drawn yet. Choose two points with the position fields or the keyboard buttons above.";
+      }
+      const point = (label, x, y) => validPoint(x, y)
+        ? `${label} point: ${Number(x.toFixed(3))}% from the left, ${Number(y.toFixed(3))}% from the top.`
+        : `${label} point: not entered yet.`;
+      const sides = positive && negative
+        ? `Movement towards the arrow counts as "${positive}"; movement against the arrow counts as "${negative}".`
+        : "The two sides of the line are not both labelled yet.";
+      const direction = (validPoint(sx, sy) && validPoint(ex, ey) && lineLength([sx, sy, ex, ey]) >= MIN_LENGTH_PERCENT)
+        ? "The direction runs from the start point to the end point, and the arrow on the picture points to the left of that walk."
+        : "The two points are too close together to give the line a direction yet.";
+      const saveState = dirty()
+        ? "There are unsaved changes to the line."
+        : draft?.line ? "The line matches what is saved." : "";
+      return `Line "${name}". ${point("Start", sx, sy)} ${point("End", ex, ey)} ${sides} ${direction}${saveState ? " " + saveState : ""}`;
+    }
+
+    function refreshSummary() {
+      if (summary) summary.textContent = describeGeometry();
+    }
+
+    /* --- Undo/redo (T15) --------------------------------------------------
+       Every deliberate geometry change (a reversal, a run of nudges, a settled
+       editing run in the fields, clearing) pushes one snapshot; free typing
+       alone does not, so the stack mirrors the actions a person would name,
+       not every keystroke. An "editing run" is the field edits and nudges made
+       between two explicit actions; it settles when focus leaves the line
+       editor's own controls, when Enter is pressed, or when the next explicit
+       action begins. */
+    const editorControls = new Set([...inputs, undoButton, redoButton, selectStart, selectEnd, ...Object.values(moveButtons), canvas].filter(Boolean));
+
+    function endBatch() {
+      if (history.batchTimer) { clearTimeout(history.batchTimer); history.batchTimer = null; }
+      history.batchFrom = null;
+    }
+
+    function pushHistory(previous) {
+      history.undo.push(previous);
+      if (history.undo.length > 100) history.undo.shift();
+      history.redo = [];
+      renderHistoryButtons();
+    }
+
+    function settleRun() {
+      if (history.editFrom != null && !sameValues(history.editFrom, values())) pushHistory(history.editFrom);
+      history.editFrom = null;
+    }
+
+    function rememberBase() {
+      history.undo = [];
+      history.redo = [];
+      history.baseState = values();
+      history.editFrom = null;
+      endBatch();
+      renderHistoryButtons();
+    }
+
+    function canUndo() { return history.undo.length > 0; }
+    function canRedo() { return history.redo.length > 0; }
+
+    function renderHistoryButtons() {
+      if (!undoButton || !redoButton) return;
+      undoButton.disabled = busy || !canUndo();
+      redoButton.disabled = busy || !canRedo();
+    }
+
+    function restoreGeometry(state) {
+      inputs.forEach((input, i) => { input.value = state[i]; });
+      dragging = null;
+      error.textContent = "";
+      previewState.t = 0;
+      history.editFrom = null;
+      endBatch();
+      paint();
+      paintPreview();
+      refreshSummary();
+      renderHistoryButtons();
+      renderChosenButtons();
+    }
+
+    function doUndo() {
+      if (busy || !canEdit()) return;
+      settleRun();
+      if (!canUndo()) return;
+      history.redo.push(values());
+      restoreGeometry(history.undo.pop());
+      status.textContent = "Undone. " + (dirty() ? "The line now differs from what is saved." : "The line is back to what is saved.");
+    }
+
+    function doRedo() {
+      if (busy || !canEdit()) return;
+      settleRun();
+      if (!canRedo()) return;
+      history.undo.push(values());
+      restoreGeometry(history.redo.pop());
+      status.textContent = "Redone. " + (dirty() ? "The line now differs from what is saved." : "The line is back to what is saved.");
+    }
+
+    if (undoButton) undoButton.addEventListener("click", doUndo);
+    if (redoButton) redoButton.addEventListener("click", doRedo);
+
+    /* --- Keyboard endpoint choice and nudging (T15) -----------------------
+       The chosen endpoint is the keyboard stand-in for "grab an endpoint with
+       the mouse". It follows the last coordinate field the person used, and
+       the two explicit buttons set it too. */
+    function renderChosenButtons() {
+      if (selectStart) selectStart.setAttribute("aria-pressed", chosen === 0 ? "true" : "false");
+      if (selectEnd) selectEnd.setAttribute("aria-pressed", chosen === 1 ? "true" : "false");
+    }
+
+    function chooseEndpoint(which) {
+      chosen = which;
+      renderChosenButtons();
+      const x = coords()[which * 2], y = coords()[which * 2 + 1];
+      status.textContent = `Keyboard endpoint chosen: the ${which === 0 ? "start" : "end"} point`
+        + (validPoint(x, y) ? ` at ${Number(x.toFixed(3))}% from the left, ${Number(y.toFixed(3))}% from the top.` : " is not placed yet. Enter its position in the fields first.");
+    }
+
+    if (selectStart) selectStart.addEventListener("click", () => { settleRun(); chooseEndpoint(0); });
+    if (selectEnd) selectEnd.addEventListener("click", () => { settleRun(); chooseEndpoint(1); });
+
+    /* Nudge the chosen endpoint by a step, clamped to the picture. Presses
+       close together collapse into one undo entry, so undo means "back before
+       this run of nudges", not one step at a time. */
+    function nudge(dx, dy) {
+      if (busy || !canEdit()) return;
+      const index = chosen * 2;
+      const x = coords()[index], y = coords()[index + 1];
+      if (!validPoint(x, y)) {
+        error.textContent = `Place the ${chosen === 0 ? "start" : "end"} point first: enter both of its position fields before nudging.`;
+        return;
+      }
+      settleRun();
+      if (!history.batchFrom) {
+        history.batchFrom = values();
+        pushHistory(history.batchFrom);
+        history.batchTimer = setTimeout(endBatch, 1200);
+      }
+      inputs[index].value = NUDGE_ROUNDED(Math.max(0, Math.min(100, x + dx)));
+      inputs[index + 1].value = NUDGE_ROUNDED(Math.max(0, Math.min(100, y + dy)));
+      error.textContent = "";
+      status.textContent = `${chosen === 0 ? "Start" : "End"} point moved to ${Number(inputs[index].value)}% from the left, ${Number(inputs[index + 1].value)}% from the top.`;
+      paint();
+      paintPreview();
+      refreshSummary();
+    }
+
+    const NUDGE = { left: [-1, 0], right: [1, 0], up: [0, -1], down: [0, 1] };
+    for (const [name, button] of Object.entries(moveButtons)) {
+      if (!button) continue;
+      button.addEventListener("click", () => { const [dx, dy] = NUDGE[name]; nudge(dx * NUDGE_FINE, dy * NUDGE_FINE); });
+      button.addEventListener("keydown", arrowNudge);
+    }
+
+    /* Arrow keys nudge from three places: the nudge buttons and the canvas
+       (where Shift chooses the coarse step), and the coordinate fields
+       themselves, nudging whichever endpoint the field belongs to. */
+    function arrowNudge(event) {
+      const map = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+      const step = map[event.key];
+      if (!step) return false;
+      event.preventDefault();
+      const size = event.shiftKey ? NUDGE_COARSE : NUDGE_FINE;
+      nudge(step[0] * size, step[1] * size);
+      return true;
+    }
+
+    canvas.addEventListener("keydown", arrowNudge);
+    inputs.slice(0, 4).forEach((input, index) => {
+      input.addEventListener("keydown", event => {
+        const map = { ArrowLeft: [-1, 0], ArrowRight: [1, 0], ArrowUp: [0, -1], ArrowDown: [0, 1] };
+        if (!map[event.key]) return;
+        event.preventDefault();
+        const size = event.shiftKey ? NUDGE_COARSE : NUDGE_FINE;
+        nudgeInField(index, map[event.key][0] * size, map[event.key][1] * size);
+      });
+    });
+    /* Nudging inside a field moves that field's endpoint through the same
+       clamped path as the buttons and the canvas, so all three entry points
+       round-trip. */
+    function nudgeInField(index, dx, dy) {
+      chosen = index < 2 ? 0 : 1;
+      renderChosenButtons();
+      const x = coords()[index], y = coords()[index + 1];
+      if (!validPoint(x, y)) {
+        error.textContent = "Enter both position fields of this endpoint before nudging with the arrow keys.";
+        return;
+      }
+      if (history.editFrom == null) history.editFrom = values();
+      inputs[index].value = NUDGE_ROUNDED(Math.max(0, Math.min(100, x + dx)));
+      inputs[index + 1].value = NUDGE_ROUNDED(Math.max(0, Math.min(100, y + dy)));
+      error.textContent = "";
+      status.textContent = `${chosen === 0 ? "Start" : "End"} point moved to ${Number(inputs[index].value)}% from the left, ${Number(inputs[index + 1].value)}% from the top.`;
+      paint();
+      paintPreview();
+      refreshSummary();
+    }
+
+    /* Editing runs: entering a field (or the canvas) opens one, leaving the
+       line editor's controls settles it into a single undo entry. Enter settles
+       immediately too. */
+    inputs.forEach((input, index) => {
+      input.addEventListener("focus", () => {
+        if (index < 4) { chosen = index < 2 ? 0 : 1; renderChosenButtons(); }
+        if (history.editFrom == null) history.editFrom = values();
+      });
+    });
+    canvas.addEventListener("focus", () => { if (history.editFrom == null) history.editFrom = values(); });
+    canvas.addEventListener("blur", settleRun);
+    for (const control of editorControls) control.addEventListener("blur", event => {
+      // Only settle when focus is actually leaving the editor's controls.
+      if (!event.relatedTarget || !editorControls.has(event.relatedTarget)) settleRun();
+    });
+    // Reaching for a button ends the field-editing run: the undo/redo buttons
+    // must already tell the truth (enabled with something to undo) by the time
+    // focus arrives, not only after the button is pressed.
+    for (const control of [selectStart, selectEnd, undoButton, redoButton, ...Object.values(moveButtons)]) {
+      if (control) control.addEventListener("focus", settleRun);
+    }
+    for (const input of inputs) input.addEventListener("keydown", event => {
+      if (event.key === "Enter") { event.preventDefault(); settleRun(); }
+    });
+
+    /* Plain-message validation for the numeric fields, on blur: the browser's
+       own number-widget wording is not ours to control. */
+    inputs.slice(0, 4).forEach((input, index) => {
+      input.addEventListener("blur", () => {
+        if (input.value === "") return;
+        const value = Number(input.value);
+        const axis = index % 2 === 0 ? "left to right" : "top to bottom";
+        if (!Number.isFinite(value) || value < 0 || value > 100) {
+          error.textContent = `Enter the ${axis} position as a number from 0 to 100 (a percentage of the picture).`;
+        }
+      });
+    });
 
     /* Paint the editing canvas: the frozen frame, the line with its positive-side
        arrow, and one halo circle over the endpoint being dragged. */
@@ -178,11 +456,12 @@
       snapshot.getContext("2d").drawImage(video, 0, 0);
       hasFrame = true;
       const saveState = dirty() ? "Line changes are not saved. " : draft?.line ? "Saved line. " : "";
-      status.textContent = `${saveState}Frame ready. Drag either endpoint, click two points, or enter positions below.`;
+      status.textContent = `${saveState}Frame ready. Drag either endpoint, click two points, use the keyboard endpoint buttons, or enter positions below.`;
       paint();
     }
 
     function load(nextDraft) {
+      const savingSameDraft = draft && nextDraft && draft.id === nextDraft.id;
       draft = nextDraft;
       section.hidden = !draft?.recording;
       const line = draft?.line;
@@ -200,6 +479,19 @@
       previewState.t = 0;
       paint();
       paintPreview();
+      if (savingSameDraft) {
+        // A save of the draft we are already editing: the history base moves to
+        // the newly saved state, but the session's own edits stay undoable —
+        // undo after a save says "the line now differs", never claims to reach
+        // before this session, and redo of the session's work still exists.
+        history.baseState = values();
+        history.editFrom = null;
+        endBatch();
+        renderHistoryButtons();
+      } else {
+        rememberBase();
+      }
+      refreshSummary();
     }
 
     function read() {
@@ -219,9 +511,11 @@
 
     function setBusy(value) {
       busy = value;
-      [...inputs, frame, save, clear, reverse].forEach(input => { if (input) input.disabled = value; });
+      [...inputs, frame, save, clear, reverse, undoButton, redoButton, selectStart, selectEnd, ...Object.values(moveButtons)].forEach(input => { if (input) input.disabled = value; });
+      if (!value) renderHistoryButtons();
     }
-    inputs.forEach(input => input.addEventListener("input", () => { error.textContent = ""; paint(); paintPreview(); }));
+    inputs.forEach(input => input.addEventListener("input", () => { error.textContent = ""; paint(); paintPreview(); refreshSummary(); }));
+    save.addEventListener("click", () => settleRun());
     canvas.addEventListener("pointerdown", event => {
       if (busy || !canEdit() || !hasFrame || event.button !== 0) return;
       const box = canvas.getBoundingClientRect();
@@ -268,11 +562,45 @@
     frame.addEventListener("click", capture);
     video.addEventListener("loadeddata", () => { if (!section.hidden) capture(); });
     clear.addEventListener("click", () => {
-      inputs.forEach(input => { input.value = ""; });
-      dragging = null; error.textContent = "";
-      status.textContent = "Line cleared; save the draft to apply.";
-      previewState.t = 0;
-      paint(); paintPreview();
+      if (busy || !canEdit()) return;
+      settleRun();
+      /* Clearing distinguishes unsaved edits from the saved state (T15): when
+         there are unsaved edits, ask before throwing them away and say exactly
+         what would be lost and what would be left. */
+      const wasUnsaved = dirty();
+      const hadSavedLine = !!draft?.line;
+      const go = () => {
+        const before = values();
+        inputs.forEach(input => { input.value = ""; });
+        dragging = null; error.textContent = "";
+        previewState.t = 0;
+        status.textContent = wasUnsaved
+          ? "Unsaved line changes discarded. No line is set now; save the draft to apply the clear."
+          : hadSavedLine
+            ? "Editor cleared. The saved line stays saved until you save the draft without one."
+            : "Line cleared; save the draft to apply.";
+        paint(); paintPreview();
+        history.editFrom = null;
+        endBatch();
+        if (before.some(value => value !== "")) pushHistory(before);
+        refreshSummary();
+        if (clear) clear.dispatchEvent(new CustomEvent("athena:line-cleared", { bubbles: true }));
+      };
+      if (wasUnsaved && window.Athena?.askConfirm) {
+        window.Athena.askConfirm({
+          title: "Discard the unsaved line?",
+          message: [
+            "The line in the editor has changes that have not been saved yet.",
+            hadSavedLine
+              ? "Clearing now throws those changes away and leaves the previously saved line on the draft. Undo can bring your edits back within this session."
+              : "Clearing now throws those changes away; nothing is saved yet. Undo can bring them back within this session."
+          ],
+          keepLabel: "Keep editing",
+          confirmLabel: "Discard and clear"
+        }).then(answer => { if (answer) go(); });
+      } else {
+        go();
+      }
     });
     /* Reversing the direction is an explicit, single-purpose action: swap the two
        endpoints and swap the two side labels with them, so "Street"/"Shop" keep
@@ -283,14 +611,17 @@
       const [sx, sy, ex, ey] = coords();
       if (!validPoint(sx, sy) || !validPoint(ex, ey)) { error.textContent = "Choose both line points before reversing the direction."; return; }
       if (lineLength([sx, sy, ex, ey]) < MIN_LENGTH_PERCENT) { error.textContent = "Draw the line longer before reversing it."; return; }
+      const before = values();
       inputs[0].value = String(ex); inputs[1].value = String(ey);
       inputs[2].value = String(sx); inputs[3].value = String(sy);
       const positive = inputs[5].value, negative = inputs[6].value;
       inputs[5].value = negative; inputs[6].value = positive;
       dragging = null; error.textContent = "";
       previewState.t = 0;
+      settleRun();
+      pushHistory(before);
       status.textContent = "Direction reversed: the start and end points swapped, and the side labels moved with them. Save the draft to keep this change.";
-      paint(); paintPreview();
+      paint(); paintPreview(); refreshSummary();
       if (reverse) reverse.dispatchEvent(new CustomEvent("athena:line-direction-reversed", { bubbles: true }));
     });
     if (preview) {
@@ -300,6 +631,11 @@
       if (step) step.addEventListener("click", () => stepPreview(0.25));
     }
     save.addEventListener("click", onSave);
+    /* After a successful save the parent calls load(), which resets the history
+       base to the newly saved state — undo can still step back through this
+       session's edits, but never claims to reach before it. */
+    renderChosenButtons();
+    renderHistoryButtons();
     return { load, read, dirty, setBusy, setError: message => { error.textContent = message; }, repaint: paintPreview };
   };
 })();
