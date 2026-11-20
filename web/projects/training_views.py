@@ -84,10 +84,14 @@ def teachable_project(project_id) -> Project:
     from .modalities import get_plugin
     from .tasks import recipe_for_project
 
+    # A recipe that never trains (document-fields) is unteachable even though its modality has
+    # a plugin with an annotation kind (text does): there is genuinely nothing to run.
+    recipe = recipe_for_project(project)
+    if recipe is not None and recipe.key in NON_TRAINING_RECIPES:
+        raise Http404("This project's task has no teaching tools yet.")
     if getattr(get_plugin(project.modality), "annotation_kind", ""):
         return project
-    recipe = recipe_for_project(project)
-    if recipe is not None and recipe.available and recipe.key not in NON_TRAINING_RECIPES:
+    if recipe is not None and recipe.available:
         return project
     raise Http404("This project's task has no teaching tools yet.")
 
