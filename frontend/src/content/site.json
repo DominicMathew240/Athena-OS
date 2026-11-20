@@ -2,10 +2,10 @@
   "siteUrl": "https://dominicmathew240.github.io/Athena-OS",
   "name": "Athena OS",
   "headline": "Train AI on all your data.",
-  "definition": "Athena OS is an open-source, self-hosted no-code AI training and visual inspection platform across photos, video, audio, handwriting, documents, motion, and spreadsheets. Apache-2.0.",
-  "description": "Train AI on all your data: photos, audio, handwriting, documents, motion, and spreadsheets. Self-hosted, no-code, Apache-2.0.",
+  "definition": "Athena OS is an open-source, self-hosted no-code AI training and visual inspection platform across photos, video, audio, handwriting, documents, signals, and spreadsheets. Apache-2.0.",
+  "description": "Train AI on all your data: photos, audio, handwriting, documents, signals, and spreadsheets. Self-hosted, no-code, Apache-2.0.",
   "features": [
-    "No-code multimodal training recipes across Vision, Audio, Handwriting OCR, Documents, Motion, and Spreadsheets",
+    "No-code multimodal training recipes across Vision, Audio, Handwriting OCR, Spreadsheets, Text, and Signals",
     "Ask plain-language questions on photos or 6-frame video clips with counts and marked regions",
     "Consistent Project to Feedback lifecycle with modality-specific quality gates",
     "Open-source Qwen by default or any OpenAI-compatible AI, self-hosted under Apache-2.0"
@@ -31,7 +31,7 @@
   "faq": [
     {
       "q": "What is Athena OS?",
-      "a": "Athena OS is an open-source, self-hosted AI training and inspection platform. Today you can inspect photos or 6-frame clips in plain words and train custom detectors, while the multimodal roadmap expands no-code training across sound, handwriting, documents, motion, and spreadsheets."
+      "a": "Athena OS is an open-source, self-hosted AI training and inspection platform. Today you can inspect photos or 6-frame clips in plain words and train across six merged recipes on synthetic data — vision detection, audio classification, handwriting OCR, spreadsheets, text classification, and signal classification — while Wave 3–4 motion and fusion expand the roadmap."
     },
     {
       "q": "Do I need to write code?",

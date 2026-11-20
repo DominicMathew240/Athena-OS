@@ -1,14 +1,15 @@
 # Athena OS
-> Athena OS is an open-source, self-hosted no-code AI training and visual inspection platform across photos, video, audio, handwriting, documents, motion, and spreadsheets. Apache-2.0.
+> Athena OS is an open-source, self-hosted no-code AI training and visual inspection platform across photos, video, audio, handwriting, documents, signals, and spreadsheets. Apache-2.0.
 
 ## Start here
 - [Home](https://dominicmathew240.github.io/Athena-OS/): Public landing page and interactive multimodal studio + docs wiki (no backend)
 - [Portfolio](https://dominic.strateticsxp.com/): Ts. Dominic Mathew, Co-Founder and CTO of Stratetics Experts
 - [Inspec-Ther](https://inspec-ther.com/): AI-driven thermal inspection of solar PV assets
 
-## Capabilities & Roadmap
-- Today: plain-language inspection of photos and 6-frame video clips, plus custom object detector training
-- Multimodal Roadmap (Waves 0-4): Computer Vision, Acoustic AI, Handwriting OCR (TrOCR), Documents & NLP, Spreadsheets & Signals, Human Pose & Gestures, and Wave 4 Cross-modal Fusion
+## Capabilities & Roadmap (20 November 2026)
+- Merged in console (synthetic-verified): plain-language inspection of photos and 6-frame video clips, plus six training recipes — Vision Detection (`torchvision-fasterrcnn` / `dfine-coco`), Acoustic Classification (`audio-wav-cnn`), Handwriting OCR (`ocr-trocr`, serving backend-level), Tabular Prediction (`tabular-sklearn`), Text Classification (`text-sklearn`), and Signal Classification (`signal-sklearn`)
+- Vision workflows: 18 of 65 tasks locally verified (`T01–T14`, `T19–T22`) including T06 guided setup, T12 view health, T13 reproducible replay, T14 line direction, and T21–T22 bound detector + per-session tracking
+- Multimodal Roadmap (Waves 0–4): Wave 0 complete, Wave 1 all 4 slices merged (gate open), Wave 2 text & signal classification halves merged, Wave 3 Pose & Gestures, and Wave 4 Cross-modal Fusion
 - Shared Resource Lifecycle: Project -> Task -> Observation -> Annotation -> Dataset Version -> Training Run -> Model Version -> Evaluation -> Deployment -> Feedback
 - Built-in open Qwen vision model or any OpenAI-compatible endpoint, running on local CPU/GPU or optional Athena Nodes
 

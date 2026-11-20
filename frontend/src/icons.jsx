@@ -55,10 +55,37 @@ export function Icon({ name, size = 20 }) {
           <path d="M4 18h16" />
         </svg>
       );
-    case "sparkle":
+    case "sun":
       return (
         <svg {...common}>
-          <path d="M9.937 15.5A2 2 0 0 0 8.5 14.063l-6.135-1.582a.5.5 0 0 1 0-.962L8.5 9.936A2 2 0 0 0 9.937 8.5l1.582-6.135a.5.5 0 0 1 .963 0L14.063 8.5A2 2 0 0 0 15.5 9.937l6.135 1.581a.5.5 0 0 1 0 .964L15.5 14.063a2 2 0 0 0-1.437 1.437l-1.582 6.135a.5.5 0 0 1-.963 0z" />
+          <circle cx="12" cy="12" r="4" />
+          <path d="M12 2v2" />
+          <path d="M12 20v2" />
+          <path d="m4.93 4.93 1.41 1.41" />
+          <path d="m17.66 17.66 1.41 1.41" />
+          <path d="M2 12h2" />
+          <path d="M20 12h2" />
+          <path d="m6.34 17.66-1.41 1.41" />
+          <path d="m19.07 4.93-1.41 1.41" />
+        </svg>
+      );
+    case "moon":
+      return (
+        <svg {...common}>
+          <path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9Z" />
+        </svg>
+      );
+    case "check":
+      return (
+        <svg {...common}>
+          <path d="M20 6 9 17l-5-5" />
+        </svg>
+      );
+    case "terminal":
+      return (
+        <svg {...common}>
+          <polyline points="4 17 10 11 4 5" />
+          <line x1="12" x2="20" y1="19" y2="19" />
         </svg>
       );
     case "arrow":

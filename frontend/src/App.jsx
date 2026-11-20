@@ -4,6 +4,7 @@ import { SCENE_ORDER, SCENES } from "./scenes.js";
 import site from "./content/site.json";
 import { MultimodalStudio } from "./MultimodalStudio.jsx";
 import { DocsSection } from "./DocsSection.jsx";
+import { HandwritingInkGraphic, RealAudioWaveform, SpectrogramGraphic } from "./ModalityGraphics.jsx";
 import pipe from "./assets/landing/pipe-corrosion.jpg";
 import parking from "./assets/landing/parking-aerial.jpg";
 import store from "./assets/landing/store-entrance.jpg";
@@ -12,20 +13,44 @@ import safety from "./assets/landing/safety-worker.jpg";
 import welding from "./assets/landing/welding.jpg";
 
 const PORTFOLIO = site.founder.url;
+const STORAGE_KEY = "color-scheme";
 const TICKER = [
-  "Parking occupancy",
-  "People in snapshot",
-  "Corrosion grading",
-  "Weld defects",
-  "Hard hats & vests",
-  "Motor fault acoustics",
-  "Handwriting (TrOCR)",
-  "Tabular predictions",
-  "Speech ASR",
-  "Posture & gestures",
-  "Sensor anomalies",
-  "Multimodal fusion",
+  "Vision detection (OS-VIS-001)",
+  "Acoustic WAV clips (OS-AUD-001)",
+  "Handwriting OCR (TrOCR)",
+  "Tabular prediction (CSV/XLSX)",
+  "Text classification (OS-NLP-001)",
+  "Signal windows (OS-SIG-001)",
+  "Vision ops · 18 of 65 verified",
+  "Frozen 80/10/10 snapshots",
+  "Human approval gates",
+  "Self-hosted Qwen or BYO AI",
 ];
+
+function getSystemScheme() {
+  if (typeof window === "undefined" || typeof window.matchMedia !== "function") return "light";
+  return window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light";
+}
+
+function readStoredScheme() {
+  try {
+    const val = window.localStorage.getItem(STORAGE_KEY);
+    return val === "light" || val === "dark" ? val : null;
+  } catch {
+    return null;
+  }
+}
+
+function applySchemeToDocument(stored) {
+  const meta = document.querySelector('meta[name="color-scheme"]');
+  if (stored === "light" || stored === "dark") {
+    document.documentElement.dataset.theme = stored;
+    if (meta) meta.setAttribute("content", stored);
+  } else {
+    delete document.documentElement.dataset.theme;
+    if (meta) meta.setAttribute("content", "light dark");
+  }
+}
 
 function Brand() {
   return (
@@ -46,11 +71,64 @@ function PortfolioButton({ className, children, testId }) {
   );
 }
 
+function ThemeToggle() {
+  const [stored, setStored] = useState(() => readStoredScheme());
+  const [system, setSystem] = useState(() => getSystemScheme());
+  const effective = stored ?? system;
+
+  useEffect(() => {
+    applySchemeToDocument(stored);
+  }, [stored]);
+
+  useEffect(() => {
+    if (typeof window.matchMedia !== "function") return undefined;
+    const mq = window.matchMedia("(prefers-color-scheme: dark)");
+    const onSystem = () => setSystem(mq.matches ? "dark" : "light");
+    const onStorage = (ev) => {
+      if (ev.key === STORAGE_KEY) setStored(readStoredScheme());
+    };
+    mq.addEventListener("change", onSystem);
+    window.addEventListener("storage", onStorage);
+    return () => {
+      mq.removeEventListener("change", onSystem);
+      window.removeEventListener("storage", onStorage);
+    };
+  }, []);
+
+  function toggle() {
+    const target = effective === "dark" ? "light" : "dark";
+    const sys = getSystemScheme();
+    if (target === sys) {
+      try { window.localStorage.removeItem(STORAGE_KEY); } catch { /* ignore */ }
+      setStored(null);
+    } else {
+      try { window.localStorage.setItem(STORAGE_KEY, target); } catch { /* ignore */ }
+      setStored(target);
+    }
+  }
+
+  const nextLabel = effective === "dark" ? "Switch to light theme" : "Switch to dark theme";
+  return (
+    <button
+      type="button"
+      className="lp-theme-btn"
+      onClick={toggle}
+      aria-label={nextLabel}
+      data-testid="landing-theme-toggle"
+    >
+      <Icon name={effective === "dark" ? "sun" : "moon"} size={16} />
+      <span className="lp-theme-text">{effective === "dark" ? "Light" : "Dark"}</span>
+    </button>
+  );
+}
+
 function Demo() {
   const [current, setCurrent] = useState("corrosion");
   const [swapping, setSwapping] = useState(false);
   const [shown, setShown] = useState(SCENES.corrosion);
+  const [activeFinding, setActiveFinding] = useState(0);
   const [auto, setAuto] = useState(true);
+  const tabRefs = useRef({});
 
   useEffect(() => {
     if (!auto) return undefined;
@@ -65,49 +143,120 @@ function Demo() {
     setSwapping(true);
     const t = window.setTimeout(() => {
       setShown(SCENES[current]);
+      setActiveFinding(0);
       setSwapping(false);
-    }, 220);
+    }, 180);
     return () => window.clearTimeout(t);
   }, [current]);
 
-  function select(key) {
+  function select(key, moveFocus = false) {
     setAuto(false);
     setCurrent(key);
+    if (moveFocus) tabRefs.current[key]?.focus();
   }
+
+  function onDemoKeyDown(ev, idx) {
+    let next = -1;
+    if (ev.key === "ArrowRight") next = (idx + 1) % SCENE_ORDER.length;
+    else if (ev.key === "ArrowLeft") next = (idx - 1 + SCENE_ORDER.length) % SCENE_ORDER.length;
+    else if (ev.key === "Home") next = 0;
+    else if (ev.key === "End") next = SCENE_ORDER.length - 1;
+    if (next >= 0) {
+      ev.preventDefault();
+      select(SCENE_ORDER[next], true);
+    }
+  }
+
+  const labels = {
+    corrosion: "Corrosion",
+    parking: "Parking",
+    footfall: "Entrance",
+    audio: "Audio WAV",
+    ocr: "OCR Form",
+  };
 
   return (
     <div className="lp-demo" data-testid="landing-hero-demo">
       <div className="lp-demo-bar">
-        <span className="lp-dots" aria-hidden="true">
-          <i />
-          <i />
-          <i />
-        </span>
-        <div className="lp-demo-tabs" role="tablist" aria-label="Example inspections">
-          <button type="button" role="tab" aria-selected={current === "corrosion"} data-testid="landing-demo-tab-corrosion" onClick={() => select("corrosion")}>Corrosion</button>
-          <button type="button" role="tab" aria-selected={current === "parking"} data-testid="landing-demo-tab-parking" onClick={() => select("parking")}>Parking</button>
-          <button type="button" role="tab" aria-selected={current === "footfall"} data-testid="landing-demo-tab-footfall" onClick={() => select("footfall")}>People in snapshot</button>
+        <span className="lp-demo-badge">MULTIMODAL</span>
+        <div className="lp-demo-tabs" role="tablist" aria-label="Example checks across modalities">
+          {SCENE_ORDER.map((key, idx) => (
+            <button
+              key={key}
+              ref={(el) => { tabRefs.current[key] = el; }}
+              type="button"
+              role="tab"
+              aria-selected={current === key}
+              tabIndex={current === key ? 0 : -1}
+              data-testid={`landing-demo-tab-${key}`}
+              onClick={() => select(key, false)}
+              onKeyDown={(ev) => onDemoKeyDown(ev, idx)}
+            >
+              {labels[key]}
+            </button>
+          ))}
         </div>
         <span className="lp-demo-live">PREVIEW</span>
       </div>
+
       <div className="lp-demo-stage">
-        <div className="lp-demo-frame" data-swap={swapping}>
-          <img src={shown.img} alt={shown.alt} width={1400} height={933} />
-          <span className="lp-scan" aria-hidden="true" />
-          {shown.boxes.map(([x, y, w, h, sev], i) => (
-            <span
-              key={`${current}-${i}`}
-              className="lp-dbox"
-              data-sev={sev}
-              style={{ left: `${x}%`, top: `${y}%`, width: `${w}%`, height: `${h}%`, animationDelay: `${0.15 + i * 0.12}s` }}
-            >
-              <i>{i + 1}</i>
-            </span>
-          ))}
+        <div className={`lp-demo-frame lp-demo-frame--${shown.kind || "photo"}`} data-swap={swapping}>
+          {shown.kind === "audio" ? (
+            <div className="lp-hero-modality">
+              <div className="lp-hero-mod-head">
+                <span>pump-bearing-line4.wav · 16-bit PCM · 48 kHz</span>
+                <code>audio-wav-cnn</code>
+              </div>
+              <RealAudioWaveform variant={shown.variants?.[activeFinding] || "fault"} />
+              <SpectrogramGraphic variant={shown.variants?.[activeFinding] || "fault"} />
+            </div>
+          ) : shown.kind === "ocr" ? (
+            <div className="lp-hero-modality lp-hero-modality--ocr">
+              <div className="lp-hero-mod-head">
+                <span>maintenance-log-408B.png · line crops</span>
+                <code>ocr-trocr</code>
+              </div>
+              <div className="lp-hero-ocr-stack">
+                {[0, 1, 2].map((idx) => (
+                  <button
+                    key={idx}
+                    type="button"
+                    className="lp-hero-ocr-item"
+                    aria-pressed={activeFinding === idx}
+                    onClick={() => { setAuto(false); setActiveFinding(idx); }}
+                  >
+                    <HandwritingInkGraphic variant={idx} />
+                  </button>
+                ))}
+              </div>
+            </div>
+          ) : (
+            <>
+              <img src={shown.img} alt={shown.alt} width={1400} height={933} />
+              {(shown.boxes || []).map(([x, y, w, h, sev], i) => (
+                <button
+                  key={`${current}-${i}`}
+                  type="button"
+                  className="lp-dbox"
+                  data-sev={sev}
+                  data-active={activeFinding === i}
+                  style={{ left: `${x}%`, top: `${y}%`, width: `${w}%`, height: `${h}%` }}
+                  onClick={() => { setAuto(false); setActiveFinding(i); }}
+                  aria-label={`Highlight finding ${i + 1}: ${shown.items[i]?.[1] || ""}`}
+                >
+                  <i>{i + 1}</i>
+                </button>
+              ))}
+            </>
+          )}
         </div>
+
         <div className="lp-report" data-swap={swapping} aria-live="polite">
+          <div className="lp-report-top">
+            <span className="lp-verdict" data-v={shown.v}>{shown.word}</span>
+            <span className="lp-report-gate">Computer opinion · person decides</span>
+          </div>
           <p className="lp-report-q">{shown.q}</p>
-          <span className="lp-verdict" data-v={shown.v}>{shown.word}</span>
           <p className="lp-report-h">{shown.h}</p>
           <div className="lp-report-counts">
             {shown.counts.map(([value, label]) => (
@@ -118,10 +267,18 @@ function Demo() {
             ))}
           </div>
           <ol className="lp-report-list">
-            {shown.items.map(([sev, text], i) => (
-              <li key={text} data-sev={sev}>
-                <b>{i + 1}</b>
-                <span>{text}</span>
+            {shown.items.map(([sev, text, tag], i) => (
+              <li key={text} data-sev={sev} data-active={activeFinding === i}>
+                <button
+                  type="button"
+                  className="lp-finding-btn"
+                  onClick={() => { setAuto(false); setActiveFinding(i); }}
+                  aria-pressed={activeFinding === i}
+                >
+                  <b>{i + 1}</b>
+                  <span>{text}</span>
+                  <code>{tag}</code>
+                </button>
               </li>
             ))}
           </ol>
@@ -294,6 +451,7 @@ export default function App() {
             </ul>
           </nav>
           <div className="lp-nav-cta">
+            <ThemeToggle />
             <a className="lp-btn lp-btn--outline" href="#docs" data-testid="landing-docs-button">Docs</a>
             <PortfolioButton className="lp-btn lp-btn--primary" testId="landing-nav-cta-button">
               Visit portfolio
@@ -314,23 +472,23 @@ export default function App() {
                 Train AI on <em>all</em> your data.
               </h1>
               <p className="lp-lead">
-                Build, label, test, and run models across photos, audio, handwriting, documents, motion, and spreadsheets — no coding required.
+                Build, review, test, and approve models across photos, audio clips, handwriting, spreadsheets, text, and signals — no coding required.
               </p>
               <p className="lp-lead-note">
-                Inspect photos or clips today. Videos are sampled into six still frames; this is not a complete crossing count or live monitor.
+                Inspect photos or 6-frame clips today (not a complete crossing count or live monitor). Six training recipes merged on synthetic data; vision workflows at 18 of 65 tasks.
               </p>
               <div className="lp-cta-row">
                 <a className="lp-btn lp-btn--primary lp-btn--lg" href="#teach-workflow" data-testid="landing-hero-cta-button">
-                  Open training studio
+                  Explore 6 merged recipes
                   <Icon name="arrow" size={18} />
                 </a>
                 <a className="lp-btn lp-btn--line lp-btn--lg" href="#docs" data-testid="landing-hero-secondary-button">
-                  Read roadmap docs
+                  Read current docs
                   <Icon name="arrow" size={16} />
                 </a>
               </div>
               <ul className="lp-proof" aria-label="At a glance">
-                <li><Icon name="layers" size={16} />Vision · Audio · OCR · Text · Motion · Tables</li>
+                <li><Icon name="layers" size={16} /><strong>6 recipes</strong> merged (Waves 0–2)</li>
                 <li><Icon name="cpu" size={16} /><strong>Qwen</strong> or your own AI</li>
                 <li><Icon name="server" size={16} />Self-hosted · Apache-2.0</li>
               </ul>
@@ -339,7 +497,7 @@ export default function App() {
           </div>
         </section>
 
-        <div className="lp-ticker" aria-label="Things people check and teach with Athena">
+        <div className="lp-ticker" aria-label="Capabilities and merged slices in Athena OS">
           <div className="lp-ticker-track">
             {TICKER.map((item) => (<span key={item}>{item}</span>))}
             {TICKER.map((item) => (<span key={`${item}-dup`} aria-hidden="true">{item}</span>))}
@@ -356,30 +514,30 @@ export default function App() {
               <article className="lp-compare-card lp-reveal" data-testid="landing-compare-detector">
                 <p className="lp-compare-tag">Standard detector (CNN)</p>
                 <div className="lp-compare-img lp-compare-img--plain">
-                  <img src={pipe} alt="" loading="lazy" width={1400} height={933} />
+                  <img src={pipe} alt="Pipes with raw confidence-only boxes" loading="lazy" width={1400} height={933} />
                   <span className="lp-cbox" data-b="1"><i>rust 0.82</i></span>
                   <span className="lp-cbox" data-b="2"><i>rust 0.77</i></span>
                   <span className="lp-cbox" data-b="3"><i>rust 0.61</i></span>
                 </div>
                 <ul className="lp-list lp-list--muted">
-                  <li>Raw boxes and class names only.</li>
-                  <li>Requires thousands of pre-labeled images.</li>
-                  <li>Single-purpose models per task.</li>
+                  <li>Raw boxes and class confidence scores only.</li>
+                  <li>No guidance on severity or next maintenance action.</li>
+                  <li>Separate tooling per data type.</li>
                 </ul>
               </article>
               <article className="lp-compare-card lp-compare-card--athena lp-reveal" data-testid="landing-compare-athena">
-                <p className="lp-compare-tag"><span className="lp-live" aria-hidden="true" />Athena vision-language inspection</p>
+                <p className="lp-compare-tag"><span className="lp-live" aria-hidden="true" />Athena inspection + human sign-off</p>
                 <div className="lp-compare-img">
-                  <img src={pipe} alt="" loading="lazy" width={1400} height={933} />
+                  <img src={pipe} alt="Pipes with numbered severity boxes and review state" loading="lazy" width={1400} height={933} />
                   <span className="lp-abox" data-b="1" data-sev="high"><i>1</i></span>
-                  <span className="lp-abox" data-b="2" data-sev="medium"><i>2</i></span>
+                  <span className="lp-abox" data-b="2" data-sev="medium"><i>2 · review</i></span>
                   <span className="lp-abox" data-b="3" data-sev="low"><i>3</i></span>
                 </div>
                 <p className="lp-quote">“<strong>Severe clamp scaling (1)</strong> and coating breakdown on both pipes (2, 3) — wire-brush, recoat, and check wall thickness.”</p>
                 <ul className="lp-list">
-                  <li>Plain-language severity and repair actions.</li>
-                  <li>Works from frame one via templates or questions.</li>
-                  <li>One assistant across checks and training.</li>
+                  <li>Plain-language severity and repair actions with human review gates.</li>
+                  <li>Suggested boxes stay marked Needs review until accepted.</li>
+                  <li>One console across instant VLM checks and trained models.</li>
                 </ul>
               </article>
             </div>
@@ -390,7 +548,7 @@ export default function App() {
           <div className="lp-container">
             <div className="lp-head lp-head--split lp-reveal">
               <div><p className="lp-eyebrow"><b>02</b> Use cases</p><h2 className="lp-h2" id="cases-title">Ready-made checks out of the box.</h2></div>
-              <p className="lp-sub">Marked regions, counts, and clear visual reports ready for human review.</p>
+              <p className="lp-sub">Marked regions, counts, and structured reports designed for human decision-making.</p>
             </div>
             <div className="lp-bento">
               <article className="lp-case lp-case--hero lp-reveal" data-testid="landing-case-oil-gas">
@@ -408,7 +566,7 @@ export default function App() {
               </article>
               <article className="lp-case lp-reveal" data-testid="landing-case-footfall">
                 <img src={store} alt="People at a store entrance" loading="lazy" width={1000} height={641} />
-                <div className="lp-case-body"><span className="lp-case-tag">Retail · snapshot</span><h3>People in snapshot</h3><p>A snapshot of people and queues. It does not count every crossing or measure waiting time.</p></div>
+                <div className="lp-case-body"><span className="lp-case-tag">Retail · snapshot</span><h3>People in snapshot</h3><p>A snapshot of people near entrances. Does not establish crossing totals or wait times.</p></div>
               </article>
               <article className="lp-case lp-reveal" data-testid="landing-case-ppe">
                 <img src={safety} alt="A worker in a helmet and high-visibility vest" loading="lazy" width={1000} height={1500} />
@@ -419,9 +577,19 @@ export default function App() {
                 <div className="lp-case-body"><span className="lp-case-tag">Manufacturing</span><h3>Weld &amp; surface defects</h3><p>Cracks, porosity, dents, and spatter bounds.</p></div>
               </article>
               <article className="lp-case lp-case--text lp-reveal" data-testid="landing-case-custom">
-                <span className="lp-case-icon"><Icon name="sparkle" size={24} /></span>
-                <div className="lp-case-body"><span className="lp-case-tag">Custom prompt</span><h3>Your own question</h3><p>“Are gauge needles in green?” Photograph it, ask it.</p></div>
-                <PortfolioButton className="lp-btn lp-btn--primary lp-case-cta" testId="landing-case-custom-cta">Visit portfolio<Icon name="arrow" size={16} /></PortfolioButton>
+                <div className="lp-case-prompt">
+                  <div className="lp-case-prompt-main">
+                    <span className="lp-case-tag">Custom prompt</span>
+                    <h3>Ask your own inspection question</h3>
+                    <p>Point Athena at any photo or 6-frame clip, mark optional target areas, and get a structured verdict ready for review.</p>
+                  </div>
+                  <div className="lp-case-prompt-sample" aria-hidden="true">
+                    <span className="lp-prompt-label">Question</span>
+                    <code>“Are gauge needles inside the green operating zone?”</code>
+                    <span className="lp-prompt-result">Verdict: All clear · 3 gauges checked</span>
+                  </div>
+                  <PortfolioButton className="lp-btn lp-btn--primary" testId="landing-case-custom-cta">Visit portfolio<Icon name="arrow" size={16} /></PortfolioButton>
+                </div>
               </article>
             </div>
           </div>
@@ -431,26 +599,32 @@ export default function App() {
           <div className="lp-container">
             <div className="lp-head lp-reveal">
               <p className="lp-eyebrow"><b>03</b> How it works</p>
-              <h2 className="lp-h2" id="how-title">Photo to report in three steps.</h2>
+              <h2 className="lp-h2" id="how-title">Photo to reviewed report in three steps.</h2>
             </div>
             <ol className="lp-steps">
               <li className="lp-step lp-reveal" data-testid="landing-step-1">
                 <span className="lp-step-n">01</span>
                 <h3>Pick a check</h3>
-                <p>Select a template or ask a plain question.</p>
-                <div className="lp-mini lp-mini--chips" aria-hidden="true"><span data-on="true">Corrosion</span><span>Parking</span><span>Safety</span><span>Custom…</span></div>
+                <p>Select a ready-made template or write your inspection question in plain English.</p>
+                <div className="lp-mini lp-mini--chips" aria-hidden="true"><span data-on="true">Corrosion</span><span>Parking</span><span>Safety</span><span>Custom</span></div>
               </li>
               <li className="lp-step lp-reveal" data-testid="landing-step-2">
                 <span className="lp-step-n">02</span>
                 <h3>Add media</h3>
-                <p>Drop up to six photos or a clip (videos are sampled into six still frames).</p>
-                <div className="lp-mini lp-mini--drop" aria-hidden="true"><span /><span /><span /><b>+</b></div>
+                <p>Drop up to six photos or one video clip (sampled evenly into six still frames in-browser).</p>
+                <div className="lp-mini lp-mini--drop" aria-hidden="true"><span /><span /><span /><b>6 max</b></div>
               </li>
               <li className="lp-step lp-reveal" data-testid="landing-step-3">
                 <span className="lp-step-n">03</span>
-                <h3>Read the report</h3>
-                <p>Marked regions, counts, and next actions.</p>
-                <div className="lp-mini lp-mini--report" aria-hidden="true"><b>NEEDS ATTENTION</b><i /><i /><i /></div>
+                <h3>Review &amp; decide</h3>
+                <p>Read the verdict, inspect numbered boxes, and confirm or reject findings yourself.</p>
+                <div className="lp-mini lp-mini--report" aria-hidden="true">
+                  <div className="lp-mini-report-head">
+                    <b>NEEDS ATTENTION</b>
+                    <span>1 severe · 2 moderate</span>
+                  </div>
+                  <p>1. Severe clamp scaling — schedule wall-thickness check.</p>
+                </div>
               </li>
             </ol>
           </div>
@@ -464,7 +638,7 @@ export default function App() {
             <div className="lp-reveal">
               <p className="lp-eyebrow"><b>07</b> Your AI, your rules</p>
               <h2 className="lp-h2" id="ai-title">Run AI where you choose.</h2>
-              <p className="lp-sub">Connect self-hosted Qwen, Ollama, or vLLM for picture reading, and train locally on your own CPU/GPU without cloud lock-in.</p>
+              <p className="lp-sub">Connect self-hosted Qwen, Ollama, or vLLM for picture reading, and run training workers locally on your own CPU/GPU with encrypted credentials.</p>
               <ul className="lp-pills" aria-label="Works with">
                 <li>Qwen-VL</li><li>OpenAI</li><li>Google Gemini</li><li>OpenRouter</li><li>vLLM</li><li>Ollama</li><li>LM Studio</li><li>Alibaba Cloud</li>
               </ul>
@@ -472,14 +646,14 @@ export default function App() {
             <div className="lp-ai-cards lp-reveal" aria-hidden="true">
               <div className="lp-ai-card lp-ai-card--on">
                 <div className="lp-ai-top"><strong>Built-in Qwen</strong><span className="lp-ai-badge">Default</span></div>
-                <p>qwen2.5vl:7b · your server</p>
+                <p>qwen2.5vl:7b · local or self-hosted</p>
                 <span className="lp-ai-status"><i />Connected example</span>
               </div>
               <div className="lp-ai-card">
                 <div className="lp-ai-top"><strong>Your own AI</strong><span className="lp-ai-badge lp-ai-badge--line">Optional</span></div>
                 <div className="lp-ai-field"><span>Address</span><code>https://api.openai.com/v1</code></div>
                 <div className="lp-ai-field"><span>Model</span><code>gpt-4o-mini</code></div>
-                <div className="lp-ai-field"><span>API key</span><code>hidden · 3f9a</code></div>
+                <div className="lp-ai-field"><span>API key</span><code>encrypted · 3f9a</code></div>
               </div>
             </div>
           </div>
@@ -493,9 +667,9 @@ export default function App() {
             </div>
             <div className="lp-trust">
               <div className="lp-trust-item lp-reveal"><span><Icon name="code" size={22} /></span><h3>Open source</h3><p>Apache-2.0 with zero required cloud service.</p></div>
-              <div className="lp-trust-item lp-reveal"><span><Icon name="server" size={22} /></span><h3>Self-hosted</h3><p>One server; images and training data stay yours.</p></div>
+              <div className="lp-trust-item lp-reveal"><span><Icon name="server" size={22} /></span><h3>Self-hosted</h3><p>One server; images, audio, and tables stay on your network.</p></div>
               <div className="lp-trust-item lp-reveal"><span><Icon name="shield" size={22} /></span><h3>Human sign-off</h3><p>No auto-promotion — review evidence and roll back anytime.</p></div>
-              <div className="lp-trust-item lp-reveal"><span><Icon name="detector" size={22} /></span><h3>Real quality gates</h3><p>Task metrics like missed faults, WER, CER, and mAP.</p></div>
+              <div className="lp-trust-item lp-reveal"><span><Icon name="detector" size={22} /></span><h3>Real quality gates</h3><p>Task metrics like missed faults, WER, CER, F1, and mAP.</p></div>
             </div>
             <section className="lp-advisory" aria-labelledby="security-update-title">
               <div>
@@ -530,7 +704,7 @@ export default function App() {
             <div className="lp-faq-list">
               {site.faq.map((item) => (
                 <details key={item.q} className="lp-faq-item lp-reveal">
-                  <summary><h3>{item.q}</h3></summary>
+                  <summary>{item.q}</summary>
                   <p>{item.a}</p>
                 </details>
               ))}
