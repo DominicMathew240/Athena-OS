@@ -35,7 +35,6 @@ from .models import (
     DatasetVersion,
     ModelVersion,
     Operation,
-    OperationExecution,
     OperationModelBinding,
     OperationReleaseBundle,
     OperationSource,
@@ -70,10 +69,22 @@ _counter = _make_counter()
 def make_clip(directory, *, seconds=2, creation_time=None):
     """A synthetic H.264 MP4, following the T09/T20 suites' pattern."""
     command = [
-        "ffmpeg", "-hide_banner", "-loglevel", "error",
-        "-f", "lavfi", "-i", "color=c=blue:s=64x48:r=5",
-        "-t", str(seconds), "-c:v", "libx264", "-pix_fmt", "yuv420p",
-        "-movflags", "+faststart",
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=blue:s=64x48:r=5",
+        "-t",
+        str(seconds),
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
     ]
     if creation_time:
         command += ["-metadata", f"creation_time={creation_time}"]
@@ -189,15 +200,17 @@ class InferenceBase(TestCase):
             width=64,
             height=48,
             duration_seconds=float(duration),
-            captured_at=(
-                datetime.fromisoformat(creation_time.replace("Z", "+00:00")) if creation_time else None
-            ),
+            captured_at=(datetime.fromisoformat(creation_time.replace("Z", "+00:00")) if creation_time else None),
         )
 
     def make_model(self, *, labels=("person",), stage=ModelVersion.APPROVED, task=None, backend="t21-fake-detector"):
         project = Project.objects.create(name="Counting", modality="image", task="Detect", labels=list(labels))
         dataset = DatasetVersion.objects.create(
-            project=project, version=1, created_by=self.user, manifest={}, manifest_sha256="c" * 64,
+            project=project,
+            version=1,
+            created_by=self.user,
+            manifest={},
+            manifest_sha256="c" * 64,
             label_names=list(labels),
         )
         run = TrainingRun.objects.create(
@@ -252,7 +265,12 @@ class InferenceBase(TestCase):
         model_pin = (
             None
             if binding is None
-            else {"id": str(binding.id), "version": binding.version, "model_version_id": str(binding.model_version_id), "sha256": "4" * 64}
+            else {
+                "id": str(binding.id),
+                "version": binding.version,
+                "model_version_id": str(binding.model_version_id),
+                "sha256": "4" * 64,
+            }
         )
         snapshot = {
             "schema_version": 1,
@@ -370,9 +388,7 @@ class FrameSamplingTests(InferenceBase):
     def setUp(self):
         super().setUp()
         self.body = make_clip(self.tmp, seconds=2, creation_time="2026-11-01T09:30:00Z")
-        self.recording = self.store_recording(
-            self.body, duration=2.0, creation_time="2026-11-01T09:30:00Z"
-        )
+        self.recording = self.store_recording(self.body, duration=2.0, creation_time="2026-11-01T09:30:00Z")
         self.timeline = build_timeline(self.recording)
 
     def test_sampling_is_a_pure_function_of_the_timeline(self):
@@ -433,9 +449,7 @@ class AdapterTests(InferenceBase):
     def setUp(self):
         super().setUp()
         self.body = make_clip(self.tmp, seconds=2, creation_time="2026-11-01T09:30:00Z")
-        self.recording = self.store_recording(
-            self.body, duration=2.0, creation_time="2026-11-01T09:30:00Z"
-        )
+        self.recording = self.store_recording(self.body, duration=2.0, creation_time="2026-11-01T09:30:00Z")
         self.timeline = build_timeline(self.recording)
         self.model = self.make_model()
         self.binding = self.make_binding(self.model)
@@ -450,9 +464,7 @@ class AdapterTests(InferenceBase):
         for frame in report.frames:
             self.assertIn(frame.frame_index, [f.index for f in self.timeline.frames])
             for box in frame.detections:
-                self.assertEqual(
-                    sorted(box), ["height", "label", "score", "width", "x", "y"]
-                )
+                self.assertEqual(sorted(box), ["height", "label", "score", "width", "x", "y"])
                 self.assertEqual(box["label"], "person")
                 for key in ("x", "y", "width", "height"):
                     self.assertTrue(0.0 <= box[key] <= 1.0, (key, box[key]))
@@ -464,11 +476,11 @@ class AdapterTests(InferenceBase):
 
     def test_predictions_outside_the_normalized_space_are_dropped(self):
         FakeDetector.boxes = [
-            BoxPrediction("person", 0.1, 0.1, 0.2, 0.2, 0.9),   # fine
-            BoxPrediction("person", 0.9, 0.9, 0.5, 0.5, 0.8),   # runs past the frame edge
-            BoxPrediction("person", 0.1, 0.1, 0.0, 0.2, 0.7),   # zero width
-            BoxPrediction("car", 0.1, 0.1, 0.2, 0.2, 0.6),      # label the model was not taught
-            BoxPrediction("person", 0.1, 0.1, 0.2, 0.2, 1.5),   # score above 1
+            BoxPrediction("person", 0.1, 0.1, 0.2, 0.2, 0.9),  # fine
+            BoxPrediction("person", 0.9, 0.9, 0.5, 0.5, 0.8),  # runs past the frame edge
+            BoxPrediction("person", 0.1, 0.1, 0.0, 0.2, 0.7),  # zero width
+            BoxPrediction("car", 0.1, 0.1, 0.2, 0.2, 0.6),  # label the model was not taught
+            BoxPrediction("person", 0.1, 0.1, 0.2, 0.2, 1.5),  # score above 1
         ]
         report = inference.run_detector(self.binding, self.recording, self.timeline, "people_counting")
         for frame in report.frames:
@@ -521,9 +533,7 @@ class DurationCrosscheckTests(InferenceBase):
     def setUp(self):
         super().setUp()
         self.body = make_clip(self.tmp, seconds=2, creation_time="2026-11-01T09:30:00Z")
-        self.recording = self.store_recording(
-            self.body, duration=2.0, creation_time="2026-11-01T09:30:00Z"
-        )
+        self.recording = self.store_recording(self.body, duration=2.0, creation_time="2026-11-01T09:30:00Z")
         self.timeline = build_timeline(self.recording)
 
     def test_a_matching_duration_passes_with_the_numbers_recorded(self):
@@ -551,9 +561,7 @@ class WorkerIntegrationTests(InferenceBase):
     def setUp(self):
         super().setUp()
         self.body = make_clip(self.tmp, seconds=2, creation_time="2026-11-01T09:30:00Z")
-        self.recording = self.store_recording(
-            self.body, duration=2.0, creation_time="2026-11-01T09:30:00Z"
-        )
+        self.recording = self.store_recording(self.body, duration=2.0, creation_time="2026-11-01T09:30:00Z")
         self.model = self.make_model()
         self.binding = self.make_binding(self.model)
 

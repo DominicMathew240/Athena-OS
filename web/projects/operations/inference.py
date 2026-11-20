@@ -28,6 +28,7 @@ outcomes can report what the model found, not what a screen chose to display).
 Tracking (T22) and crossing episodes (T25) are out of scope: the adapter produces
 per-frame detections only.
 """
+
 from __future__ import annotations
 
 import hashlib
@@ -278,11 +279,32 @@ def _extract_frames(recording, timeline: FrameTimeline, indices: list[int]):
                 target = Path(work) / f"frame-{index:06d}.png"
                 try:
                     result = subprocess.run(
-                        ["ffmpeg", "-v", "error", "-nostdin", "-protocol_whitelist", "file", "-f", "mov",
-                         "-enable_drefs", "0", "-use_absolute_path", "0",
-                         "-ss", f"{frame.pts:.6f}", "-i", str(source),
-                         "-frames:v", "1", "-f", "image2", "-y", str(target)],
-                        capture_output=True, timeout=_FRAME_TIMEOUT_SECONDS,
+                        [
+                            "ffmpeg",
+                            "-v",
+                            "error",
+                            "-nostdin",
+                            "-protocol_whitelist",
+                            "file",
+                            "-f",
+                            "mov",
+                            "-enable_drefs",
+                            "0",
+                            "-use_absolute_path",
+                            "0",
+                            "-ss",
+                            f"{frame.pts:.6f}",
+                            "-i",
+                            str(source),
+                            "-frames:v",
+                            "1",
+                            "-f",
+                            "image2",
+                            "-y",
+                            str(target),
+                        ],
+                        capture_output=True,
+                        timeout=_FRAME_TIMEOUT_SECONDS,
                     )
                 except FileNotFoundError as error:
                     raise InferenceAdapterError(
@@ -335,7 +357,7 @@ def run_detector(
 
     try:
         backend = get_backend(model.backend)
-    except ValueError as error:
+    except ValueError:
         raise InferenceAdapterError(
             f"The model's backend ('{model.backend}') is not installed in this worker, so no inference "
             "can run. Ask an administrator to install it in the operation worker's environment."
@@ -356,8 +378,7 @@ def run_detector(
                 )
             except Exception as error:  # noqa: BLE001 - the model failed; that is an explicit failure
                 raise InferenceAdapterError(
-                    f"The bound model failed while analysing frame {frame.index}: "
-                    f"{error or error.__class__.__name__}"
+                    f"The bound model failed while analysing frame {frame.index}: {error or error.__class__.__name__}"
                 ) from error
             ordered = sorted(
                 (p for p in found if isinstance(p, BoxPrediction) and p.label in checks["model_labels"]),
@@ -401,14 +422,28 @@ def run_detector(
 def _is_normalized_box(prediction) -> bool:
     """A prediction counts only with finite [0,1] coordinates, positive size and score."""
     try:
-        values = (float(prediction.x), float(prediction.y), float(prediction.width), float(prediction.height), float(prediction.score))
+        values = (
+            float(prediction.x),
+            float(prediction.y),
+            float(prediction.width),
+            float(prediction.height),
+            float(prediction.score),
+        )
     except (TypeError, ValueError, OverflowError):
         return False
     x, y, width, height, score = values
     return (
-        math.isfinite(x) and math.isfinite(y) and math.isfinite(width) and math.isfinite(height)
-        and 0.0 <= x <= 1.0 and 0.0 <= y <= 1.0 and width > 0.0 and height > 0.0
-        and x + width <= 1.0 + 1e-9 and y + height <= 1.0 + 1e-9 and 0.0 <= score <= 1.0
+        math.isfinite(x)
+        and math.isfinite(y)
+        and math.isfinite(width)
+        and math.isfinite(height)
+        and 0.0 <= x <= 1.0
+        and 0.0 <= y <= 1.0
+        and width > 0.0
+        and height > 0.0
+        and x + width <= 1.0 + 1e-9
+        and y + height <= 1.0 + 1e-9
+        and 0.0 <= score <= 1.0
     )
 
 

@@ -46,10 +46,22 @@ def make_clip(directory, *, seconds=2, creation_time=None, drop_between=None):
     source frames from the output while keeping the remaining frames' original
     presentation timestamps — a genuine timestamp gap, not a shorter clip."""
     command = [
-        "ffmpeg", "-hide_banner", "-loglevel", "error",
-        "-f", "lavfi", "-i", "color=c=blue:s=64x48:r=5",
-        "-t", str(seconds), "-c:v", "libx264", "-pix_fmt", "yuv420p",
-        "-movflags", "+faststart",
+        "ffmpeg",
+        "-hide_banner",
+        "-loglevel",
+        "error",
+        "-f",
+        "lavfi",
+        "-i",
+        "color=c=blue:s=64x48:r=5",
+        "-t",
+        str(seconds),
+        "-c:v",
+        "libx264",
+        "-pix_fmt",
+        "yuv420p",
+        "-movflags",
+        "+faststart",
     ]
     if drop_between is not None:
         start, end = drop_between
@@ -139,9 +151,7 @@ class SourceTimeBase(TestCase):
             # The real container duration when known (T21 cross-checks this against the
             # timeline); a placeholder is only used where the timeline is never built.
             duration_seconds=float(duration if duration is not None else len(body)),
-            captured_at=(
-                datetime.fromisoformat(creation_time.replace("Z", "+00:00")) if creation_time else None
-            ),
+            captured_at=(datetime.fromisoformat(creation_time.replace("Z", "+00:00")) if creation_time else None),
         )
 
 
@@ -287,13 +297,32 @@ class GapAndSessionTests(SourceTimeBase):
         # Two drop windows: frames 1.0–2.0 s and 3.0–4.0 s are removed while
         # the remaining frames keep their original timestamps.
         path = Path(self.tmp) / "two-gaps.mp4"
-        _run([
-            "ffmpeg", "-hide_banner", "-loglevel", "error",
-            "-f", "lavfi", "-i", "color=c=red:s=64x48:r=5", "-t", "5",
-            "-vf", "select='not(between(t,1,2)+between(t,3,4))'",
-            "-c:v", "libx264", "-pix_fmt", "yuv420p", "-movflags", "+faststart",
-            "-metadata", "creation_time=2026-11-01T09:30:00Z", "-y", str(path),
-        ])
+        _run(
+            [
+                "ffmpeg",
+                "-hide_banner",
+                "-loglevel",
+                "error",
+                "-f",
+                "lavfi",
+                "-i",
+                "color=c=red:s=64x48:r=5",
+                "-t",
+                "5",
+                "-vf",
+                "select='not(between(t,1,2)+between(t,3,4))'",
+                "-c:v",
+                "libx264",
+                "-pix_fmt",
+                "yuv420p",
+                "-movflags",
+                "+faststart",
+                "-metadata",
+                "creation_time=2026-11-01T09:30:00Z",
+                "-y",
+                str(path),
+            ]
+        )
         body = path.read_bytes()
         path.unlink()
         recording = self.store_recording(body, creation_time="2026-11-01T09:30:00Z")
@@ -360,9 +389,11 @@ class RefusalTests(SourceTimeBase):
         # Refused either at decode or at frame reading — both are plain refusals.
         self.assertIn(
             str(raised.exception),
-            ("The recording's pictures no longer decode. The file is damaged; re-import it.",
-             "The recording's frame timestamps could not be read.",
-             "The recording has no video frames."),
+            (
+                "The recording's pictures no longer decode. The file is damaged; re-import it.",
+                "The recording's frame timestamps could not be read.",
+                "The recording has no video frames.",
+            ),
         )
 
 
@@ -383,9 +414,7 @@ class ExecutionTimelineTests(SourceTimeBase):
         # The clip's real duration: the last kept frame's span, as the T21 duration
         # cross-check requires (source frames 1.0-2.0 s were dropped, so the span is
         # the last frame's PTS plus one frame).
-        self.recording = self.store_recording(
-            self.body, creation_time="2026-11-01T09:30:00Z", duration=3.0
-        )
+        self.recording = self.store_recording(self.body, creation_time="2026-11-01T09:30:00Z", duration=3.0)
         self.bundle = self._bundle()
 
     def _bundle(self):
@@ -412,7 +441,7 @@ class ExecutionTimelineTests(SourceTimeBase):
             dataset_manifest_sha256="e" * 64,
             created_by=self.user,
         )
-        model = ModelVersion.objects.create(
+        ModelVersion.objects.create(  # the model exists but no bundle pins it: the no-model run
             project=project,
             version=1,
             training_run=training_run,

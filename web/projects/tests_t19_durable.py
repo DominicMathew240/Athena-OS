@@ -58,11 +58,29 @@ def _clip_bytes() -> bytes:
         with tempfile.TemporaryDirectory(prefix="t19-clip-") as directory:
             path = Path(directory) / "rec.mp4"
             subprocess.run(
-                ["ffmpeg", "-hide_banner", "-loglevel", "error",
-                 "-f", "lavfi", "-i", "color=c=blue:s=64x48:r=5",
-                 "-t", "1", "-c:v", "libx264", "-pix_fmt", "yuv420p",
-                 "-movflags", "+faststart", "-y", str(path)],
-                check=True, capture_output=True, timeout=30,
+                [
+                    "ffmpeg",
+                    "-hide_banner",
+                    "-loglevel",
+                    "error",
+                    "-f",
+                    "lavfi",
+                    "-i",
+                    "color=c=blue:s=64x48:r=5",
+                    "-t",
+                    "1",
+                    "-c:v",
+                    "libx264",
+                    "-pix_fmt",
+                    "yuv420p",
+                    "-movflags",
+                    "+faststart",
+                    "-y",
+                    str(path),
+                ],
+                check=True,
+                capture_output=True,
+                timeout=30,
             )
             return path.read_bytes()
     return b"t19-recording-" + b"".join(bytes([i % 251]) for i in range(4096))
@@ -127,7 +145,7 @@ class DurableExecutionBase(TestCase):
             dataset_manifest_sha256="e" * 64,
             created_by=self.user,
         )
-        model = ModelVersion.objects.create(
+        ModelVersion.objects.create(  # the model exists but no bundle pins it: the no-model run
             project=project,
             version=1,
             training_run=training_run,

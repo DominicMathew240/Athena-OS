@@ -302,9 +302,7 @@ def _pinned_binding(execution):
         raise ValueError(
             "The bundle's model pin does not name a valid model binding. Rebuild the release bundle."
         ) from None
-    binding = (
-        OperationModelBinding.objects.select_related("model_version").filter(id=binding_uuid).first()
-    )
+    binding = OperationModelBinding.objects.select_related("model_version").filter(id=binding_uuid).first()
     if binding is None:
         raise ValueError(
             "The model binding this bundle pinned no longer exists. Rebuild the release bundle with a "
