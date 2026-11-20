@@ -75,12 +75,12 @@
       href: "/detectors?recipe=ocr"
     },
     documents: {
-      status: "Wave 2 roadmap (coming soon)",
+      status: "Available now in custom projects",
       title: "Document Understanding",
-      summary: "Label categories, names or key fields across text documents so Athena learns to sort incoming records and extract structured answers.",
-      data: "Text documents + category tags, names or fields",
-      quality: "Wrongly grouped documents and missed fields",
-      steps: "Choose a goal · Add documents · Label spans or tags · Train · Check errors · Use and improve",
+      summary: "Upload document tables (CSV strictly; Excel where the server has the reader), define fields like name:number or invoice:date, and Athena checks a later table version against your field answers with per-field accuracy. Sorting whole documents by category and reading scanned pages are not part of this yet.",
+      data: "CSV (or XLSX where supported) document tables + field definitions",
+      quality: "Per-field accuracy on a later table version, unclear cells excluded",
+      steps: "Choose a goal · Upload a table · Define fields · Compare versions · Check per-field accuracy · Use and improve",
       href: "/detectors?recipe=documents"
     },
     movements: {
