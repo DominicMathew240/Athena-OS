@@ -1229,16 +1229,33 @@ def operation_screen_versions(request: HttpRequest, operation_id):
     return _no_store(JsonResponse({"screen_version": _screen_data(row)}, status=201))
 
 
+_ALLOWED_WIDGET_ORDERS = (["entries", "exits"], ["exits", "entries"])
+
+
+def _widget_order(value):
+    """Exact board layout: entries and exits once each, in either order."""
+    if not isinstance(value, list):
+        raise ValueError("Widget order must be a list of entries and exits.")
+    if value not in _ALLOWED_WIDGET_ORDERS:
+        raise ValueError("Widget order must list entries and exits exactly once.")
+    return list(value)
+
+
 def _screen_configuration(value):
     fields = {"title", "show_entries", "show_exits"}
-    if not isinstance(value, dict) or value.keys() != fields:
+    allowed = (fields, fields | {"widget_order"})
+    if not isinstance(value, dict) or value.keys() not in allowed:
         raise ValueError("Provide the board title and both metric toggles.")
     title = value["title"]
     if not isinstance(title, str) or not title.strip() or len(title.strip()) > 120:
         raise ValueError("Enter a board title of up to 120 characters.")
     if type(value["show_entries"]) is not bool or type(value["show_exits"]) is not bool:
         raise ValueError("Both metric toggles must be true or false.")
-    return {**value, "title": title.strip()}
+    # Legacy payloads omit widget_order; do not invent a default so digests stay stable.
+    configuration = {"title": title.strip(), "show_entries": value["show_entries"], "show_exits": value["show_exits"]}
+    if "widget_order" in value:
+        configuration["widget_order"] = _widget_order(value["widget_order"])
+    return configuration
 
 
 def _screen_data(version):

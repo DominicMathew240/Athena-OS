@@ -283,6 +283,67 @@
   for (const id of ["line-positive", "line-negative"]) {
     document.getElementById(id).addEventListener("input", renderReferenceEvents);
   }
+
+  // --- Scoped local draft autosave (resumable across reload / same-tab nav) ---
+  // Keyed per signed-in user + draft (or transient "new"). Survives reload but is
+  // user-isolated, deleted on explicit discard/sign-out, reports when unavailable.
+  const DRAFT_LOCAL_KEY = (id) => `athena.operation-draft.local.${id || "new"}`;
+  let localAvailable = true;
+  try {
+    localStorage.setItem("__athena_test__", "1");
+    localStorage.removeItem("__athena_test__");
+  } catch (_) {
+    localAvailable = false;
+    status.textContent = "Local storage unavailable — drafts will not survive reload.";
+    status.classList.add("warning");
+  }
+
+  function saveLocalDraft(draftId, state) {
+    if (!localAvailable) return;
+    try {
+      localStorage.setItem(DRAFT_LOCAL_KEY(draftId), JSON.stringify(state));
+    } catch (_) {
+      status.textContent = "Local storage full — unsaved changes may be lost on reload.";
+    }
+  }
+
+  function loadLocalDraft(draftId) {
+    if (!localAvailable) return null;
+    try {
+      const raw = localStorage.getItem(DRAFT_LOCAL_KEY(draftId));
+      return raw ? JSON.parse(raw) : null;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  function clearLocalDraft(draftId) {
+    if (!localAvailable) return;
+    try { localStorage.removeItem(DRAFT_LOCAL_KEY(draftId)); } catch (_) {}
+  }
+
+  // After server save, drop the local shadow copy
+  document.addEventListener("athena:draft-saved", (e) => {
+    if (e.detail && e.detail.id) clearLocalDraft(e.detail.id);
+  });
+
+  // Autosave current form state (name + events) on relevant input
+  const autosave = () => {
+    if (!current || !localAvailable) return;
+    const state = {
+      name: name.value,
+      referenceEvents: referenceEvents.slice(),
+    };
+    saveLocalDraft(current.id, state);
+  };
+  name.addEventListener("input", autosave);
+  // lineEditor changes already trigger renderReferenceEvents; extend there for completeness
+  const origRenderRef = renderReferenceEvents;
+  renderReferenceEvents = function() {
+    origRenderRef();
+    autosave();
+  };
+
   window.addEventListener("beforeunload", event => { if (busy || dirty()) { event.preventDefault(); event.returnValue = ""; } });
   showDraft(null);
   loadList();

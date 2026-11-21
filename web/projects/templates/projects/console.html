@@ -62,6 +62,7 @@
           <a href="#labels-panel" data-panel="labels-panel">Labels</a>
           <a href="#image-assets-panel" data-panel="image-assets-panel"><span class="jump-label">Pictures</span><span class="jump-count" id="jump-corrections" hidden></span></a>
           <a href="#audio-assets-panel" data-panel="audio-assets-panel"><span class="jump-label">Sound clips</span></a>
+          <a href="#doc-compare-panel" data-panel="doc-compare-panel">Compare versions</a>
           <a href="#dataset-panel" data-panel="dataset-panel">Make a training set</a>
           <a href="#train-panel" data-panel="train-panel">Teach the computer</a>
           {% if check_setup_url %}<a href="#apps-panel" data-panel="apps-panel">Check screens</a>{% endif %}
@@ -153,6 +154,31 @@
           <p class="form-error" id="audio-upload-error" role="alert"></p>
           <p class="asset-status" id="audio-asset-status" role="status" aria-live="polite"></p>
           <ul class="clip-list" id="clip-list" aria-label="Sound clips in this project"></ul>
+        </section>
+
+        <section class="panel doc-compare-panel" id="doc-compare-panel" aria-labelledby="doc-compare-heading" hidden>
+          <div class="panel-head"><h3 id="doc-compare-heading" tabindex="-1">Compare document versions</h3><span class="progress-note" id="doc-compare-count-note"></span></div>
+          <p class="panel-intro">Compare two saved versions of this document table field by field. Rows pair by position in the table (row 1 with row 1). The selected reference version is treated as correct only for this comparison. Unclear cells are excluded from accuracy, and this result uses fixed rules — it is not a taught model and not a promise about future documents.</p>
+          <p class="asset-status" id="doc-compare-status" role="status" aria-live="polite"></p>
+          <div class="doc-compare-empty" id="doc-compare-empty" hidden><p id="doc-compare-empty-text"></p></div>
+          <form class="doc-compare-form" id="doc-compare-form" aria-labelledby="doc-compare-heading" novalidate hidden>
+            <div class="doc-compare-selectors">
+              <label for="doc-compare-reference">Reference version<span class="field-help">Treated as correct only for this comparison.</span><select id="doc-compare-reference" name="reference"></select></label>
+              <label for="doc-compare-candidate">Candidate version<span class="field-help">Checked cell by cell against the reference.</span><select id="doc-compare-candidate" name="candidate"></select></label>
+            </div>
+            <div class="form-actions doc-compare-actions">
+              <button class="secondary" id="doc-compare-run" type="submit">Compare versions</button>
+              <button class="secondary" id="doc-compare-refresh" type="button">Refresh versions</button>
+            </div>
+          </form>
+          <p class="form-error" id="doc-compare-error" role="alert"></p>
+          <div class="form-actions doc-compare-actions doc-compare-retry-actions" id="doc-compare-retry-actions" hidden>
+            <button class="secondary" id="doc-compare-retry" type="button">Try again</button>
+          </div>
+          <div class="doc-compare-results" id="doc-compare-results" role="region" aria-labelledby="doc-compare-results-heading" hidden>
+            <h4 id="doc-compare-results-heading" tabindex="-1">Comparison results</h4>
+            <div class="doc-compare-results-body" id="doc-compare-results-body"></div>
+          </div>
         </section>
 
         <section class="panel dataset-panel" id="dataset-panel" aria-labelledby="dataset-heading" hidden>

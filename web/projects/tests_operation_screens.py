@@ -222,3 +222,60 @@ class OperationScreenTests(TestCase):
         )
         self.assertEqual(denied.status_code, 403)
         self.assertEqual(self._post_screen(self._configuration()).status_code, 201)
+
+    def test_legacy_configuration_omits_widget_order_and_keeps_digest_stable(self):
+        """Payloads without widget_order must stay identical — no default, no hash drift."""
+        response = self._post_screen(self._configuration())
+        self.assertEqual(response.status_code, 201, response.content)
+        body = response.json()["screen_version"]
+        self.assertEqual(body["configuration"], self._configuration())
+        self.assertNotIn("widget_order", body["configuration"])
+        again = self._post_screen(self._configuration())
+        self.assertEqual(again.json()["screen_version"]["sha256"], body["sha256"])
+        self.assertEqual(again.json()["screen_version"]["configuration"], body["configuration"])
+
+    def test_widget_order_is_accepted_retained_and_hashed(self):
+        entries_first = {**self._configuration(), "widget_order": ["entries", "exits"]}
+        exits_first = {**self._configuration(), "widget_order": ["exits", "entries"]}
+
+        first = self._post_screen(entries_first)
+        self.assertEqual(first.status_code, 201, first.content)
+        first_body = first.json()["screen_version"]
+        self.assertEqual(first_body["configuration"], entries_first)
+        self.assertEqual(first_body["configuration"]["widget_order"], ["entries", "exits"])
+
+        second = self._post_screen(exits_first)
+        self.assertEqual(second.status_code, 201, second.content)
+        second_body = second.json()["screen_version"]
+        self.assertEqual(second_body["configuration"], exits_first)
+        self.assertNotEqual(second_body["sha256"], first_body["sha256"])
+
+        listed = self.client.get(self._url()).json()["screen_versions"]
+        by_version = {item["version"]: item for item in listed}
+        self.assertEqual(by_version[1]["configuration"]["widget_order"], ["entries", "exits"])
+        self.assertEqual(by_version[2]["configuration"]["widget_order"], ["exits", "entries"])
+        self.assertEqual(by_version[1]["sha256"], first_body["sha256"])
+        self.assertEqual(by_version[2]["sha256"], second_body["sha256"])
+
+    def test_invalid_widget_order_is_rejected_without_creating_anything(self):
+        from .models import OperationScreenVersion
+
+        before = OperationScreenVersion.objects.count()
+        invalid = [
+            {**self._configuration(), "widget_order": "entries,exits"},  # bad type
+            {**self._configuration(), "widget_order": None},
+            {**self._configuration(), "widget_order": {"entries": 0, "exits": 1}},
+            {**self._configuration(), "widget_order": ["entries"]},  # missing exits
+            {**self._configuration(), "widget_order": []},
+            {**self._configuration(), "widget_order": ["entries", "entries"]},  # duplicate
+            {**self._configuration(), "widget_order": ["exits", "exits"]},
+            {**self._configuration(), "widget_order": ["entries", "totals"]},  # unknown
+            {**self._configuration(), "widget_order": ["Entries", "exits"]},
+            {**self._configuration(), "widget_order": ["entries", "exits", "totals"]},  # additional
+            {**self._configuration(), "widget_order": ["entries", "exits", "entries"]},
+        ]
+        for configuration in invalid:
+            with self.subTest(configuration=configuration):
+                response = self._post_screen(configuration)
+                self.assertEqual(response.status_code, 400, response.content)
+        self.assertEqual(OperationScreenVersion.objects.count(), before)

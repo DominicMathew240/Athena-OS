@@ -611,6 +611,7 @@ class EveryRouteDeclaresItsRole(RoleBase):
         "api/projects/<uuid:project_id>/autolabel/<uuid:job_id>/cancel": {"POST": LABEL},
         "api/projects/<uuid:project_id>/annotations/review": {"POST": LABEL},
         "api/projects/<uuid:project_id>/datasets": {"POST": LABEL},
+        "api/projects/<uuid:project_id>/datasets/compare": {},
         "api/projects/<uuid:project_id>/datasets/health": {},
         "api/projects/<uuid:project_id>/datasets/readiness": {},
         "api/projects/<uuid:project_id>/datasets/<uuid:dataset_id>": {},

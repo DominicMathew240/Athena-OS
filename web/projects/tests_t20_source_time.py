@@ -496,14 +496,14 @@ class ExecutionTimelineTests(SourceTimeBase):
             snapshot_sha256=hashlib.sha256(encoded.encode()).hexdigest(),
         )
 
-    def _enqueue_and_claim(self):
+    def _enqueue_and_claim(self, owner="worker-a"):
         response = self.client.post(
             f"/api/operation-release-bundles/{self.bundle.id}/executions",
             json.dumps({"recording_id": str(self.recording.id)}),
             content_type="application/json",
         )
         assert response.status_code == 202, response.content
-        return executions.claim_next_execution("worker-a")
+        return executions.claim_next_execution(owner)
 
     def test_execution_reports_frames_gaps_sessions_and_stays_honest(self):
         execution = self._enqueue_and_claim()
@@ -543,8 +543,8 @@ class ExecutionTimelineTests(SourceTimeBase):
         self.assertIn("no longer decode", finished.error)
 
     def test_execution_outcome_is_reproducible_across_two_runs(self):
-        first = executions.run_execution(self._enqueue_and_claim(), "worker-a")
-        second = executions.run_execution(self._enqueue_and_claim(), "worker-b")
+        first = executions.run_execution(self._enqueue_and_claim("worker-a"), "worker-a")
+        second = executions.run_execution(self._enqueue_and_claim("worker-b"), "worker-b")
         self.assertEqual(first.status, "succeeded")
         self.assertEqual(second.status, "succeeded")
         self.assertEqual(first.result["timeline_sha256"], second.result["timeline_sha256"])

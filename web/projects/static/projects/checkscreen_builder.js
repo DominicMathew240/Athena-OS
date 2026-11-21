@@ -21,6 +21,16 @@
   const pageAlert = { box: "cs-page-alert", title: "cs-page-alert-title", text: "cs-page-alert-text" };
   const saveAlert = { box: "cs-save-error", title: "cs-save-error-title", text: "cs-save-error-text" };
   const tryAlert = { box: "cs-try-error", title: "cs-try-error-title", text: "cs-try-error-text", details: "cs-try-error-details", detailText: "cs-try-error-detail-text" };
+  const wf = {
+    root: byId("cs-workflow"),
+    badge: byId("cs-wf-badge"),
+    stages: {
+      input: { stage: byId("cs-wf-stage-input"), vals: byId("cs-wf-vals-input") },
+      model: { stage: byId("cs-wf-stage-model"), vals: byId("cs-wf-vals-model") },
+      findings: { stage: byId("cs-wf-stage-findings"), vals: byId("cs-wf-vals-findings") },
+      decision: { stage: byId("cs-wf-stage-decision"), vals: byId("cs-wf-vals-decision") }
+    }
+  };
 
   const DEFAULT_WORDS = { clear: "Nothing found", flagged: "Something found", needs_review: "Please look closely" };
   const ALL_TYPES = ["image/jpeg", "image/png", "image/webp"];
@@ -31,6 +41,11 @@
   let currentApp = null;  // null = a new screen
   let preview = null;     // the last render model fetched from GET .../preview
   let tryController = null;
+  let previewController = null;
+  let screenSeq = 0;
+  let trySeq = 0;
+  let saving = false;
+  let confirmingSwitch = false;
 
   const approved = () => models.filter((m) => m.stage === "approved");
   const modelById = (id) => models.find((m) => m.id === id);
@@ -188,6 +203,8 @@
     } else {
       f.save.disabled = false;
     }
+    setEditingStage(null);
+    renderWorkflow();
   }
 
   function drawAppSelect(selectedId) {
@@ -242,6 +259,7 @@
   /* -- saving ----------------------------------------------------------------------------- */
   async function onSave(event) {
     event.preventDefault();
+    if (saving) return;
     if (!Athena.can("train")) { CS.showAlert(saveAlert, { title: "Not saved", text: Athena.reasonFor("train") }); return; }
     CS.hideAlert(saveAlert);
     setMsg(f.saveMsg, "");
@@ -251,36 +269,82 @@
       data.field.focus();
       return;
     }
-    f.save.disabled = true;
-    let result;
-    if (currentApp) {
-      const body = { name: data.name, config: data.config };
-      if (data.model !== currentApp.model_version.id) body.model_version_id = data.model;
-      const wanted = f.active.checked ? "active" : "archived";
-      if (wanted !== currentApp.status) body.status = wanted;
-      result = await CS.request(`${appsPath}/${currentApp.id}`, { method: "PATCH", json: body });
-    } else {
-      const body = { name: data.name, model_version_id: data.model, config: data.config };
-      if (data.slug) body.slug = data.slug;
-      result = await CS.request(appsPath, { method: "POST", json: body });
+    const targetApp = currentApp;
+    const creating = !targetApp;
+    const controls = [...f.form.querySelectorAll("input, select, button, textarea")];
+    const disabledStates = controls.map((control) => [control, control.disabled]);
+    saving = true;
+    controls.forEach((control) => { control.disabled = true; });
+    try {
+      let result;
+      if (targetApp) {
+        const body = { name: data.name, config: data.config };
+        if (data.model !== targetApp.model_version.id) body.model_version_id = data.model;
+        const wanted = f.active.checked ? "active" : "archived";
+        if (wanted !== targetApp.status) body.status = wanted;
+        result = await CS.request(`${appsPath}/${targetApp.id}`, { method: "PATCH", json: body });
+      } else {
+        const body = { name: data.name, model_version_id: data.model, config: data.config };
+        if (data.slug) body.slug = data.slug;
+        result = await CS.request(appsPath, { method: "POST", json: body });
+      }
+      if (!result.ok) {
+        CS.showAlert(saveAlert, CS.explain(result, "save this screen"));
+        return;
+      }
+      const saved = result.body.app;
+      const idx = apps.findIndex((a) => a.id === saved.id);
+      if (idx >= 0) apps[idx] = saved;
+      else apps.push(saved);
+      const refreshed = await loadApps(saved.id);
+      if (!refreshed) drawAppSelect(saved.id);
+      await selectApp(saved.id, true);
+      if (!refreshed) {
+        CS.showAlert(pageAlert, {
+          title: "Saved",
+          text: "Screen saved, but the screen list could not be refreshed. Reload this page."
+        });
+        setMsg(
+          f.saveMsg,
+          "Screen saved, but the screen list could not be refreshed. Reload this page.",
+          "ok"
+        );
+      } else {
+        if (preview !== null) CS.hideAlert(pageAlert);
+        setMsg(
+          f.saveMsg,
+          preview === null
+            ? "Saved, but preview could not be loaded. Reload this page."
+            : (creating ? "Created. People can open it at the web address shown above." : "Saved. The preview now shows the saved screen."),
+          "ok"
+        );
+      }
+    } catch (error) {
+      CS.showAlert(saveAlert, { title: "That did not work", text: "Could not save this screen. Try again." });
+    } finally {
+      saving = false;
+      disabledStates.forEach(([control, wasDisabled]) => { control.disabled = wasDisabled; });
     }
-    f.save.disabled = false;
-    if (!result.ok) {
-      CS.showAlert(saveAlert, CS.explain(result, "save this screen"));
-      return;
-    }
-    const saved = result.body.app;
-    const creating = !currentApp;
-    await loadApps(saved.id);
-    await selectApp(saved.id, true);
-    CS.hideAlert(pageAlert);
-    setMsg(f.saveMsg, creating ? "Created. People can open it at the web address shown above." : "Saved. The preview now shows the saved screen.", "ok");
   }
 
   /* -- preview (the server's own render model) -------------------------------------------- */
-  async function loadPreview(app) {
-    const got = await CS.request(`${appsPath}/${app.id}/preview`);
+  async function loadPreview(app, seq, signal) {
+    let got;
+    try {
+      got = await CS.request(`${appsPath}/${app.id}/preview`, { signal });
+    } catch (error) {
+      if (seq !== screenSeq || (signal && signal.aborted)) return;
+      byId("cs-preview").hidden = true;
+      byId("cs-preview-source").textContent = "Preview could not be loaded.";
+      CS.showAlert(pageAlert, { title: "That did not work", text: "Could not load the preview. Try again in a moment." });
+      return;
+    } finally {
+      if (previewController && previewController.signal === signal) previewController = null;
+    }
+    if (seq !== screenSeq || got.aborted || (signal && signal.aborted)) return;
     if (!got.ok) {
+      byId("cs-preview").hidden = true;
+      byId("cs-preview-source").textContent = "Preview could not be loaded.";
       CS.showAlert(pageAlert, CS.explain(got, "load the preview"));
       return;
     }
@@ -353,15 +417,20 @@
     const problemText = CS.checkFile(file, preview);
     if (problemText) { setMsg(status, problemText, "error"); byId("cs-try-file").focus(); return; }
     if (tryController) tryController.abort();
-    tryController = new AbortController();
+    const controller = new AbortController();
+    tryController = controller;
+    const myScreenSeq = screenSeq;
+    const myTrySeq = ++trySeq;
     const run = byId("cs-try-run");
     run.disabled = true;
     const progress = byId("cs-try-progress");
     progress.hidden = false;
     byId("cs-try-progress-text").textContent = "Sending your picture…";
     const paths = CS.paths(projectId, currentApp.id);
+    const isStale = () => myScreenSeq !== screenSeq || myTrySeq !== trySeq || controller.signal.aborted;
     const hooks = {
       onStatus(info) {
+        if (isStale()) return;
         const text = info.status === "queued"
           ? (info.workerOnline === false && info.elapsed >= 5 ? "Still waiting. The checking program may not be running." : "Your picture is in line to be checked…")
           : "The computer is looking at your picture…";
@@ -369,10 +438,22 @@
         if (node.textContent !== text) node.textContent = text;
       }
     };
-    const outcome = await CS.runImage(paths, file, hooks, tryController.signal);
-    progress.hidden = true;
-    run.disabled = false;
-    if (outcome.aborted) return;
+    let outcome;
+    try {
+      outcome = await CS.runImage(paths, file, hooks, controller.signal);
+    } catch (error) {
+      if (!isStale()) {
+        CS.showAlert(tryAlert, { title: "That did not work", text: "Could not check that picture. Try again." });
+      }
+      return;
+    } finally {
+      if (tryController === controller) tryController = null;
+      if (myScreenSeq === screenSeq && myTrySeq === trySeq) {
+        progress.hidden = true;
+        run.disabled = !Athena.can("label");
+      }
+    }
+    if (isStale() || outcome.aborted) return;
     if (outcome.timedOut) { setMsg(status, "This is taking longer than usual. The picture is still waiting; try again in a moment.", "error"); return; }
     if (!outcome.ok) { CS.showAlert(tryAlert, outcome.error); return; }
     showTryResult(outcome.render, paths);
@@ -413,43 +494,257 @@
   /* -- choosing which screen -------------------------------------------------------------- */
   async function loadApps(wantedId) {
     const got = await CS.request(appsPath);
-    if (!got.ok) { CS.showAlert(pageAlert, CS.explain(got, "load your screens")); apps = []; }
-    else apps = got.body.apps;
+    if (!got.ok) {
+      CS.showAlert(pageAlert, CS.explain(got, "load your screens"));
+      return false;
+    }
+    apps = got.body.apps;
     drawAppSelect(wantedId);
+    return true;
   }
 
   async function selectApp(id, keepAlerts) {
-    currentApp = id === "new" ? null : apps.find((a) => a.id === id) || null;
-    preview = null; // the last screen's render model must not feed this screen's suggestion
-    if (!keepAlerts) { CS.hideAlert(saveAlert); CS.hideAlert(pageAlert); }
-    fillForm(currentApp);
+    const seq = ++screenSeq;
+    if (previewController) {
+      previewController.abort();
+      previewController = null;
+    }
+    trySeq += 1;
+    if (tryController) {
+      tryController.abort();
+      tryController = null;
+    }
+    byId("cs-try-progress").hidden = true;
+    byId("cs-try-progress-text").textContent = "";
+    byId("cs-try-run").disabled = !Athena.can("label");
+    setMsg(byId("cs-try-msg"), "");
     byId("cs-try-result").hidden = true;
     CS.hideAlert(tryAlert);
+
+    currentApp = id === "new" ? null : apps.find((a) => a.id === id) || null;
+    f.appSelect.value = currentApp ? currentApp.id : "new";
+    preview = null; // the last screen's render model must not feed this screen's suggestion
+    byId("cs-preview").hidden = true;
+    byId("cs-preview-source").textContent = currentApp ? "Loading preview…" : "Save the screen to see its preview.";
+    if (!keepAlerts) { CS.hideAlert(saveAlert); CS.hideAlert(pageAlert); }
+    fillForm(currentApp);
     if (currentApp) {
       f.appLinkRow.hidden = false;
       f.appLink.href = `/check/${currentApp.slug}`;
       f.appLink.textContent = `${window.location.origin}/check/${currentApp.slug}`;
-      await loadPreview(currentApp);
+      const controller = new AbortController();
+      previewController = controller;
+      await loadPreview(currentApp, seq, controller.signal);
     } else {
       f.appLinkRow.hidden = true;
-      preview = null;
-      byId("cs-preview").hidden = true;
-      byId("cs-preview-source").textContent = "Save the screen to see its preview.";
+    }
+  }
+
+  /* -- interactive workflow canvas (live current form values) ----------------------------- */
+  let flashTimer = null;
+  let flashedNode = null;
+
+  function addWfFact(dl, term, value, tone) {
+    const row = el("div", "cs-wf-val");
+    if (tone) row.dataset.tone = tone;
+    row.appendChild(el("dt", "", term));
+    row.appendChild(el("dd", "", value));
+    dl.appendChild(row);
+  }
+
+  function setWfStage(key, state, rows) {
+    const entry = wf.stages[key];
+    if (!entry || !entry.stage || !entry.vals) return;
+    entry.stage.dataset.state = state;
+    CS.clear(entry.vals);
+    rows.forEach(([term, value, tone]) => addWfFact(entry.vals, term, value, tone));
+  }
+
+  function setEditingStage(activeKey) {
+    Object.keys(wf.stages).forEach((key) => {
+      const node = wf.stages[key].stage;
+      if (!node) return;
+      if (key === activeKey) node.dataset.editing = "true";
+      else delete node.dataset.editing;
+    });
+  }
+
+  function stageForControl(node) {
+    if (!node || typeof node.closest !== "function") return null;
+    if (node.closest("#cs-types") || node.closest("#cs-active-row")) return "input";
+    if (node.closest("#cs-model") || node.closest("#cs-name") || node.closest("#cs-slug-field")) return "model";
+    if (node.closest("#cs-labels") || node.closest("#cs-threshold") || node.closest("#cs-suggest")) return "findings";
+    if (node.closest("#cs-decisions") || node.closest("#cs-note-required") || node.closest("#cs-human") || node.closest("#cs-say-clear") || node.closest("#cs-say-flagged") || node.closest("#cs-say-review")) return "decision";
+    return null;
+  }
+
+  function renderWorkflow() {
+    if (!wf.root) return;
+    if (!currentApp) {
+      wf.badge.textContent = "Current form · not saved yet";
+      wf.badge.dataset.state = "unsaved";
+    } else if (touched) {
+      wf.badge.textContent = "Unsaved form edits · Preview shows saved settings";
+      wf.badge.dataset.state = "unsaved";
+    } else {
+      wf.badge.textContent = "Current form · matches saved screen";
+      wf.badge.dataset.state = "saved";
+    }
+
+    const types = checked(f.types);
+    const activeOn = !currentApp || f.active.checked;
+    setWfStage("input", types.length ? (activeOn ? "ready" : "warn") : "bad", [
+      ["Accepts", types.length ? CS.typeList(types) : "None selected — pick at least 1", types.length ? "" : "bad"],
+      ["Screen status", currentApp ? (f.active.checked ? "Switched on" : "Switched off") : "Will start switched on", currentApp ? (f.active.checked ? "ok" : "warn") : ""]
+    ]);
+
+    const selectedModel = modelById(f.model.value);
+    const titleVal = f.name.value.trim();
+    if (selectedModel) {
+      const isApproved = selectedModel.stage === "approved";
+      setWfStage("model", isApproved ? (titleVal ? "ready" : "warn") : "bad", [
+        ["Model", `Version ${selectedModel.version} (${isApproved ? "approved" : "not approved"})`, isApproved ? "ok" : "bad"],
+        ["Screen title", titleVal || "Not named yet", titleVal ? "" : "warn"],
+        ["Finds", selectedModel.label_names.length ? selectedModel.label_names.join(", ") : "None"]
+      ]);
+    } else {
+      setWfStage("model", "bad", [
+        ["Model", "No approved model yet", "bad"],
+        ["Screen title", titleVal || "Not named yet", titleVal ? "" : "warn"]
+      ]);
+    }
+
+    const allLabels = modelLabels();
+    const selectedLabels = checked(f.labels);
+    let labelText = "Waiting for an approved model";
+    let labelTone = "warn";
+    if (allLabels.length) {
+      if (!selectedLabels.length) {
+        labelText = "None selected — pick at least 1";
+        labelTone = "bad";
+      } else {
+        const hiddenCount = allLabels.length - selectedLabels.length;
+        labelText = hiddenCount > 0 ? `${selectedLabels.join(", ")} (${hiddenCount} hidden)` : selectedLabels.join(", ");
+        labelTone = "";
+      }
+    }
+    const pct = Math.round(Number(f.threshold.value));
+    const thresholdText = isTextModel() ? "Not used for handwriting" : `${pct}% sure or more`;
+    setWfStage("findings", (!allLabels.length || !selectedLabels.length) ? (allLabels.length ? "bad" : "warn") : "ready", [
+      ["Show findings", labelText, labelTone],
+      ["Sureness threshold", thresholdText]
+    ]);
+
+    const humanReq = f.human.checked;
+    const options = checked(f.decisions);
+    const missingConfirmOrReject = humanReq && !options.includes("confirm") && !options.includes("reject");
+    let btnText = options.length
+      ? options.map((d) => (CS.DECISIONS[d] ? CS.DECISIONS[d].label : d)).join(", ")
+      : "None selected — pick at least 1";
+    if (missingConfirmOrReject) btnText += " (needs Confirm or Reject)";
+    setWfStage("decision", (!options.length || missingConfirmOrReject) ? "bad" : (humanReq ? "ready" : "warn"), [
+      ["Person decides", humanReq ? "Always required" : "Optional (can clear on its own)", humanReq ? "ok" : "warn"],
+      ["Buttons", btnText, (!options.length || missingConfirmOrReject) ? "bad" : ""],
+      ["Disagree note", f.noteRequired.checked ? "Required" : "Optional"]
+    ]);
+  }
+
+  function editStage(key) {
+    const map = {
+      input: {
+        section: f.types.closest(".cs-card"),
+        flashEl: f.types.closest(".cs-fieldset") || f.types,
+        focusEl: () => f.types.querySelector("input") || f.types
+      },
+      model: {
+        section: f.model.closest(".cs-card"),
+        flashEl: f.model.closest(".cs-field") || f.model,
+        focusEl: () => f.model
+      },
+      findings: {
+        section: f.labels.closest(".cs-card"),
+        flashEl: f.labels.closest(".cs-fieldset") || f.labels,
+        focusEl: () => f.labels.querySelector("input") || f.threshold
+      },
+      decision: {
+        section: f.human.closest(".cs-card"),
+        flashEl: f.human.closest(".cs-card") || f.human,
+        focusEl: () => f.human
+      }
+    };
+    const spec = map[key];
+    if (!spec) return;
+    setEditingStage(key);
+    const target = spec.focusEl();
+    const section = spec.section;
+    const scrollTarget = (section && section.getBoundingClientRect().height < window.innerHeight * 0.75) ? section : (spec.flashEl || target || section);
+    if (scrollTarget) CS.scrollTo(scrollTarget);
+    if (target && !target.disabled && typeof target.focus === "function") {
+      target.focus({ preventScroll: true });
+    } else if (section) {
+      if (!section.hasAttribute("tabindex")) section.setAttribute("tabindex", "-1");
+      section.focus({ preventScroll: true });
+    }
+    if (flashedNode) flashedNode.classList.remove("cs-wf-flash");
+    window.clearTimeout(flashTimer);
+    flashedNode = spec.flashEl || section;
+    if (flashedNode) {
+      flashedNode.classList.add("cs-wf-flash");
+      flashTimer = window.setTimeout(() => {
+        if (flashedNode) flashedNode.classList.remove("cs-wf-flash");
+        flashedNode = null;
+      }, 1400);
     }
   }
 
   let touched = false;   // true from the first edit until the screen is saved or another one is loaded
-  function markDirty() { touched = true; if (currentApp) f.unsaved.hidden = false; }
+  function markDirty() { touched = true; if (currentApp) f.unsaved.hidden = false; renderWorkflow(); }
   // Same protection as the labels in the console: leaving the page with unsaved edits asks first.
   window.addEventListener("beforeunload", (event) => { if (touched) { event.preventDefault(); event.returnValue = ""; } });
 
   /* -- wiring ----------------------------------------------------------------------------- */
   f.form.addEventListener("submit", onSave);
-  f.form.addEventListener("input", () => { setMsg(f.saveMsg, ""); markDirty(); });
-  f.form.addEventListener("change", markDirty);
+  f.form.addEventListener("input", (event) => { if (event.target === f.appSelect) return; setMsg(f.saveMsg, ""); markDirty(); });
+  f.form.addEventListener("change", (event) => { if (event.target === f.appSelect) return; markDirty(); });
+  f.form.addEventListener("focusin", (event) => { setEditingStage(stageForControl(event.target)); });
+  if (wf.root) {
+    wf.root.addEventListener("click", (event) => {
+      const btn = event.target instanceof Element ? event.target.closest("[data-wf-edit]") : null;
+      if (btn) editStage(btn.dataset.wfEdit);
+    });
+  }
   f.threshold.addEventListener("input", updateThresholdText);
   f.suggestUse.addEventListener("click", useSuggestion);
-  f.appSelect.addEventListener("change", () => selectApp(f.appSelect.value, false));
+  f.appSelect.addEventListener("change", async () => {
+    const nextId = f.appSelect.value;
+    const prevId = currentApp ? currentApp.id : "new";
+    if (saving || confirmingSwitch) {
+      f.appSelect.value = prevId;
+      return;
+    }
+    if (nextId === prevId) return;
+    if (touched) {
+      confirmingSwitch = true;
+      let discard = false;
+      try {
+        discard = await Athena.askConfirm({
+          title: "Leave without saving?",
+          message: "You have unsaved changes on this screen. If you switch screens now, those changes will be lost.",
+          keepLabel: "Stay on this screen",
+          confirmLabel: "Discard changes"
+        });
+      } catch (error) {
+        discard = false;
+      } finally {
+        confirmingSwitch = false;
+      }
+      if (!discard || saving) {
+        f.appSelect.value = currentApp ? currentApp.id : "new";
+        return;
+      }
+    }
+    await selectApp(nextId, false);
+  });
   f.model.addEventListener("change", () => {
     const names = modelLabels();
     const prior = checked(f.labels).filter((n) => names.includes(n));
@@ -460,25 +755,37 @@
   f.human.addEventListener("change", async () => {
     if (f.human.checked) return;
     f.human.checked = true;            // stays on until the person confirms
-    const turnOff = await Athena.askConfirm({
-      title: "Let the screen decide without a person?",
-      message: "If you turn this off, the screen can say “nothing found” on its own, and nobody has to look at the picture. The computer will sometimes be wrong, and a missed problem may go unnoticed. Only do this if a person double-checks in another way.",
-      keepLabel: "Keep a person deciding",
-      confirmLabel: "Yes, turn it off"
-    });
+    const seq = screenSeq;
+    let turnOff = false;
+    try {
+      turnOff = await Athena.askConfirm({
+        title: "Let the screen decide without a person?",
+        message: "If you turn this off, the screen can say “nothing found” on its own, and nobody has to look at the picture. The computer will sometimes be wrong, and a missed problem may go unnoticed. Only do this if a person double-checks in another way.",
+        keepLabel: "Keep a person deciding",
+        confirmLabel: "Yes, turn it off"
+      });
+    } catch (error) {
+      turnOff = false;
+    }
+    if (seq !== screenSeq) return;
     if (turnOff) { f.human.checked = false; markDirty(); }
     f.human.focus();
   });
   byId("cs-try-run").addEventListener("click", onTry);
 
   (async function init() {
-    const [m, a] = await Promise.all([CS.request(`/api/projects/${projectId}/models`), CS.request(appsPath)]);
-    if (!m.ok) { CS.showAlert(pageAlert, CS.explain(m, "load the models")); return; }
-    models = m.body.models;
-    apps = a.ok ? a.body.apps : [];
-    if (!a.ok) CS.showAlert(pageAlert, CS.explain(a, "load your screens"));
-    const wanted = root.dataset.initialApp || (apps.length ? apps[0].id : "new");
-    drawAppSelect(wanted);
-    await selectApp(f.appSelect.value, true);
+    try {
+      const [m, a] = await Promise.all([CS.request(`/api/projects/${projectId}/models`), CS.request(appsPath)]);
+      if (!m.ok) { CS.showAlert(pageAlert, CS.explain(m, "load the models")); renderWorkflow(); return; }
+      models = m.body.models;
+      apps = a.ok ? a.body.apps : [];
+      if (!a.ok) CS.showAlert(pageAlert, CS.explain(a, "load your screens"));
+      const wanted = root.dataset.initialApp || (apps.length ? apps[0].id : "new");
+      drawAppSelect(wanted);
+      await selectApp(f.appSelect.value, true);
+    } catch (error) {
+      CS.showAlert(pageAlert, { title: "That did not work", text: "Could not load this page. Reload and try again." });
+      renderWorkflow();
+    }
   })();
 })();

@@ -4,6 +4,10 @@ Date: 2026-11-20
 Branch: `wave2/documents`
 Roadmap: `docs/plans/2026-11-17-multimodal-platform-roadmap.md` (section 6, Wave 2, OS-DOC-001)
 
+## Working-tree continuation (2026-11-20; not complete)
+
+An uncommitted continuation adds a read-only comparison API and a console panel, and fixes numeric blank-cell comparison. The API and numerical fix have focused tests; the panel has only a general console smoke check, not a document-specific browser journey. The existing console does not yet provide a complete document upload-and-snapshot journey, so the comparison flow and this roadmap task remain open. The historical statements below describe the original slice, before this continuation.
+
 ## What this slice is
 
 The roadmap line is "Structured document-field extraction and table evaluation". This slice

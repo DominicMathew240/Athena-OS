@@ -512,6 +512,17 @@ class ComparisonTests(DocumentTestBase):
         self.assertEqual(document_eval.compare_cells("10", "n/a", "number"), "unclear")
         self.assertEqual(document_eval.compare_cells("lots", "n/a", "number"), "unclear")
 
+    def test_blank_number_cells_match_and_a_blank_against_a_number_mismatches(self) -> None:
+        # Empty number cells are data, not failed parses: two blanks match, and a blank
+        # against a real number is a mismatch. A non-number against a blank cannot be
+        # judged, so that pair stays unclear.
+        self.assertEqual(document_eval.compare_cells("", "", "number"), "match")
+        self.assertEqual(document_eval.compare_cells("   ", "  ", "number"), "match")
+        self.assertEqual(document_eval.compare_cells("", "10", "number"), "mismatch")
+        self.assertEqual(document_eval.compare_cells("1,234.5", "", "number"), "mismatch")
+        self.assertEqual(document_eval.compare_cells("lots", "", "number"), "unclear")
+        self.assertEqual(document_eval.compare_cells("", "n/a", "number"), "unclear")
+
     def test_an_ambiguous_date_is_unclear_never_a_match(self) -> None:
         self.assertEqual(document_eval.compare_cells("03/04/05", "2026-11-19", "date"), "unclear")
         self.assertEqual(document_eval.compare_cells("2026-11-19", "19 Nov 2026", "date"), "match")

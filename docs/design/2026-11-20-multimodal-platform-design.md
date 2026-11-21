@@ -7,6 +7,10 @@ development process the team will use going forward. Nothing in this document cl
 shipped behaviour that does not exist in the tree; where a section describes a target, it
 says so.
 
+## Working-tree continuation — image check workflow canvas
+
+An uncommitted image check-screen builder now shows a connected view of picture input, the selected model, displayed findings and human decisions. Its Edit controls lead to the real existing settings; Save continues to write the existing check-screen configuration. A disposable Chromium test verified an input-type change through save, reload, the server preview and the operator page at 390 and 1280 px. This is a single image-workflow view, not a general node editor, multimodal prediction hub, or new publication mechanism. Real model accuracy, real-user usability, role-specific previews and arbitrary nodes remain unverified or unimplemented. The historical design below remains a roadmap, not a claim that those capabilities shipped.
+
 ## 1. Where the multimodal platform actually is
 
 The platform's shape is one shared lifecycle with modality plugins riding on it:

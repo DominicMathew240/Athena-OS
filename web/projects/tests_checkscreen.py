@@ -152,7 +152,7 @@ class ClientContractTests(InferenceBase):
         ):
             self.assertEqual(route(name, pid, aid, oid), f"{apps}/{aid}/observations/{oid}{suffix}")
             self.assertIn(js, core)
-        self.assertIn("`${appsPath}/${currentApp.id}`", builder)
+        self.assertIn("`${appsPath}/${targetApp.id}`", builder)
         self.assertIn("`/api/projects/${projectId}/models`", builder)
         self.assertEqual(route("model-list", pid), f"/api/projects/{pid}/models")
 

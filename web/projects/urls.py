@@ -211,6 +211,12 @@ urlpatterns = [
         dataset_views.project_dataset_readiness,
         name="project-dataset-readiness",
     ),
+    # Document-fields only. Versions stay on project-datasets; this route does not store a result.
+    path(
+        "api/projects/<uuid:project_id>/datasets/compare",
+        dataset_views.project_dataset_compare,
+        name="project-dataset-compare",
+    ),
     path(
         "api/projects/<uuid:project_id>/datasets/<uuid:dataset_id>",
         dataset_views.project_dataset_detail,

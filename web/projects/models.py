@@ -1307,6 +1307,9 @@ class OperationExecution(models.Model):
     # The lease: which worker holds this execution, and until when. Null when queued or finished.
     lease_owner = models.CharField(max_length=120, blank=True, default="")
     lease_expires_at = models.DateTimeField(null=True, blank=True)
+    # T24 (bounded slice): durable stage progress. Empty for legacy/queued rows; never
+    # evidence of full footage coverage or resumable inference — see executions.checkpoint_progress.
+    progress_checkpoint = models.JSONField(default=dict, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     started_at = models.DateTimeField(null=True, blank=True)
     heartbeat_at = models.DateTimeField(null=True, blank=True)

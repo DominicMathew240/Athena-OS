@@ -16,6 +16,65 @@
     <p id="cs-page-alert-text"></p>
   </div>
 
+  <section class="cs-card cs-workflow" id="cs-workflow" aria-labelledby="cs-wf-title">
+    <div class="cs-wf-head">
+      <div>
+        <h2 id="cs-wf-title">Image check workflow</h2>
+        <p class="cs-help cs-wf-note">Shows your <strong>current form values</strong> (before saving). The Preview shows the last saved version from the server.</p>
+      </div>
+      <p class="cs-wf-badge" id="cs-wf-badge" role="status"></p>
+    </div>
+
+    <ol class="cs-wf-track" aria-label="Image check workflow stages">
+      <li class="cs-wf-stage" id="cs-wf-stage-input" data-stage="input">
+        <div class="cs-wf-card">
+          <div class="cs-wf-stage-head">
+            <span class="cs-step" aria-hidden="true">1</span>
+            <h3 class="cs-wf-stage-title">Picture input</h3>
+            <button type="button" class="secondary cs-wf-edit" data-wf-edit="input">Edit<span class="visually-hidden"> picture input</span></button>
+          </div>
+          <dl class="cs-wf-vals" id="cs-wf-vals-input"></dl>
+        </div>
+        <span class="cs-wf-arrow" aria-hidden="true"></span>
+      </li>
+
+      <li class="cs-wf-stage" id="cs-wf-stage-model" data-stage="model">
+        <div class="cs-wf-card">
+          <div class="cs-wf-stage-head">
+            <span class="cs-step" aria-hidden="true">2</span>
+            <h3 class="cs-wf-stage-title">Approved model</h3>
+            <button type="button" class="secondary cs-wf-edit" data-wf-edit="model">Edit<span class="visually-hidden"> approved model</span></button>
+          </div>
+          <dl class="cs-wf-vals" id="cs-wf-vals-model"></dl>
+        </div>
+        <span class="cs-wf-arrow" aria-hidden="true"></span>
+      </li>
+
+      <li class="cs-wf-stage" id="cs-wf-stage-findings" data-stage="findings">
+        <div class="cs-wf-card">
+          <div class="cs-wf-stage-head">
+            <span class="cs-step" aria-hidden="true">3</span>
+            <h3 class="cs-wf-stage-title">What findings to show</h3>
+            <button type="button" class="secondary cs-wf-edit" data-wf-edit="findings">Edit<span class="visually-hidden"> what findings to show</span></button>
+          </div>
+          <dl class="cs-wf-vals" id="cs-wf-vals-findings"></dl>
+        </div>
+        <span class="cs-wf-arrow" aria-hidden="true"></span>
+      </li>
+
+      <li class="cs-wf-stage" id="cs-wf-stage-decision" data-stage="decision">
+        <div class="cs-wf-card">
+          <div class="cs-wf-stage-head">
+            <span class="cs-step" aria-hidden="true">4</span>
+            <h3 class="cs-wf-stage-title">Human decision</h3>
+            <button type="button" class="secondary cs-wf-edit" data-wf-edit="decision">Edit<span class="visually-hidden"> human decision</span></button>
+          </div>
+          <dl class="cs-wf-vals" id="cs-wf-vals-decision"></dl>
+        </div>
+      </li>
+    </ol>
+  </section>
+
   <div class="cs-builder">
     <form id="cs-form" class="cs-form" novalidate aria-label="Check screen settings">
       <section class="cs-card" aria-labelledby="cs-h-which">

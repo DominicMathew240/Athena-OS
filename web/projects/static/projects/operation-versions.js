@@ -33,6 +33,38 @@
   let operationVersions = {};  // operation id -> loaded version lists
   let projectsCache = null;
 
+  const SCREEN_DEFAULT_WIDGET_ORDER = ["entries", "exits"];
+  // Unsaved "Freeze the board look" form state per draft.id (in-memory only, never persisted).
+  const screenDraftStates = new Map();
+
+  const normalizeScreenOrder = order => (
+    Array.isArray(order) && order.length === 2 && order.includes("entries") && order.includes("exits")
+      ? [...order]
+      : [...SCREEN_DEFAULT_WIDGET_ORDER]
+  );
+
+  const cloneScreenConfig = config => ({
+    title: typeof config?.title === "string" ? config.title : "",
+    show_entries: Boolean(config?.show_entries),
+    show_exits: Boolean(config?.show_exits),
+    widget_order: normalizeScreenOrder(config?.widget_order)
+  });
+
+  const isScreenConfigDirty = (current, loaded) => (
+    current.title !== loaded.title
+    || current.show_entries !== loaded.show_entries
+    || current.show_exits !== loaded.show_exits
+    || current.widget_order[0] !== loaded.widget_order[0]
+    || current.widget_order[1] !== loaded.widget_order[1]
+  );
+
+  const isAnyScreenDraftDirty = () => {
+    for (const state of screenDraftStates.values()) {
+      if (isScreenConfigDirty(state, state.loadedConfig)) return true;
+    }
+    return false;
+  };
+
   async function guarded(action, working, where = areas.setup) {
     if (busy) return;
     busy = true;
@@ -464,22 +496,252 @@
       }).catch(() => areas.creators.err.textContent = "Could not load your projects.");
     }));
 
-    box.append(creatorCard("create-screen", "Freeze the board look", "The public counting board for this operation: its title and which numbers it shows.", body => {
-      const title = el("input", { class: "a-input", id: "screen-title", maxlength: "120", "data-needs": "label", placeholder: "e.g. Shop entrance today", value: draft.name });
-      const entries = el("label", { class: "a-check", for: "screen-entries" }, el("input", { type: "checkbox", id: "screen-entries", checked: "", "data-needs": "label" }), "Show entries");
-      const exits = el("label", { class: "a-check", for: "screen-exits" }, el("input", { type: "checkbox", id: "screen-exits", checked: "", "data-needs": "label" }), "Show exits");
+    box.append(creatorCard("create-screen", "Freeze the board look", "A private layout choice for this operation's counting board: its title and which numbers it shows. Not published or running.", body => {
+      const WIDGET_LABELS = { entries: "Entries", exits: "Exits" };
+      const savedScreens = Array.isArray(versions.screens) ? versions.screens : [];
+      const draftId = draft.id;
+
+      const newConfig = () => ({
+        title: draft.name ?? "",
+        show_entries: true,
+        show_exits: true,
+        widget_order: [...SCREEN_DEFAULT_WIDGET_ORDER]
+      });
+      const configFromScreen = screen => cloneScreenConfig(screen?.configuration);
+
+      const savedState = draftId ? screenDraftStates.get(draftId) : null;
+      let selectedVersionId = savedState ? (savedState.selectedVersionId || "") : "";
+      if (selectedVersionId && !savedScreens.some(screen => screen.id === selectedVersionId)) {
+        selectedVersionId = "";
+      }
+      let loadedConfig = savedState ? cloneScreenConfig(savedState.loadedConfig) : newConfig();
+      const initialConfig = savedState ? cloneScreenConfig(savedState) : cloneScreenConfig(loadedConfig);
+      let widgetOrder = [...initialConfig.widget_order];
+      let confirmingVersionChange = false;
+
+      const versionSelectEl = el("select", {
+        class: "a-input",
+        id: "screen-version-select",
+        "data-testid": "screen-version-select",
+        "aria-describedby": "screen-version-help"
+      }, option("", "New layout"));
+      for (const screen of savedScreens) {
+        const screenTitle = typeof screen.configuration?.title === "string" ? screen.configuration.title.trim() : "";
+        versionSelectEl.append(option(
+          screen.id,
+          screenTitle ? `Version ${screen.version} — ${screenTitle}` : `Version ${screen.version}`
+        ));
+      }
+      if (!savedScreens.length) {
+        versionSelectEl.disabled = true;
+        versionSelectEl.dataset.empty = "1";
+      }
+      if (selectedVersionId) versionSelectEl.value = selectedVersionId;
+      const versionSelect = gate(versionSelectEl, "label");
+      const versionHelp = el("p", {
+        class: "a-help",
+        id: "screen-version-help",
+        text: savedScreens.length
+          ? "Saved versions never change. Choosing one copies its layout here so you can freeze a new version."
+          : "No saved board versions yet. Freeze this board to create version 1."
+      });
+
+      const title = el("input", { class: "a-input", id: "screen-title", maxlength: "120", "data-needs": "label", placeholder: "e.g. Shop entrance today", value: initialConfig.title });
+      const entriesInput = el("input", { type: "checkbox", id: "screen-entries", "data-needs": "label", ...(initialConfig.show_entries ? { checked: "" } : {}) });
+      const exitsInput = el("input", { type: "checkbox", id: "screen-exits", "data-needs": "label", ...(initialConfig.show_exits ? { checked: "" } : {}) });
+      title.value = initialConfig.title;
+      entriesInput.checked = initialConfig.show_entries;
+      exitsInput.checked = initialConfig.show_exits;
+      const entries = el("label", { class: "a-check", for: "screen-entries" }, entriesInput, "Show entries");
+      const exits = el("label", { class: "a-check", for: "screen-exits" }, exitsInput, "Show exits");
+
+      const orderList = el("ol", { class: "screen-order-list", "data-testid": "screen-order-list" });
+      const orderStatus = el("p", { class: "a-sr", role: "status", "aria-live": "polite" });
+      const orderSection = el("div", { class: "screen-order", role: "group", "aria-labelledby": "screen-order-label", "data-testid": "screen-order" },
+        el("div", { class: "screen-order-head" },
+          el("span", { class: "a-label", id: "screen-order-label", text: "Tile order" }),
+          el("span", { class: "a-help", text: "Arrange which tile appears first on the board." })),
+        orderList,
+        orderStatus);
+
+      const previewTitle = el("p", { class: "screen-canvas-title", "data-testid": "screen-preview-title" });
+      const previewTiles = el("div", { class: "screen-canvas-tiles", "data-testid": "screen-preview-tiles" });
+      const previewSection = el("div", { class: "screen-preview", role: "region", "aria-labelledby": "screen-preview-heading", "data-testid": "screen-preview" },
+        el("div", { class: "screen-preview-bar" },
+          el("h4", { class: "screen-preview-heading", id: "screen-preview-heading", text: "Board canvas preview" }),
+          el("span", { class: "a-tag screen-preview-badge", "data-testid": "screen-preview-badge", text: "Layout preview only" })),
+        el("p", { class: "a-help screen-preview-notice", "data-testid": "screen-preview-notice", text: "Layout preview only, not live or published. Counts stay as dashes (—) here." }),
+        el("div", { class: "screen-canvas", "data-testid": "screen-canvas" },
+          el("div", { class: "screen-canvas-head" },
+            previewTitle,
+            el("span", { class: "screen-canvas-state", text: "Not live" })),
+          previewTiles));
+
+      function isShown(key) {
+        return key === "entries" ? entriesInput.checked : exitsInput.checked;
+      }
+
+      function currentConfig() {
+        return {
+          title: title.value,
+          show_entries: entriesInput.checked,
+          show_exits: exitsInput.checked,
+          widget_order: [...widgetOrder]
+        };
+      }
+
+      function saveScreenDraftState() {
+        if (!draftId) return;
+        const current = currentConfig();
+        screenDraftStates.set(draftId, {
+          selectedVersionId,
+          loadedConfig: cloneScreenConfig(loadedConfig),
+          title: current.title,
+          show_entries: current.show_entries,
+          show_exits: current.show_exits,
+          widget_order: [...current.widget_order]
+        });
+      }
+
+      function isDirty() {
+        return isScreenConfigDirty(currentConfig(), loadedConfig);
+      }
+
+      function applyConfig(config) {
+        title.value = config.title;
+        entriesInput.checked = config.show_entries;
+        exitsInput.checked = config.show_exits;
+        widgetOrder = [...config.widget_order];
+        orderStatus.textContent = "";
+        renderOrderControls();
+        renderScreenPreview();
+      }
+
+      function moveWidget(index, delta, directionWord, focusKey) {
+        const target = index + delta;
+        if (target < 0 || target >= widgetOrder.length) return;
+        const next = [...widgetOrder];
+        const [item] = next.splice(index, 1);
+        next.splice(target, 0, item);
+        widgetOrder = next;
+        saveScreenDraftState();
+        renderOrderControls(focusKey);
+        renderScreenPreview();
+        orderStatus.textContent = `${WIDGET_LABELS[item]} moved ${directionWord}. Board order is ${widgetOrder.map(k => WIDGET_LABELS[k]).join(", then ")}.`;
+      }
+
+      function renderOrderControls(focusKey = null) {
+        orderList.replaceChildren();
+        widgetOrder.forEach((key, index) => {
+          const label = WIDGET_LABELS[key];
+          const hiddenNote = isShown(key) ? null : el("span", { class: "screen-order-muted", text: "(hidden)" });
+          const earlierBtn = gate(el("button", {
+            class: "a-btn", type: "button", text: "Move earlier",
+            "aria-label": `Move ${label} earlier`,
+            "data-testid": `move-earlier-${key}`,
+            ...(index === 0 ? { disabled: "" } : {})
+          }), "label");
+          earlierBtn.addEventListener("click", () => moveWidget(index, -1, "earlier", key));
+
+          const laterBtn = gate(el("button", {
+            class: "a-btn", type: "button", text: "Move later",
+            "aria-label": `Move ${label} later`,
+            "data-testid": `move-later-${key}`,
+            ...(index === widgetOrder.length - 1 ? { disabled: "" } : {})
+          }), "label");
+          laterBtn.addEventListener("click", () => moveWidget(index, 1, "later", key));
+
+          orderList.append(el("li", { class: "screen-order-row", "data-widget": key },
+            el("span", { class: "screen-order-name" }, `${index + 1}. ${label}`, hiddenNote),
+            el("div", { class: "screen-order-actions" }, earlierBtn, laterBtn)));
+
+          if (focusKey === key) {
+            const targetBtn = !earlierBtn.disabled ? earlierBtn : !laterBtn.disabled ? laterBtn : null;
+            if (targetBtn) targetBtn.focus();
+          }
+        });
+      }
+
+      function renderScreenPreview() {
+        const trimmedTitle = title.value.trim();
+        previewTitle.textContent = trimmedTitle || "Untitled board";
+        if (trimmedTitle) previewTitle.removeAttribute("data-empty");
+        else previewTitle.setAttribute("data-empty", "true");
+
+        previewTiles.replaceChildren();
+        const visible = widgetOrder.filter(isShown);
+        if (!visible.length) {
+          previewTiles.append(el("p", {
+            class: "screen-canvas-empty",
+            "data-testid": "screen-preview-empty",
+            text: "No numbers shown — turn on Show entries or Show exits to preview tiles."
+          }));
+          return;
+        }
+        for (const key of visible) {
+          previewTiles.append(el("div", { class: "screen-canvas-tile", "data-widget": key, "data-testid": `screen-preview-tile-${key}` },
+            el("span", { class: "screen-canvas-tile-label", text: WIDGET_LABELS[key] }),
+            el("span", { class: "screen-canvas-tile-value", "data-testid": `screen-preview-value-${key}`, text: "—" }),
+            el("span", { class: "screen-canvas-tile-note", text: "No live count" })));
+        }
+      }
+
+      versionSelect.addEventListener("change", async () => {
+        const nextId = versionSelect.value;
+        if (nextId === selectedVersionId) return;
+        if (busy || confirmingVersionChange) {
+          versionSelect.value = selectedVersionId;
+          return;
+        }
+        if (isDirty()) {
+          confirmingVersionChange = true;
+          let accepted = false;
+          try {
+            accepted = await window.Athena.askConfirm({
+              title: "Discard unsaved board changes?",
+              message: "Your edits to the board layout have not been frozen as a new version.",
+              keepLabel: "Keep editing",
+              confirmLabel: "Discard changes"
+            });
+          } catch (_) {
+            accepted = false;
+          } finally {
+            confirmingVersionChange = false;
+          }
+          if (!accepted || busy || !draft || draft.id !== draftId) {
+            versionSelect.value = selectedVersionId;
+            return;
+          }
+        }
+        const nextScreen = nextId ? savedScreens.find(screen => screen.id === nextId) : null;
+        if (nextId && !nextScreen) {
+          versionSelect.value = selectedVersionId;
+          return;
+        }
+        const nextConfig = nextScreen ? configFromScreen(nextScreen) : newConfig();
+        selectedVersionId = nextId;
+        loadedConfig = cloneScreenConfig(nextConfig);
+        applyConfig(nextConfig);
+        saveScreenDraftState();
+      });
+
+      title.addEventListener("input", () => { saveScreenDraftState(); renderScreenPreview(); });
+      title.addEventListener("change", saveScreenDraftState);
+      entriesInput.addEventListener("change", () => { saveScreenDraftState(); renderOrderControls(); renderScreenPreview(); });
+      exitsInput.addEventListener("change", () => { saveScreenDraftState(); renderOrderControls(); renderScreenPreview(); });
+
       const button = gate(el("button", { class: "a-btn", type: "button", text: "Freeze this board", "data-testid": "create-screen" }), "label");
       button.addEventListener("click", () => guarded(async () => {
-        const configuration = {
-          title: byId("screen-title").value,
-          show_entries: byId("screen-entries").checked,
-          show_exits: byId("screen-exits").checked
-        };
+        const configuration = currentConfig();
         const result = await api(`/api/operations/${draft.operation_id}/screen-versions`, { method: "POST", json: { configuration } });
+        if (draftId) screenDraftStates.delete(draftId);
         await refreshVersions();
         areas.creators.note.textContent = `Board frozen as version ${result.screen_version.version}. Pin it on the draft above to use it.`;
       }, "Freezing the board…", areas.creators));
-      body.append(formRow("Board title", title), el("div", { class: "op-checks" }, entries, exits), button);
+
+      renderOrderControls();
+      renderScreenPreview();
+      body.append(formRow("Start from", versionSelect), versionHelp, formRow("Board title", title), el("div", { class: "op-checks" }, entries, exits), orderSection, previewSection, button);
     }));
   }
 
@@ -558,6 +820,13 @@
      same way for anything watching (the guided setup re-reads state from them). */
   document.addEventListener("athena:draft-shown", event => setDraft(event.detail));
   const announceDraft = draft => document.dispatchEvent(new CustomEvent("athena:draft-updated", { detail: draft }));
+
+  window.addEventListener("beforeunload", event => {
+    if (isAnyScreenDraftDirty()) {
+      event.preventDefault();
+      event.returnValue = "";
+    }
+  });
 
   wireScopeForms();
   loadScope().catch(problem => { areas.setup.err.textContent = problem.message; });

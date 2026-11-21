@@ -97,11 +97,18 @@ def compare_cells(reference: str, candidate: str, field_type: str) -> str:
     of one of the tables. Empty cells compare as empty: two blanks match, a blank against a
     value is a mismatch (a missing value is data)."""
     if field_type == "number":
-        if normalize_cell(reference, "number") is None or normalize_cell(candidate, "number") is None:
+        left = normalize_cell(reference, "number")
+        right = normalize_cell(candidate, "number")
+        # A non-number is unclear. A blank is valid data (""), so it is judged below
+        # rather than here: number_equal cannot parse "" and returns None.
+        if left is None or right is None:
             return UNCLEAR
-        equal = number_equal(
-            normalize_cell(reference, "number") or "", normalize_cell(candidate, "number") or ""
-        )
+        if left == "" or right == "":
+            return MATCH if left == right else MISMATCH
+        equal = number_equal(left, right)
+        # None means the pair cannot be judged; it is never a mismatch.
+        if equal is None:
+            return UNCLEAR
         return MATCH if equal else MISMATCH
     left = normalize_cell(reference, field_type)
     right = normalize_cell(candidate, field_type)

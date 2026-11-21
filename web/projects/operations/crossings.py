@@ -4,6 +4,13 @@ Pure temporal geometry, not detection or tracking. Coordinates use normalized im
 space with x to the right and y down. Positive is the left-hand cross-product side
 of the directed start-to-end line in that coordinate system. The caller owns track
 lifecycle, identity, persistence and gap/coverage reporting.
+
+T25 consumes tracks (T22) through ``episodes_from_tracks``: each track's box-center
+anchor feeds one ``CrossingCounter``. Valid side-to-side episodes emit direction
+and time once; reverse returns count; jitter, touches, line-parallel motion and
+long ambiguous gaps never fabricate events. Worker commits of the resulting
+``detector_crossing`` drafts must use the live-lease fence (see
+``executions.commit_events_owned``).
 """
 from __future__ import annotations
 
@@ -32,6 +39,118 @@ def _point(value):
 class Crossing:
     direction: str
     time: float
+
+
+@dataclass(frozen=True)
+class CrossingEpisode:
+    """One valid directional crossing derived from a single session-scoped track."""
+
+    direction: str
+    time: float
+    track_id: int
+    session: int
+    camera_key: str
+
+
+def _observation_anchor(observation) -> tuple[float, float]:
+    """The configured object anchor for one track observation: the box center.
+
+    Track observations carry ``box`` as ``(x, y, width, height)`` in normalized
+    image space. The center is the same anchor ``CrossingCounter`` already tests
+    against; footprint/bottom anchors are out of scope for this bounded slice.
+    """
+    try:
+        x, y, width, height = observation.box
+    except (AttributeError, TypeError, ValueError):
+        raise ValueError("Each track observation needs a normalized box.") from None
+    if any(not _number(v) for v in (x, y, width, height)):
+        raise ValueError("Each track observation needs a normalized box.")
+    if width <= 0 or height <= 0:
+        raise ValueError("Each track observation needs a positive-size box.")
+    cx, cy = x + width / 2.0, y + height / 2.0
+    if not (0 <= cx <= 1 and 0 <= cy <= 1):
+        raise ValueError("Each track observation anchor must stay in normalized image space.")
+    return (cx, cy)
+
+
+def episodes_from_tracks(tracks, start, end, *, dead_band=0.01, confirmations=2, max_gap=1.0):
+    """Emit valid crossing episodes from session-scoped tracks over one finite line.
+
+    Each track gets its own ``CrossingCounter`` — track ids are never used as a
+    permanent "already counted" set, so a real reverse return still counts.
+    Observations are consumed in track order by presentation time; a gap longer
+    than ``max_gap`` resets that track's episode state and never invents a
+    crossing across it.
+    """
+    if tracks is None:
+        raise ValueError("Provide the tracks to evaluate, or an empty list.")
+    episodes: list[CrossingEpisode] = []
+    for track in tracks:
+        try:
+            track_id = track.track_id
+            session = track.session
+            camera_key = track.camera_key
+            observations = track.observations
+        except AttributeError as error:
+            raise ValueError("Each track needs track_id, session, camera_key and observations.") from error
+        if type(track_id) is not int or track_id < 1:
+            raise ValueError("Each track id must be a positive integer.")
+        if type(session) is not int or session < 0:
+            raise ValueError("Each track session must be a nonnegative integer.")
+        if not isinstance(camera_key, str) or not camera_key:
+            raise ValueError("Each track must name its camera.")
+        counter = CrossingCounter(
+            start, end, dead_band=dead_band, confirmations=confirmations, max_gap=max_gap
+        )
+        for observation in observations:
+            try:
+                pts = observation.pts
+            except AttributeError as error:
+                raise ValueError("Each track observation needs a presentation timestamp.") from error
+            event = counter.observe(pts, _observation_anchor(observation))
+            if event is not None:
+                episodes.append(
+                    CrossingEpisode(
+                        direction=event.direction,
+                        time=event.time,
+                        track_id=track_id,
+                        session=session,
+                        camera_key=camera_key,
+                    )
+                )
+    return episodes
+
+
+def episode_event_drafts(episodes, *, source: str):
+    """Ledger drafts for detector crossing episodes (T23 kind ``detector_crossing``).
+
+    Session comes from the track's T20 session; payload carries direction plus
+    the session-scoped track bookkeeping the episode came from. Worker commits
+    must go through ``executions.commit_events_owned``.
+    """
+    from ..models import OperationEvent
+    from .ledger import EventDraft
+
+    if not isinstance(source, str) or not source:
+        raise ValueError("Detector crossing drafts need their source stream name.")
+    if episodes is None:
+        raise ValueError("Provide the episodes to draft, or an empty list.")
+    drafts = []
+    for episode in episodes:
+        drafts.append(
+            EventDraft(
+                kind=OperationEvent.KIND_DETECTOR,
+                source=source,
+                session=episode.session,
+                timestamp=episode.time,
+                payload={
+                    "direction": episode.direction,
+                    "track_id": episode.track_id,
+                    "camera_key": episode.camera_key,
+                },
+            )
+        )
+    return drafts
 
 
 class CrossingCounter:

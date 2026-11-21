@@ -1,8 +1,9 @@
-"""JSON API for dataset versions: readiness, create/list, detail and zip export."""
+"""JSON API for dataset versions: readiness, create/list, detail, zip export and document comparison."""
 
 from __future__ import annotations
 
 import json
+import uuid
 from typing import Any
 
 from django.core.exceptions import RequestDataTooBig
@@ -541,3 +542,56 @@ def project_dataset_health(request: HttpRequest, project_id) -> JsonResponse:
     except ValueError as error:
         return JsonResponse({"error": str(error)}, status=400)
     return _no_store(JsonResponse(health.build(project, config)))
+
+
+def _comparison_ids(query) -> tuple[uuid.UUID, uuid.UUID]:
+    """The two dataset ids, or ``_HttpError`` when the query is not a pair of ids."""
+    raw = {name: str(query.get(name, "")).strip() for name in ("reference", "candidate")}
+    if not raw["reference"] or not raw["candidate"]:
+        raise _HttpError("Provide both reference and candidate dataset version ids.", 400)
+    parsed: list[uuid.UUID] = []
+    for value in (raw["reference"], raw["candidate"]):
+        try:
+            parsed.append(uuid.UUID(value))
+        except (ValueError, AttributeError, TypeError) as error:
+            raise _HttpError("reference and candidate must be dataset version ids.", 400) from error
+    return parsed[0], parsed[1]
+
+
+@access()
+@require_http_methods(["GET"])
+def project_dataset_compare(request: HttpRequest, project_id) -> JsonResponse:
+    """Compare two CSV dataset versions of one document-fields project.
+
+    Success is ``{"comparison": <document_eval.compare_versions block>}`` and nothing is
+    saved. Both version ids must belong to this project; an id from another project is
+    refused before its file is read. A missing project is 404. Invalid input is
+    ``400 {"error": "..."}``.
+    """
+    project = get_object_or_404(Project, id=project_id)
+    from .tasks import DOCUMENT_FIELDS
+
+    if project.recipe != DOCUMENT_FIELDS.key:
+        return JsonResponse(
+            {"error": "Version comparison is only available for a document-fields project."},
+            status=400,
+        )
+    try:
+        reference_id, candidate_id = _comparison_ids(request.GET)
+    except _HttpError as error:
+        return JsonResponse({"error": str(error)}, status=error.status)
+
+    versions = {
+        version.id: version
+        for version in DatasetVersion.objects.filter(project_id=project.id, id__in=(reference_id, candidate_id))
+    }
+    if reference_id not in versions or candidate_id not in versions:
+        return JsonResponse({"error": "Both dataset versions must belong to this project."}, status=400)
+
+    from .training import document_eval
+
+    try:
+        block = document_eval.compare_versions(versions[reference_id], versions[candidate_id], project)
+    except ValueError as error:
+        return JsonResponse({"error": str(error)}, status=400)
+    return _no_store(JsonResponse({"comparison": block}))

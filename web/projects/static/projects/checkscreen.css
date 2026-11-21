@@ -213,3 +213,50 @@ g.is-active .cs-box-halo { stroke-width: 8; }
 .cs-box-grid .cs-field { margin-bottom: 0; }
 .cs-dialog .cs-actions { margin-top: 18px; }
 #cs-active-row { margin-top: 10px; }
+
+/* interactive workflow canvas */
+.cs-workflow { padding: 18px 20px; }
+.cs-wf-head { display: flex; flex-wrap: wrap; align-items: flex-start; justify-content: space-between; gap: 10px 16px; }
+.cs-workflow h2 { margin: 0; }
+.cs-wf-note { margin-top: 4px; color: var(--fg-2); }
+.cs-wf-badge { margin: 0; padding: 5px 11px; border: 1px solid var(--rule-2); border-radius: var(--r-pill); background: var(--panel-2); color: var(--fg-2); font-size: 14px; font-weight: 600; line-height: 1.3; }
+.cs-wf-badge[data-state="unsaved"] { border-color: var(--warn-line); background: var(--warn-tint); color: var(--warn); }
+.cs-wf-badge[data-state="saved"] { border-color: var(--ok); background: var(--ok-tint); color: var(--ok); }
+.cs-wf-track { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 0; list-style: none; margin: 14px 0 0; padding: 0; align-items: stretch; }
+.cs-wf-stage { display: grid; grid-template-columns: minmax(0, 1fr); min-width: 0; }
+.cs-wf-stage:not(:last-child) { grid-template-columns: minmax(0, 1fr) 28px; }
+.cs-wf-card { display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 14px; border: 1px solid var(--rule-2); border-radius: var(--r-card); background: var(--panel-2); }
+.cs-wf-stage[data-state="warn"] .cs-wf-card { border-color: var(--warn-line); }
+.cs-wf-stage[data-state="bad"] .cs-wf-card { border-color: var(--bad-line); background: var(--bad-tint); }
+.cs-wf-stage[data-editing="true"] .cs-wf-card { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-tint); }
+.cs-wf-stage-head { display: flex; align-items: center; gap: 8px; min-width: 0; }
+.cs-wf-stage-head .cs-step { width: 24px; height: 24px; font-size: 13px; }
+.cs-workflow .cs-wf-stage-title { margin: 0; flex: 1 1 auto; min-width: 0; font-size: 16px; line-height: 1.25; overflow-wrap: anywhere; }
+.cs-wf-edit { flex: none; min-height: 36px; padding: 5px 10px; border-radius: var(--r-field); background: var(--panel); color: var(--fg); font-size: 14px; }
+.cs-wf-edit:hover { background: var(--accent-tint); border-color: var(--accent); color: var(--accent); }
+.cs-wf-vals { margin: 0; display: grid; gap: 8px; }
+.cs-wf-val { display: grid; gap: 2px; padding-top: 7px; border-top: 1px solid var(--rule); min-width: 0; }
+.cs-wf-val dt { color: var(--fg-3); font-size: 13px; font-weight: 600; line-height: 1.25; }
+.cs-wf-val dd { margin: 0; color: var(--fg); font-size: 14px; font-weight: 600; line-height: 1.35; overflow-wrap: anywhere; }
+.cs-wf-val[data-tone="ok"] dd { color: var(--ok); }
+.cs-wf-val[data-tone="warn"] dd { color: var(--warn); }
+.cs-wf-val[data-tone="bad"] dd { color: var(--bad); }
+.cs-wf-arrow { position: relative; place-self: center; width: 28px; height: 28px; color: var(--fg-3); }
+.cs-wf-arrow::before, .cs-wf-arrow::after { content: ""; position: absolute; top: 50%; left: 50%; box-sizing: border-box; }
+.cs-wf-arrow::before { width: 12px; height: 2px; border-radius: 1px; background: currentColor; transform: translate(-7px, -50%); }
+.cs-wf-arrow::after { width: 7px; height: 7px; border-top: 2px solid currentColor; border-right: 2px solid currentColor; transform: translate(-2px, -50%) rotate(45deg); }
+.cs-wf-flash { outline: 3px solid var(--accent); outline-offset: 4px; transition: outline-color .3s ease; }
+
+@media (max-width: 1060px) {
+  .cs-wf-track { grid-template-columns: minmax(0, 1fr); }
+  .cs-wf-stage:not(:last-child) { grid-template-columns: minmax(0, 1fr); grid-template-rows: auto 28px; }
+  .cs-wf-arrow { transform: rotate(90deg); }
+}
+@media (max-width: 768px) {
+  .cs-wf-edit { min-height: 44px; padding: 6px 12px; }
+}
+@media (max-width: 640px) {
+  .cs-workflow { padding: 14px; }
+  .cs-wf-head { flex-direction: column; align-items: stretch; }
+  .cs-wf-badge { align-self: flex-start; }
+}

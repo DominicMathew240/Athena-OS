@@ -1032,3 +1032,37 @@ input[type="file"]::file-selector-button:hover { background: var(--rule); }
 .recipe-note { margin: 0; color: var(--fg-2); font-size: 14px; line-height: 1.45; }
 .recipe-note[hidden] { display: none; }
 @media (max-width: 850px) { .recipe-btn { min-height: 44px; } }
+
+/* --- Document-fields version comparison ------------------------------------------------------- */
+.doc-compare-panel { min-width: 0; }
+.doc-compare-panel h4 { margin: 0; font-size: 17px; letter-spacing: -.01em; }
+.doc-compare-panel h5 { margin: 0; font-size: 16px; }
+.doc-compare-panel h3:focus-visible, .doc-compare-panel h4:focus-visible { box-shadow: none; }
+.doc-compare-form { display: grid; gap: 12px; margin: 14px 0 0; }
+.doc-compare-selectors { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 240px), 1fr)); gap: 12px; }
+.doc-compare-selectors label { display: grid; align-content: start; gap: 5px; font-size: 15px; font-weight: 700; min-width: 0; }
+.doc-compare-selectors select { min-height: 40px; width: 100%; padding: 7px 10px; border: 1px solid var(--field-line); border-radius: var(--r-field); background: var(--field); color: var(--fg); font-size: var(--field-size); font-weight: 400; }
+.doc-compare-selectors select:disabled { background: var(--panel-2); color: var(--fg-3); cursor: not-allowed; }
+.doc-compare-actions { justify-content: start; flex-wrap: wrap; }
+.doc-compare-panel .form-error { margin-top: 12px; }
+.doc-compare-retry-actions { margin-top: 10px; }
+.doc-compare-empty { margin: 12px 0 0; padding: 14px; border: 1px dashed var(--rule-2); border-radius: var(--r-card); background: var(--panel-2); color: var(--fg-2); font-size: 15px; line-height: 1.5; }
+.doc-compare-empty p { margin: 0; }
+.doc-compare-results { display: grid; gap: 14px; margin: 16px 0 0; padding: 16px 0 0; border-top: 1px solid var(--rule-2); min-width: 0; }
+.doc-compare-results-body { display: grid; gap: 14px; min-width: 0; }
+.doc-compare-results-body p, .doc-compare-results-body li { overflow-wrap: anywhere; }
+.doc-compare-reminders { margin: 0; padding: 12px 14px 12px 30px; border: 1px solid var(--warn-line); border-radius: var(--r-card); background: var(--warn-tint); color: var(--fg); font-size: 14px; line-height: 1.5; display: grid; gap: 4px; }
+.doc-compare-counts { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr)); gap: 8px; margin: 0; }
+.doc-compare-count { padding: 10px 12px; border: 1px solid var(--rule); border-radius: var(--r-field); background: var(--panel-2); min-width: 0; }
+.doc-compare-count dt { color: var(--fg-3); font-size: 14px; font-weight: 600; }
+.doc-compare-count dd { margin: 4px 0 0; font-size: 18px; font-weight: 700; overflow-wrap: anywhere; }
+.doc-compare-sub { display: block; margin-top: 2px; color: var(--fg-3); font-size: 13px; font-weight: 400; }
+.doc-compare-field-type { margin-left: 6px; padding: 1px 6px; border: 1px solid var(--rule-2); border-radius: var(--r-pill); font-size: 12px; font-weight: 500; color: var(--fg-3); }
+.doc-compare-blank { color: var(--fg-3); font-style: italic; }
+@media (max-width: 850px) {
+  .doc-compare-selectors select { min-height: 44px; }
+  .doc-compare-actions button { min-height: 44px; }
+}
+@media (max-width: 580px) {
+  .doc-compare-actions button { width: 100%; }
+}

@@ -315,14 +315,14 @@ class InferenceBase(TestCase):
             snapshot_sha256=hashlib.sha256(encoded.encode()).hexdigest(),
         )
 
-    def enqueue_and_claim(self, bundle):
+    def enqueue_and_claim(self, bundle, owner="worker-a"):
         response = self.client.post(
             f"/api/operation-release-bundles/{bundle.id}/executions",
             json.dumps({"recording_id": str(self.recording.id)}),
             content_type="application/json",
         )
         assert response.status_code == 202, response.content
-        return executions.claim_next_execution("worker-a")
+        return executions.claim_next_execution(owner)
 
 
 # -- the compatibility matrix --------------------------------------------------------------------
@@ -641,8 +641,8 @@ class WorkerIntegrationTests(InferenceBase):
 
     def test_the_with_model_outcome_is_reproducible(self):
         bundle = self.make_bundle(binding=self.binding)
-        first = executions.run_execution(self.enqueue_and_claim(bundle), "worker-a")
-        second = executions.run_execution(self.enqueue_and_claim(bundle), "worker-b")
+        first = executions.run_execution(self.enqueue_and_claim(bundle, "worker-a"), "worker-a")
+        second = executions.run_execution(self.enqueue_and_claim(bundle, "worker-b"), "worker-b")
         self.assertEqual(first.status, "succeeded")
         self.assertEqual(second.status, "succeeded")
         self.assertEqual(first.result["detector"]["frames"], second.result["detector"]["frames"])

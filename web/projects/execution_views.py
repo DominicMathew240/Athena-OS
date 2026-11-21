@@ -20,6 +20,8 @@ from .permissions import access
 
 
 def _execution_data(row):
+    from .operations.executions import serialize_progress_checkpoint
+
     return {
         "id": str(row.id),
         "bundle_id": str(row.bundle_id),
@@ -30,6 +32,8 @@ def _execution_data(row):
         "cancel_requested": row.cancel_requested,
         "result": row.result,
         "error": row.error,
+        # T24: actual checkpoint state (or safe empty defaults). Never invents coverage.
+        "progress_checkpoint": serialize_progress_checkpoint(row),
         "created_at": row.created_at.isoformat(),
         "started_at": row.started_at.isoformat() if row.started_at else None,
         "finished_at": row.finished_at.isoformat() if row.finished_at else None,

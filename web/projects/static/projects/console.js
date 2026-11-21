@@ -13,7 +13,7 @@ const modalityInfo = {
 let projects = [];
 let currentFilter = "all";
 let selectedId = null;
-const PANEL_ORDER = ["checklist-panel", "labels-panel", "image-assets-panel", "audio-assets-panel", "dataset-panel", "train-panel", "apps-panel"];
+const PANEL_ORDER = ["checklist-panel", "labels-panel", "image-assets-panel", "audio-assets-panel", "doc-compare-panel", "dataset-panel", "train-panel", "apps-panel"];
 let currentPanelId = "checklist-panel"; // which part of the open project is on screen
 let loadError = "";
 const tableBody = document.getElementById("dataset-rows");
@@ -108,6 +108,7 @@ const searchable = project => `${project.name} ${project.id} ${project.modality}
 // A handwriting project: pictures, but the label is the corrected text (the "transcript"), not a box.
 // Everything that is box-shaped (drawing, auto-suggest, corrections) must not appear for it.
 const isOcrProject = project => Boolean(project) && project.modality === "image" && project.recipe === "handwriting-ocr";
+const isDocumentFieldsProject = project => Boolean(project) && project.recipe === "document-fields";
 
 function projectState(project) {
   if (project.modality !== "image") return { text: "No labelling tools yet", tone: "plugin" };
@@ -177,10 +178,14 @@ async function selectProject(id, { reveal = false } = {}) {
   const selected = projects.find(project => project.id === id);
   // The Teach part must never keep the old project's state (a ticked licence box, an enabled button) while the new
   // project's pictures are still loading: forget it now, before any request is waited for.
-  if (changed) resetTraining(selected ? selected.id : null);
+  if (changed) {
+    resetTraining(selected ? selected.id : null);
+    resetDocumentCompare(selected ? selected.id : null);
+  }
   if (!selected) {
     imageAssetsPanel.hidden = true;
     datasetPanel.hidden = true;
+    if (docComparePanel) docComparePanel.hidden = true;
     trPanel.hidden = true;
     if (appsPanel) appsPanel.hidden = true;
     autolabelPanel.hidden = true;
@@ -389,8 +394,10 @@ assetFilterFeedback.addEventListener("click", () => {
 async function loadAssets(projectId) {
   const project = projects.find(candidate => candidate.id === projectId);
   const ocr = isOcrProject(project);
+  const docFields = isDocumentFieldsProject(project);
   imageAssetsPanel.hidden = !project || project.modality !== "image";
   audioAssetsPanel.hidden = !project || project.modality !== "audio";
+  if (docComparePanel) docComparePanel.hidden = !docFields;
   datasetPanel.hidden = imageAssetsPanel.hidden && audioAssetsPanel.hidden;
   trPanel.hidden = datasetPanel.hidden;
   if (appsPanel) appsPanel.hidden = imageAssetsPanel.hidden;
@@ -402,6 +409,8 @@ async function loadAssets(projectId) {
   assetFilter.hidden = true;
   autolabelFeedbackNote.hidden = true;
   if (assetFilterProject !== projectId) { assetFilterProject = projectId; assetFeedbackOnly = false; autolabelOutcome.textContent = ""; }
+  if (docFields) void loadDocumentCompareVersions(projectId);
+  else if (docCompareState.projectId !== null) resetDocumentCompare(null);
   if (imageAssetsPanel.hidden) {
     if (!audioAssetsPanel.hidden) loadClips(projectId);
     return;
@@ -2074,6 +2083,8 @@ async function deleteCurrentProject() {
     history.replaceState(null, "", location.pathname);
     imageAssetsPanel.hidden = true;
     audioAssetsPanel.hidden = true;
+    if (docComparePanel) docComparePanel.hidden = true;
+    resetDocumentCompare(null);
     autolabelPanel.hidden = true;
     assetList.replaceChildren();
     render();
@@ -2194,6 +2205,7 @@ projectForm.addEventListener("submit", async event => {
     showPanel("checklist-panel");
     selectedId = body.project.id;
     resetTraining(selectedId); // the Teach part belongs to the project that was open before
+    resetDocumentCompare(selectedId);
     Athena.useProject(selectedId);
     // Same as selectProject(): the address must name the open project, or a reload/Back reopens another one.
     rememberProjectInAddress(selectedId);
@@ -3522,6 +3534,580 @@ splitReset.addEventListener("click", () => { resetSplitForm(); setDatasetError()
 updateSplitTotal();
 
 // --- end of training sets ---
+
+// --- Document-fields version comparison -------------------------------------------------------
+const docComparePanel = document.getElementById("doc-compare-panel");
+const docCompareCountNote = document.getElementById("doc-compare-count-note");
+const docCompareStatus = document.getElementById("doc-compare-status");
+const docCompareEmpty = document.getElementById("doc-compare-empty");
+const docCompareEmptyText = document.getElementById("doc-compare-empty-text");
+const docCompareForm = document.getElementById("doc-compare-form");
+const docCompareReference = document.getElementById("doc-compare-reference");
+const docCompareCandidate = document.getElementById("doc-compare-candidate");
+const docCompareRun = document.getElementById("doc-compare-run");
+const docCompareRefresh = document.getElementById("doc-compare-refresh");
+const docCompareError = document.getElementById("doc-compare-error");
+const docCompareRetryActions = document.getElementById("doc-compare-retry-actions");
+const docCompareRetry = document.getElementById("doc-compare-retry");
+const docCompareResults = document.getElementById("doc-compare-results");
+const docCompareResultsHeading = document.getElementById("doc-compare-results-heading");
+const docCompareResultsBody = document.getElementById("doc-compare-results-body");
+
+const docCompareState = {
+  projectId: null,
+  versions: [],
+  loadingVersions: false,
+  comparing: false,
+  versionsError: false,
+  versionsLoaded: false,
+  displayedComparison: null,
+  versionsToken: 0,
+  compareToken: 0
+};
+
+const isDocComparePlainObject = value => Boolean(value) && typeof value === "object" && !Array.isArray(value);
+const isDocCompareWholeNumber = value => Number.isInteger(value) && value >= 0;
+const isDocComparePercent = value => typeof value === "number" && Number.isFinite(value) && value >= 0 && value <= 100;
+
+function setDocCompareError(message = "") {
+  if (!docCompareError) return;
+  docCompareError.textContent = message;
+  docCompareError.dataset.open = message ? "true" : "false";
+}
+
+function clearDocCompareResults() {
+  docCompareState.displayedComparison = null;
+  if (docCompareResults) docCompareResults.hidden = true;
+  if (docCompareResultsBody) docCompareResultsBody.replaceChildren();
+}
+
+function docCompareVersionLabel(version) {
+  const parts = [`Version ${version.version}`];
+  if (version.created_at) parts.push(`saved ${formatWhen(version.created_at)}`);
+  if (version.is_incomplete) parts.push("incomplete");
+  return parts.join(" · ");
+}
+
+function updateDocCompareControls() {
+  const busy = docCompareState.loadingVersions || docCompareState.comparing;
+  const enough = docCompareState.versions.length >= 2;
+  const formHidden = !docCompareForm || docCompareForm.hidden;
+  if (docCompareReference) docCompareReference.disabled = busy || !enough;
+  if (docCompareCandidate) docCompareCandidate.disabled = busy || !enough;
+  if (docCompareRun) {
+    docCompareRun.disabled = busy || !enough;
+    docCompareRun.setAttribute("aria-busy", String(docCompareState.comparing));
+    docCompareRun.textContent = docCompareState.comparing ? "Comparing…" : "Compare versions";
+  }
+  if (docCompareRefresh) {
+    docCompareRefresh.disabled = busy;
+    docCompareRefresh.setAttribute("aria-busy", String(docCompareState.loadingVersions));
+    docCompareRefresh.textContent = docCompareState.loadingVersions ? "Refreshing…" : "Refresh versions";
+  }
+  if (docCompareRetryActions) {
+    docCompareRetryActions.hidden = !formHidden || (!docCompareState.versionsError && !docCompareState.versionsLoaded);
+  }
+  if (docCompareRetry) {
+    docCompareRetry.disabled = busy;
+    docCompareRetry.setAttribute("aria-busy", String(docCompareState.loadingVersions));
+    docCompareRetry.textContent = docCompareState.loadingVersions
+      ? (docCompareState.versionsError ? "Trying again…" : "Refreshing…")
+      : (docCompareState.versionsError ? "Try again" : "Refresh versions");
+  }
+}
+
+function resetDocumentCompare(projectId) {
+  docCompareState.versionsToken += 1;
+  docCompareState.compareToken += 1;
+  docCompareState.projectId = projectId;
+  docCompareState.versions = [];
+  docCompareState.loadingVersions = false;
+  docCompareState.comparing = false;
+  docCompareState.versionsError = false;
+  docCompareState.versionsLoaded = false;
+  clearDocCompareResults();
+  if (!docComparePanel) return;
+  if (docCompareCountNote) docCompareCountNote.textContent = "";
+  if (docCompareStatus) docCompareStatus.textContent = "";
+  if (docCompareEmpty) docCompareEmpty.hidden = true;
+  if (docCompareEmptyText) docCompareEmptyText.textContent = "";
+  if (docCompareForm) docCompareForm.hidden = true;
+  if (docCompareReference) docCompareReference.replaceChildren();
+  if (docCompareCandidate) docCompareCandidate.replaceChildren();
+  setDocCompareError("");
+  updateDocCompareControls();
+}
+
+function populateDocCompareSelect(select, versions, selectedValue) {
+  if (!select) return;
+  select.replaceChildren();
+  versions.forEach(version => {
+    const option = document.createElement("option");
+    option.value = String(version.id);
+    option.textContent = docCompareVersionLabel(version);
+    select.append(option);
+  });
+  if (selectedValue && versions.some(version => String(version.id) === String(selectedValue))) {
+    select.value = String(selectedValue);
+  }
+}
+
+function renderDocumentCompareVersions() {
+  if (!docComparePanel) return;
+  const versions = docCompareState.versions;
+  const count = versions.length;
+  if (docCompareCountNote) docCompareCountNote.textContent = count ? plural(count, "version", "versions") : "";
+  if (count < 2) {
+    if (docCompareForm) docCompareForm.hidden = true;
+    if (docCompareReference) docCompareReference.replaceChildren();
+    if (docCompareCandidate) docCompareCandidate.replaceChildren();
+    clearDocCompareResults();
+    if (docCompareStatus) {
+      docCompareStatus.textContent = count === 0
+        ? "No saved versions yet."
+        : "1 saved version in this project. Two are needed to compare.";
+    }
+    if (docCompareEmpty) docCompareEmpty.hidden = false;
+    if (docCompareEmptyText) {
+      docCompareEmptyText.textContent = count === 0
+        ? "There are no saved versions in this project yet. Upload a CSV document table and save at least two versions before comparing them here."
+        : `Only Version ${versions[0].version} has been saved so far. Save at least one more version to compare two versions field by field.`;
+    }
+    updateDocCompareControls();
+    return;
+  }
+  if (docCompareEmpty) docCompareEmpty.hidden = true;
+  if (docCompareEmptyText) docCompareEmptyText.textContent = "";
+  if (docCompareForm) docCompareForm.hidden = false;
+  const prevRef = docCompareReference ? docCompareReference.value : "";
+  const prevCand = docCompareCandidate ? docCompareCandidate.value : "";
+  const hasRef = Boolean(prevRef) && versions.some(version => String(version.id) === prevRef);
+  const hasCand = Boolean(prevCand) && versions.some(version => String(version.id) === prevCand);
+  const v0 = String(versions[0].id);
+  const v1 = String(versions[1].id);
+  const nextRef = hasRef ? prevRef : (hasCand && prevCand === v1 ? v0 : v1);
+  const nextCand = hasCand ? prevCand : (nextRef === v0 ? v1 : v0);
+  populateDocCompareSelect(docCompareReference, versions, nextRef);
+  populateDocCompareSelect(docCompareCandidate, versions, nextCand);
+  const shown = docCompareState.displayedComparison;
+  if (shown && (shown.referenceId !== nextRef || shown.candidateId !== nextCand)) {
+    clearDocCompareResults();
+  }
+  if (docCompareStatus) {
+    docCompareStatus.textContent = `${plural(count, "saved version", "saved versions")} in this project, newest first.`;
+  }
+  updateDocCompareControls();
+}
+
+async function loadDocumentCompareVersions(projectId) {
+  if (!docComparePanel || !projectId || selectedId !== projectId) return;
+  if (!isDocumentFieldsProject(projects.find(candidate => candidate.id === projectId))) return;
+  if (docCompareState.projectId !== projectId) resetDocumentCompare(projectId);
+  if (docCompareState.comparing) {
+    docCompareState.compareToken += 1;
+    docCompareState.comparing = false;
+  }
+  const retryFocused = Boolean(docCompareRetry && document.activeElement === docCompareRetry);
+  const refreshFocused = Boolean(docCompareRefresh && document.activeElement === docCompareRefresh);
+  const token = ++docCompareState.versionsToken;
+  docCompareState.loadingVersions = true;
+  setDocCompareError("");
+  updateDocCompareControls();
+  if (docCompareStatus && !docCompareState.versions.length) {
+    docCompareStatus.textContent = "Loading saved versions…";
+  }
+  try {
+    const body = await api(`/api/projects/${encodeURIComponent(projectId)}/datasets`);
+    if (token !== docCompareState.versionsToken || docCompareState.projectId !== projectId || selectedId !== projectId) return;
+    if (!body || !Array.isArray(body.datasets) || body.datasets.some(item => !isDocComparePlainObject(item) || item.id == null || String(item.id).trim() === "" || item.version == null)) {
+      throw new Error("The answer from the server was incomplete.");
+    }
+    docCompareState.loadingVersions = false;
+    docCompareState.versionsError = false;
+    docCompareState.versionsLoaded = true;
+    docCompareState.versions = body.datasets;
+    renderDocumentCompareVersions();
+    if (retryFocused) {
+      if (docCompareForm && !docCompareForm.hidden && docCompareReference) docCompareReference.focus({ preventScroll: true });
+      else if (docCompareRetryActions && !docCompareRetryActions.hidden && docCompareRetry) docCompareRetry.focus({ preventScroll: true });
+      else docComparePanel.querySelector("#doc-compare-heading")?.focus({ preventScroll: true });
+    } else if (refreshFocused && docCompareForm && docCompareForm.hidden) {
+      if (docCompareRetryActions && !docCompareRetryActions.hidden && docCompareRetry) docCompareRetry.focus({ preventScroll: true });
+      else docComparePanel.querySelector("#doc-compare-heading")?.focus({ preventScroll: true });
+    }
+  } catch (error) {
+    if (token !== docCompareState.versionsToken || docCompareState.projectId !== projectId || selectedId !== projectId) return;
+    docCompareState.loadingVersions = false;
+    docCompareState.versionsError = true;
+    if (!docCompareState.versions.length) {
+      if (docCompareCountNote) docCompareCountNote.textContent = "";
+      if (docCompareForm) docCompareForm.hidden = true;
+      if (docCompareEmpty) docCompareEmpty.hidden = true;
+      if (docCompareStatus) docCompareStatus.textContent = "";
+      clearDocCompareResults();
+    }
+    setDocCompareError(`Could not load saved versions. ${error.message}`);
+    updateDocCompareControls();
+    if (retryFocused && docCompareRetryActions && !docCompareRetryActions.hidden && docCompareRetry) {
+      docCompareRetry.focus({ preventScroll: true });
+    }
+  } finally {
+    if (token === docCompareState.versionsToken && docCompareState.projectId === projectId && selectedId === projectId) {
+      docCompareState.loadingVersions = false;
+      updateDocCompareControls();
+    }
+  }
+}
+
+function docCompareValueNode(value) {
+  if (value === null || value === undefined || String(value) === "") {
+    return dsNode("span", "doc-compare-blank", "(blank)");
+  }
+  return String(value);
+}
+
+function validateDocumentComparison(comparison, { projectId, referenceId, candidateId }) {
+  if (!isDocComparePlainObject(comparison)) return false;
+  if (comparison.available !== undefined && typeof comparison.available !== "boolean") return false;
+  if (comparison.project_id != null && String(comparison.project_id) !== String(projectId)) return false;
+  if (comparison.reference_id != null && String(comparison.reference_id) !== String(referenceId)) return false;
+  if (comparison.candidate_id != null && String(comparison.candidate_id) !== String(candidateId)) return false;
+  if (comparison.reference_version !== undefined && comparison.reference_version !== null &&
+      typeof comparison.reference_version !== "number" &&
+      (typeof comparison.reference_version !== "string" || !comparison.reference_version.trim())) {
+    return false;
+  }
+  if (comparison.candidate_version !== undefined && comparison.candidate_version !== null &&
+      typeof comparison.candidate_version !== "number" &&
+      (typeof comparison.candidate_version !== "string" || !comparison.candidate_version.trim())) {
+    return false;
+  }
+
+  const totals = comparison.totals;
+  if (!isDocComparePlainObject(totals)) return false;
+  if (!isDocCompareWholeNumber(totals.match) || !isDocCompareWholeNumber(totals.mismatch) || !isDocCompareWholeNumber(totals.unclear)) {
+    return false;
+  }
+  if (!isDocCompareWholeNumber(comparison.rows_compared)) return false;
+  if (comparison.reference_rows !== undefined && comparison.reference_rows !== null && !isDocCompareWholeNumber(comparison.reference_rows)) {
+    return false;
+  }
+  if (comparison.candidate_rows !== undefined && comparison.candidate_rows !== null && !isDocCompareWholeNumber(comparison.candidate_rows)) {
+    return false;
+  }
+
+  const comparable = totals.match + totals.mismatch;
+  if (comparison.accuracy === undefined) return false;
+  if (comparable === 0) {
+    if (comparison.accuracy !== null) return false;
+  } else if (!isDocComparePercent(comparison.accuracy)) {
+    return false;
+  }
+
+  if (!Array.isArray(comparison.per_field)) return false;
+  for (const row of comparison.per_field) {
+    if (!isDocComparePlainObject(row)) return false;
+    if (typeof row.field !== "string" || !row.field.trim()) return false;
+    if (!isDocCompareWholeNumber(row.match) || !isDocCompareWholeNumber(row.mismatch) || !isDocCompareWholeNumber(row.unclear)) {
+      return false;
+    }
+    const rowComparable = row.match + row.mismatch;
+    if (rowComparable === 0) {
+      if (row.accuracy !== null && row.accuracy !== undefined) return false;
+    } else if (!isDocComparePercent(row.accuracy)) {
+      return false;
+    }
+  }
+
+  if (!Array.isArray(comparison.mismatches)) return false;
+  for (const item of comparison.mismatches) {
+    if (!isDocComparePlainObject(item)) return false;
+    if (typeof item.field !== "string" || !item.field.trim()) return false;
+    if (item.row === null || item.row === undefined) return false;
+    if (typeof item.row === "number") {
+      if (!Number.isInteger(item.row) || item.row < 0) return false;
+    } else if (typeof item.row !== "string" || !item.row.trim()) {
+      return false;
+    }
+    if (!("reference" in item) || !("candidate" in item)) return false;
+  }
+
+  if (comparison.mismatch_count !== undefined) {
+    if (!isDocCompareWholeNumber(comparison.mismatch_count)) return false;
+    if (comparison.mismatch_count !== totals.mismatch) return false;
+  }
+  const expectedMismatches = comparison.mismatch_count !== undefined ? comparison.mismatch_count : totals.mismatch;
+  if (expectedMismatches > 0 && comparison.mismatches.length === 0) return false;
+  if (comparison.mismatches.length > expectedMismatches) return false;
+  if (!comparison.mismatches_truncated && comparison.mismatches.length < expectedMismatches) return false;
+
+  if (comparison.notes !== undefined && comparison.notes !== null && !Array.isArray(comparison.notes)) return false;
+  return true;
+}
+
+function renderDocumentComparison(comparison) {
+  if (!docCompareResults || !docCompareResultsBody) return;
+  docCompareResultsBody.replaceChildren();
+
+  const totals = comparison.totals;
+  const match = totals.match;
+  const mismatch = totals.mismatch;
+  const unclear = totals.unclear;
+  const comparable = match + mismatch;
+  const accuracy = comparable > 0 ? comparison.accuracy : null;
+  const rowsCompared = comparison.rows_compared;
+  const hasRowCounts = isDocCompareWholeNumber(comparison.reference_rows) && isDocCompareWholeNumber(comparison.candidate_rows);
+  const refRows = hasRowCounts ? comparison.reference_rows : null;
+  const candRows = hasRowCounts ? comparison.candidate_rows : null;
+  const perField = comparison.per_field;
+  const mismatches = comparison.mismatches;
+  const mismatchCount = comparison.mismatch_count !== undefined ? comparison.mismatch_count : mismatch;
+
+  const summaryText = typeof comparison.plain === "string" && comparison.plain.trim()
+    ? comparison.plain.trim()
+    : (comparable === 0 ? "No comparable cells were found." : `${match.toLocaleString()} of ${comparable.toLocaleString()} compared cells match.`);
+  const headline = dsNode("p", "result-headline", summaryText);
+  if (accuracy === 100 && mismatch === 0 && comparable > 0) headline.dataset.state = "ok";
+  else if (comparable === 0) headline.dataset.state = "none";
+  docCompareResultsBody.append(headline);
+
+  if (comparison.reference_version != null && comparison.candidate_version != null) {
+    docCompareResultsBody.append(dsNode(
+      "p",
+      "asset-help",
+      `Candidate Version ${comparison.candidate_version} compared against Reference Version ${comparison.reference_version}.`
+    ));
+  }
+
+  const reminders = [];
+  if (Array.isArray(comparison.notes)) {
+    comparison.notes.forEach(note => {
+      const text = typeof note === "string" ? note.trim() : "";
+      if (text && !reminders.includes(text)) reminders.push(text);
+    });
+  }
+  if (unclear > 0) {
+    reminders.push(`${plural(unclear, "unclear cell was", "unclear cells were")} excluded from accuracy and not guessed.`);
+  }
+  if (comparison.mismatches_truncated && mismatches.length < mismatchCount) {
+    reminders.push(`Only the first ${mismatches.length.toLocaleString()} of ${mismatchCount.toLocaleString()} mismatches are listed below.`);
+  }
+  if (reminders.length) {
+    const reminderList = dsNode("ul", "doc-compare-reminders");
+    reminders.forEach(text => reminderList.append(dsNode("li", "", text)));
+    docCompareResultsBody.append(reminderList);
+  }
+
+  const counts = dsNode("dl", "doc-compare-counts");
+  const addCount = (label, value, sub = "") => {
+    const item = dsNode("div", "doc-compare-count");
+    item.append(dsNode("dt", "", label));
+    const dd = dsNode("dd", "", value);
+    if (sub) dd.append(dsNode("span", "doc-compare-sub", sub));
+    item.append(dd);
+    counts.append(item);
+  };
+  addCount(
+    "Match rate",
+    accuracy !== null ? `${accuracy}%` : "Not measured",
+    comparable ? `${match.toLocaleString()} of ${comparable.toLocaleString()} comparable cells` : "No comparable cells"
+  );
+  addCount("Matches", match.toLocaleString());
+  addCount("Mismatches", mismatch.toLocaleString());
+  addCount("Unclear cells", unclear.toLocaleString(), unclear ? "Excluded from accuracy" : "");
+  addCount(
+    "Rows compared",
+    rowsCompared.toLocaleString(),
+    hasRowCounts && refRows !== candRows ? `Reference ${refRows.toLocaleString()} · Candidate ${candRows.toLocaleString()}` : ""
+  );
+  docCompareResultsBody.append(counts);
+
+  const fieldsBlock = dsNode("div", "result-block");
+  fieldsBlock.append(dsNode("h5", "", "Field by field"));
+  if (!perField.length) {
+    fieldsBlock.append(dsNode("p", "asset-help", "This project has no defined fields yet. Add fields under Labels to see a field-by-field breakdown."));
+  } else {
+    const wrap = dsNode("div", "result-scroll");
+    wrap.setAttribute("role", "region");
+    wrap.tabIndex = 0;
+    wrap.setAttribute("aria-label", "Field-by-field comparison results. Scrolls sideways on a narrow screen.");
+    const table = dsNode("table", "result-table");
+    table.append(dsNode("caption", "", "Cell match breakdown for each field"));
+    const thead = dsNode("thead");
+    const headRow = dsNode("tr");
+    ["Field", "Match rate", "Matches", "Mismatches", "Unclear"].forEach((title, index) => {
+      const th = dsNode("th", index ? "num" : "", title);
+      th.scope = "col";
+      headRow.append(th);
+    });
+    thead.append(headRow);
+    const tbody = dsNode("tbody");
+    perField.forEach(row => {
+      const tr = dsNode("tr");
+      const rowHead = dsNode("th", "", row.field);
+      rowHead.scope = "row";
+      if (row.type) rowHead.append(dsNode("span", "doc-compare-field-type", String(row.type)));
+      if (row.note) rowHead.append(dsNode("span", "doc-compare-sub", String(row.note)));
+      const rowAccuracy = row.match + row.mismatch > 0 ? `${row.accuracy}%` : "—";
+      tr.append(
+        rowHead,
+        dsNode("td", "num", rowAccuracy),
+        dsNode("td", "num", row.match.toLocaleString()),
+        dsNode("td", "num", row.mismatch.toLocaleString()),
+        dsNode("td", "num", row.unclear.toLocaleString())
+      );
+      tbody.append(tr);
+    });
+    table.append(thead, tbody);
+    wrap.append(table);
+    fieldsBlock.append(wrap, dsNode("p", "result-scroll-hint", "On a narrow screen, swipe the table sideways to see every column."));
+  }
+  docCompareResultsBody.append(fieldsBlock);
+
+  const mismatchesBlock = dsNode("div", "result-block");
+  mismatchesBlock.append(dsNode("h5", "", mismatchCount ? `Mismatches (${mismatchCount.toLocaleString()})` : "Mismatches"));
+  if (!mismatches.length) {
+    mismatchesBlock.append(dsNode("p", "asset-help", "No mismatched cells were found in the compared rows."));
+  } else {
+    if (comparison.mismatches_truncated && mismatches.length < mismatchCount) {
+      mismatchesBlock.append(dsNode("p", "asset-help", `Showing the first ${mismatches.length.toLocaleString()} of ${mismatchCount.toLocaleString()} mismatches.`));
+    }
+    const wrap = dsNode("div", "result-scroll");
+    wrap.setAttribute("role", "region");
+    wrap.tabIndex = 0;
+    wrap.setAttribute("aria-label", "Mismatched cells. Scrolls sideways on a narrow screen.");
+    const table = dsNode("table", "result-table");
+    table.append(dsNode("caption", "", "Mismatched cells between reference and candidate versions"));
+    const thead = dsNode("thead");
+    const headRow = dsNode("tr");
+    ["Row", "Field", "Reference", "Candidate"].forEach(title => {
+      const th = dsNode("th", "", title);
+      th.scope = "col";
+      headRow.append(th);
+    });
+    thead.append(headRow);
+    const tbody = dsNode("tbody");
+    mismatches.forEach(item => {
+      const tr = dsNode("tr");
+      const rowCell = dsNode("td", "", String(item.row));
+      const fieldHead = dsNode("th", "", item.field);
+      fieldHead.scope = "row";
+      if (item.type) fieldHead.append(dsNode("span", "doc-compare-field-type", String(item.type)));
+      const refCell = dsNode("td");
+      refCell.append(docCompareValueNode(item.reference));
+      const candCell = dsNode("td");
+      candCell.append(docCompareValueNode(item.candidate));
+      tr.append(rowCell, fieldHead, refCell, candCell);
+      tbody.append(tr);
+    });
+    table.append(thead, tbody);
+    wrap.append(table);
+    mismatchesBlock.append(wrap, dsNode("p", "result-scroll-hint", "On a narrow screen, swipe the table sideways to see every column."));
+  }
+  docCompareResultsBody.append(mismatchesBlock);
+
+  docCompareResults.hidden = false;
+}
+
+async function runDocumentCompare() {
+  const projectId = docCompareState.projectId;
+  if (!docComparePanel || !projectId || projectId !== selectedId || docCompareState.comparing || docCompareState.loadingVersions) return;
+  if (!isDocumentFieldsProject(selectedProject())) return;
+  if (docCompareState.versions.length < 2) return;
+  const referenceId = docCompareReference ? docCompareReference.value : "";
+  const candidateId = docCompareCandidate ? docCompareCandidate.value : "";
+  if (!referenceId || !candidateId) {
+    clearDocCompareResults();
+    setDocCompareError("Choose both a reference version and a candidate version to compare.");
+    (referenceId ? docCompareCandidate : docCompareReference)?.focus();
+    return;
+  }
+  if (!docCompareState.versions.some(version => String(version.id) === referenceId) ||
+      !docCompareState.versions.some(version => String(version.id) === candidateId)) {
+    clearDocCompareResults();
+    setDocCompareError("Choose two valid saved versions to compare.");
+    docCompareReference?.focus();
+    return;
+  }
+  if (referenceId === candidateId) {
+    clearDocCompareResults();
+    setDocCompareError("Choose two different versions to compare. Reference and candidate cannot be the same version.");
+    docCompareCandidate?.focus();
+    return;
+  }
+  setDocCompareError("");
+  clearDocCompareResults();
+  const versionsToken = docCompareState.versionsToken;
+  const token = ++docCompareState.compareToken;
+  docCompareState.comparing = true;
+  updateDocCompareControls();
+  if (docCompareStatus) docCompareStatus.textContent = "Comparing versions…";
+  try {
+    const query = new URLSearchParams({ reference: referenceId, candidate: candidateId });
+    const body = await api(`/api/projects/${encodeURIComponent(projectId)}/datasets/compare?${query}`);
+    if (token !== docCompareState.compareToken || versionsToken !== docCompareState.versionsToken || docCompareState.projectId !== projectId || selectedId !== projectId) return;
+    const comparison = body && body.comparison;
+    if (!isDocComparePlainObject(comparison)) {
+      throw new Error("The comparison result from the server was incomplete.");
+    }
+    if (comparison.available === false) {
+      clearDocCompareResults();
+      const reason = typeof comparison.reason === "string" && comparison.reason.trim()
+        ? comparison.reason.trim()
+        : "These two versions could not be compared.";
+      setDocCompareError(reason);
+      if (docCompareStatus) docCompareStatus.textContent = "Comparison could not be completed.";
+      return;
+    }
+    if (!validateDocumentComparison(comparison, { projectId, referenceId, candidateId })) {
+      throw new Error("The comparison result from the server was incomplete or invalid.");
+    }
+    renderDocumentComparison(comparison);
+    docCompareState.displayedComparison = { referenceId, candidateId };
+    if (docCompareStatus) {
+      docCompareStatus.textContent = comparison.reference_version != null && comparison.candidate_version != null
+        ? `Compared Version ${comparison.candidate_version} against Reference Version ${comparison.reference_version}.`
+        : "Comparison complete.";
+    }
+    docCompareResultsHeading?.focus({ preventScroll: true });
+  } catch (error) {
+    if (token !== docCompareState.compareToken || versionsToken !== docCompareState.versionsToken || docCompareState.projectId !== projectId || selectedId !== projectId) return;
+    clearDocCompareResults();
+    setDocCompareError(error.message || "Could not compare those versions.");
+    if (docCompareStatus) docCompareStatus.textContent = "Comparison failed.";
+  } finally {
+    if (token === docCompareState.compareToken && docCompareState.projectId === projectId && selectedId === projectId) {
+      docCompareState.comparing = false;
+      updateDocCompareControls();
+    }
+  }
+}
+
+if (docCompareForm) {
+  docCompareForm.addEventListener("submit", event => {
+    event.preventDefault();
+    void runDocumentCompare();
+  });
+}
+[docCompareRefresh, docCompareRetry].forEach(button => {
+  if (!button) return;
+  button.addEventListener("click", () => {
+    if (docCompareState.projectId && docCompareState.projectId === selectedId && !docCompareState.loadingVersions && !docCompareState.comparing) {
+      void loadDocumentCompareVersions(docCompareState.projectId);
+    }
+  });
+});
+[docCompareReference, docCompareCandidate].forEach(select => {
+  if (!select) return;
+  select.addEventListener("change", () => {
+    setDocCompareError("");
+    const hadResults = Boolean(docCompareState.displayedComparison) || (docCompareResults && !docCompareResults.hidden);
+    clearDocCompareResults();
+    if (hadResults && docCompareStatus && docCompareState.versions.length >= 2) {
+      docCompareStatus.textContent = "Selection changed. Press “Compare versions” to compare the selected versions.";
+    }
+  });
+});
 
 // --- Teach the computer (training, results and approval) ---------------------------------
 // Plain-language wording rules (checked by tests_training_ui.py): no "epoch", "batch", "precision",
@@ -6482,6 +7068,8 @@ function renderWorkspace() {
   if (!project) {
     imageAssetsPanel.hidden = true;
     audioAssetsPanel.hidden = true;
+    if (docComparePanel) docComparePanel.hidden = true;
+    if (docCompareState.projectId !== null) resetDocumentCompare(null);
     datasetPanel.hidden = true;
     trPanel.hidden = true;
     if (appsPanel) appsPanel.hidden = true;
