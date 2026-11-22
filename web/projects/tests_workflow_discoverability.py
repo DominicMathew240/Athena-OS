@@ -103,10 +103,11 @@ class TaskLinkedHelpExplainsOperationsTests(TestCase):
                     'data-toc="operations"',
                     "People counting operations",
                     "how many people crossed a line",
+                    "four-corner polygon bays with stable identities",
                     "an approved",  # detector pinning
                     "custom detector",
                     "recorded replay analysis, not a live count",
-                    "crossing episodes and operator boards are not built yet",
+                    "operator boards are not built yet",
                     "encrypted",
                 ):
                     self.assertIn(needle, html)

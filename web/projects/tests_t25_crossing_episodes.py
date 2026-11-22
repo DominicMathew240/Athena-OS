@@ -513,3 +513,51 @@ class WorkerCrossingIntegrationTests(DurableExecutionBase):
         self.assertEqual(row.recording_sha256, self.recording.sha256)
         self.assertEqual(row.bundle_sha256, finished.bundle_sha256)
         self.assertEqual(row.geometry_sha256, self.geometry.geometry_sha256)
+
+    @skipUnless(REQUIRE_FFMPEG, "running an execution needs a decodable recording (ffmpeg)")
+    def test_run_execution_decodes_real_ffmpeg_recording_and_commits_crossing_episode(self) -> None:
+        """Real FFmpeg timeline build + PNG frame extraction + registered backend -> committed crossing."""
+        from .training import register_backend, unregister_backend
+        from .training.base import Availability, BoxPrediction, TrainingBackend
+
+        centers_y = [0.40, 0.44, 0.54, 0.58, 0.62]
+        call_idx = {"n": 0}
+
+        class _T25SteppingDetector(TrainingBackend):
+            name = "t25-controlled-detector"
+            description = "T25 stepping detector."
+            license_note = "Test only."
+
+            def check_available(self) -> Availability:
+                return Availability(True, "ready")
+
+            def default_config(self):
+                return {}
+
+            def validate_config(self, config):
+                return {}
+
+            def train(self, dataset_dir, config, progress_cb, cancel_cb):
+                raise NotImplementedError
+
+            def predict(self, artifact, image, thresholds):
+                idx = min(call_idx["n"], len(centers_y) - 1)
+                call_idx["n"] += 1
+                cy = centers_y[idx]
+                return [BoxPrediction("person", 0.40, cy - 0.10, 0.20, 0.20, 0.92)]
+
+        register_backend(_T25SteppingDetector)
+        self.addCleanup(lambda: unregister_backend("t25-controlled-detector"))
+        self._pin_detector_and_geometry()
+        execution = self.enqueue_and_claim("worker-a")
+        finished = executions.run_execution(execution, "worker-a", heartbeat_seconds=60)
+        self.assertEqual(finished.status, OperationExecution.SUCCEEDED, finished.error)
+        self.assertEqual(finished.result["detector"]["frame_count"], 5)
+        self.assertEqual(finished.result["tracks"]["crossing_episode_count"], 1)
+        rows = OperationEvent.objects.filter(
+            execution=finished, kind=OperationEvent.KIND_DETECTOR
+        )
+        self.assertEqual(rows.count(), 1)
+        row = rows.get()
+        self.assertEqual(row.payload["direction"], "negative_to_positive")
+        self.assertEqual(row.geometry_sha256, self.geometry.geometry_sha256)

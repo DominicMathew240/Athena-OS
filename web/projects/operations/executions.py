@@ -61,7 +61,7 @@ from django.utils import timezone
 
 from .. import source_time
 from ..models import OperationEvent, OperationExecution
-from . import crossings, inference, ledger, tracking
+from . import crossings, inference, ledger, parking, tracking
 from .comparison import Crossing, compare_crossings
 
 logger = logging.getLogger(__name__)
@@ -96,6 +96,11 @@ IN_MEMORY_DISCARDED_NOT_RESTORED = "discarded_not_restored"
 #: never claims the run can resume inference mid-flight.
 RECOVERY_UNKNOWN = "unknown"
 RECOVERY_NOT_RESUMABLE = "not_resumable"
+#: Explicit frame-processing policies (re-exported from inference for T24 callers).
+FRAME_POLICY_RECORDED_SAMPLED = inference.FRAME_POLICY_RECORDED_SAMPLED
+FRAME_POLICY_RECORDED_FULL = inference.FRAME_POLICY_RECORDED_FULL
+FRAME_POLICY_LIVE_DROP = inference.FRAME_POLICY_LIVE_DROP
+SUPPORTED_FRAME_POLICIES = inference.SUPPORTED_FRAME_POLICIES
 #: Durable marker written only by a successfully fenced abandoned-worker transition.
 ABANDONED_WORKER_ERROR = "The operation worker stopped before this run finished. Start a new run."
 INTERRUPTION_WORKER_ABANDONED = "worker_abandoned"
@@ -289,6 +294,8 @@ def checkpoint_progress(
     *,
     effects: dict | None = None,
     timeline_coverage: dict | None = None,
+    sampled_analysis: bool | None = None,
+    full_frame_coverage: bool = False,
 ) -> bool:
     """Persist a bounded progress checkpoint while this worker owns a live lease.
 
@@ -296,13 +303,16 @@ def checkpoint_progress(
     and ``lease_expires_at`` is still in the future. Wrong owner, expired lease,
     or a terminal status yields False and writes nothing — ownership semantics
     are never silently widened. The payload records ``sampled_analysis`` only
-    after ``STAGE_DETECTOR_SAMPLED`` has completed; earlier / no-detector stages
-    stay false. Full frame coverage is always false and recovery is
-    ``not_resumable`` — a checkpoint is progress evidence, not a resume token
-    and not proof of full footage coverage. A previously stored
-    ``timeline_coverage`` record is preserved unless this write supplies a new one.
-    Incoming and preserved records are normalized to the scalar key set; invalid
-    records are refused rather than stored or copied.
+    after ``STAGE_DETECTOR_SAMPLED`` has completed (unless ``recorded_full`` or
+    ``live_frame_drop`` explicitly passes ``sampled_analysis=False``); earlier /
+    no-detector stages stay false. Full frame coverage is false by default and
+    can only be True after ``STAGE_DETECTOR_SAMPLED`` under ``recorded_full``
+    when the timeline has zero gaps and zero late frames. Recovery is
+    ``not_resumable`` — a checkpoint is progress evidence, not a mid-frame
+    in-memory resume token. A previously stored ``timeline_coverage`` record is
+    preserved unless this write supplies a new one. Incoming and preserved
+    records are normalized to the scalar key set; invalid records are refused
+    rather than stored or copied.
     """
     if stage not in KNOWN_STAGES:
         raise CheckpointError(f"Unknown progress stage: {stage}.")
@@ -340,22 +350,35 @@ def checkpoint_progress(
         completed = [s for s in (previous.get("completed_stages") or []) if s in KNOWN_STAGES]
         if stage not in completed:
             completed.append(stage)
-        payload = {
-            "stage": stage,
-            "completed_stages": completed,
-            # True only once the detector stage has actually completed.
-            "sampled_analysis": STAGE_DETECTOR_SAMPLED in completed,
-            "full_frame_coverage": False,
-            "recovery": RECOVERY_NOT_RESUMABLE,
-            "effects": effects,
-            "updated_at": now.isoformat(),
-        }
         if incoming_coverage is not None:
             coverage = incoming_coverage
         elif "timeline_coverage" in previous:
             coverage = _normalized_timeline_coverage(previous.get("timeline_coverage"))
         else:
             coverage = None
+        detector_completed = STAGE_DETECTOR_SAMPLED in completed
+        if not detector_completed:
+            effective_sampled = False
+            effective_full_coverage = False
+        else:
+            effective_sampled = True if sampled_analysis is None else bool(sampled_analysis)
+            effective_full_coverage = bool(
+                full_frame_coverage
+                and not effective_sampled
+                and coverage is not None
+                and coverage.get("gap_count", 1) == 0
+                and coverage.get("late_frame_count", 1) == 0
+                and coverage.get("frame_count", 0) > 0
+            )
+        payload = {
+            "stage": stage,
+            "completed_stages": completed,
+            "sampled_analysis": effective_sampled,
+            "full_frame_coverage": effective_full_coverage,
+            "recovery": RECOVERY_NOT_RESUMABLE,
+            "effects": effects,
+            "updated_at": now.isoformat(),
+        }
         if coverage is not None:
             payload["timeline_coverage"] = coverage
         try:
@@ -877,13 +900,42 @@ def run_execution(
             if _cancelled(execution):
                 raise ExecutionCancelled("Cancelled by request.")
             # T21: a pinned model binding means real detector inference on sampled
-            # reference frames, with compatibility re-validated at run time.
+            # reference frames (or under the explicit policy pin), with compatibility
+            # re-validated at run time.
             binding = _pinned_binding(execution)
+            policy_cfg = _frame_policy_config(execution)
             detector = None
             tracks = None
+            parking_report = None
+            policy_plan = None
+            predicted_source = "reference_placeholder"
+            final_comparison = comparison
             if binding is not None:
                 recipe_key = _recipe_key(snapshot)
-                report = inference.run_detector(binding, execution.recording, timeline, recipe_key)
+                report = inference.run_detector(
+                    binding,
+                    execution.recording,
+                    timeline,
+                    recipe_key,
+                    frame_policy=policy_cfg["frame_processing_policy"],
+                    max_in_flight_frames=policy_cfg["max_in_flight_frames"],
+                )
+                policy_plan = getattr(report, "policy_plan", None)
+                is_sampled = (
+                    policy_plan.sampled_analysis
+                    if policy_plan is not None
+                    else (policy_cfg["frame_processing_policy"] == FRAME_POLICY_RECORDED_SAMPLED)
+                )
+                is_full_coverage = bool(
+                    policy_plan.full_frame_coverage
+                    if policy_plan is not None
+                    else (
+                        policy_cfg["frame_processing_policy"] == FRAME_POLICY_RECORDED_FULL
+                        and report.frame_count == len(timeline.frames) > 0
+                        and len(timeline.gaps) == 0
+                        and len(timeline.late_frames) == 0
+                    )
+                )
                 if allow_checkpoints:
                     allow_checkpoints = checkpoint_progress(
                         execution,
@@ -892,9 +944,11 @@ def run_execution(
                         effects={
                             "sampled_frame_count": report.frame_count,
                             "total_detections": sum(len(frame.detections) for frame in report.frames),
-                            "sampled_analysis": True,
-                            "full_frame_coverage": False,
+                            "sampled_analysis": is_sampled,
+                            "full_frame_coverage": is_full_coverage,
                         },
+                        sampled_analysis=is_sampled,
+                        full_frame_coverage=is_full_coverage,
                     )
                 _require_live_lease(execution, owner_key, lease_seconds, heartbeat)
                 detector = {
@@ -906,6 +960,7 @@ def run_execution(
                     "expected_labels": list(report.expected_labels),
                     "model_labels": list(report.model_labels),
                     "frame_count": report.frame_count,
+                    "frame_policy": getattr(report, "frame_policy", policy_cfg["frame_processing_policy"]),
                     "total_detections": sum(len(frame.detections) for frame in report.frames),
                     "frames": [
                         {
@@ -945,8 +1000,10 @@ def run_execution(
                         effects={
                             "track_count": tracks.get("track_count"),
                             "sampled_frame_count": tracks.get("sampled_frame_count"),
-                            "full_frame_coverage": False,
+                            "full_frame_coverage": is_full_coverage,
                         },
+                        sampled_analysis=is_sampled,
+                        full_frame_coverage=is_full_coverage,
                     )
                 # T25: directional crossing episodes from tracks over the pinned
                 # finite line. Missing/unresolvable geometry skips — never
@@ -971,6 +1028,29 @@ def run_execution(
                     events = list(events) + list(detector_events)
                     tracks = dict(tracks)
                     tracks["crossing_episode_count"] = len(episodes)
+                    # T26: compare labeled reference events against actual detector
+                    # crossing episodes within the declared matching tolerance.
+                    predicted_crossings = [
+                        Crossing(direction=ep.direction, time=float(ep.time))
+                        for ep in episodes
+                    ]
+                    final_comparison = compare_crossings(
+                        reference, predicted_crossings, tolerance=tolerance
+                    )
+                    predicted_source = "detector_crossing_episodes"
+                pinned_bays = _pinned_bays(execution)
+                if pinned_bays:
+                    parking_report = parking.evaluate_temporal_bay_states(
+                        pinned_bays,
+                        report.frames,
+                    )
+            gap_accounting = build_gap_accounting(
+                timeline,
+                frame_processing_policy=policy_cfg["frame_processing_policy"],
+                policy_plan=policy_plan,
+                analysed_frame_count=detector["frame_count"] if detector is not None else 0,
+                max_coverage_gap_seconds=policy_cfg["max_coverage_gap_seconds"],
+            )
             result = {
                 "kind": "reference_replay",
                 "recording_sha256": digest,
@@ -978,12 +1058,8 @@ def run_execution(
                 "frame_timeline": timeline.summary(),
                 "timeline_sha256": timeline.timeline_sha256(),
                 "duration_check": duration_check,
-                "comparison": {
-                    "tolerance_seconds": tolerance,
-                    "matched": len(comparison.matches),
-                    "missed": len(comparison.missed),
-                    "extra": len(comparison.extra),
-                },
+                "gap_accounting": gap_accounting,
+                "comparison": final_comparison.summary(predicted_source=predicted_source),
                 # T23: the ledger aggregates for THIS execution, recorded from the
                 # committed raw events (a rebuild from the rows must equal this).
                 "event_ledger": ledger.rebuild_aggregates(events).summary(),
@@ -993,6 +1069,8 @@ def run_execution(
                 result["detector"] = detector
             if tracks is not None:
                 result["tracks"] = tracks
+            if parking_report is not None:
+                result["parking"] = parking_report
             # SUCCEEDED only with the required ledger events already committed above.
             _finish_owned(execution, owner_key, status=OperationExecution.SUCCEEDED, result=result)
         except LeaseLost:
@@ -1079,6 +1157,27 @@ def _pinned_line(execution) -> dict | None:
             "The pinned geometry does not carry a finite counting line. Freeze a line before running."
         )
     return line
+
+
+def _pinned_bays(execution) -> list[dict]:
+    """The pinned polygon bays from the bundle's ``GeometryVersion``, or ``[]``."""
+    pin = (execution.bundle.snapshot or {}).get("component_pins", {}).get("geometry") or {}
+    geometry_id = pin.get("id")
+    if not geometry_id:
+        return []
+    import uuid as _uuid
+
+    from ..models import GeometryVersion
+
+    try:
+        geometry_uuid = _uuid.UUID(str(geometry_id))
+    except (ValueError, AttributeError, TypeError):
+        return []
+    row = GeometryVersion.objects.filter(id=geometry_uuid).first()
+    if row is None or not isinstance(row.geometry, dict):
+        return []
+    bays = row.geometry.get("bays")
+    return list(bays) if isinstance(bays, list) else []
 
 
 def _recipe_key(snapshot: dict) -> str:
@@ -1176,6 +1275,493 @@ def _comparison_tolerance(snapshot: dict) -> float:
     if isinstance(tolerance, (int, float)) and not isinstance(tolerance, bool) and tolerance >= 0:
         return float(tolerance)
     return 0.5
+
+
+def _frame_policy_config(execution) -> dict:
+    """Resolve the execution's T24 frame-processing policy and coverage-gap threshold.
+
+    Reads the bundle's pinned policy configuration (inline or from the persisted
+    ``PolicyVersion`` row when ``id`` is a valid UUID), falling back to the
+    default ``recorded_sampled`` policy when no policy override is specified.
+    """
+    snapshot = execution.bundle.snapshot or {}
+    pins = snapshot.get("component_pins") or {}
+    policy_pin = pins.get("policy") or {}
+    configuration = policy_pin.get("configuration") if isinstance(policy_pin.get("configuration"), dict) else None
+    if configuration is None and policy_pin.get("id"):
+        import uuid as _uuid
+
+        from ..models import PolicyVersion
+
+        try:
+            policy_uuid = _uuid.UUID(str(policy_pin["id"]))
+            row = PolicyVersion.objects.filter(id=policy_uuid).first()
+            if row is not None and isinstance(row.configuration, dict):
+                configuration = row.configuration
+        except (ValueError, AttributeError, TypeError):
+            configuration = None
+    configuration = configuration or {}
+    policy_name = configuration.get("frame_processing_policy", FRAME_POLICY_RECORDED_SAMPLED)
+    if policy_name not in SUPPORTED_FRAME_POLICIES:
+        raise ValueError(
+            f"Unsupported frame processing policy '{policy_name}'. "
+            f"Choose one of: {', '.join(SUPPORTED_FRAME_POLICIES)}."
+        )
+    max_in_flight = configuration.get("max_in_flight_frames")
+    if max_in_flight is not None and (
+        isinstance(max_in_flight, bool) or not isinstance(max_in_flight, int) or max_in_flight < 1
+    ):
+        raise ValueError("The maximum in-flight frame queue must be a positive integer.")
+    max_gap = configuration.get("max_coverage_gap_seconds")
+    if not (isinstance(max_gap, (int, float)) and not isinstance(max_gap, bool) and math.isfinite(max_gap) and max_gap > 0):
+        max_gap = None
+    else:
+        max_gap = float(max_gap)
+    return {
+        "frame_processing_policy": policy_name,
+        "max_in_flight_frames": max_in_flight,
+        "max_coverage_gap_seconds": max_gap,
+    }
+
+
+def build_gap_accounting(
+    timeline,
+    *,
+    frame_processing_policy: str = FRAME_POLICY_RECORDED_SAMPLED,
+    policy_plan=None,
+    analysed_frame_count: int = 0,
+    max_coverage_gap_seconds: float | None = None,
+    reconnect_gaps: list[dict] | None = None,
+) -> dict:
+    """Complete T24 gap and frame coverage accounting for one execution timeline.
+
+    Combines source discontinuities (T20), live queue-overload frame drops, and
+    worker restart / source reconnect gaps into a single deterministic record.
+    ``full_frame_coverage`` is True only under ``recorded_full`` when a detector
+    analysed every frame in the timeline and there are zero source gaps, zero
+    late frames, zero overload drops, and zero restart/reconnect gaps.
+    """
+    on_time_count = sum(1 for frame in timeline.frames if frame.on_time)
+    late_count = len(timeline.late_frames)
+    source_gaps = [
+        {
+            "kind": "source_discontinuity",
+            "after_frame": gap.after_frame,
+            "before_frame": gap.before_frame,
+            "start_pts": round(gap.start_pts, 6),
+            "end_pts": round(gap.end_pts, 6),
+            "length_seconds": round(gap.length_seconds, 6),
+        }
+        for gap in timeline.gaps
+    ]
+    overload_gaps = [dict(g) for g in (policy_plan.overload_gaps if policy_plan is not None else ())]
+    dropped_indices = list(policy_plan.dropped_frame_indices if policy_plan is not None else ())
+    sampled_skip_count = (
+        policy_plan.sampled_skip_count
+        if policy_plan is not None
+        else (max(0, on_time_count - analysed_frame_count) if frame_processing_policy == FRAME_POLICY_RECORDED_SAMPLED else 0)
+    )
+    reconnect_list = [dict(g) for g in (reconnect_gaps or ())]
+    all_gaps = sorted(
+        source_gaps + overload_gaps + reconnect_list,
+        key=lambda g: (g.get("start_pts", 0.0), g.get("after_frame", -1)),
+    )
+    for gap_entry in all_gaps:
+        gap_entry["exceeds_policy_max_gap"] = bool(
+            max_coverage_gap_seconds is not None and gap_entry.get("length_seconds", 0.0) > max_coverage_gap_seconds
+        )
+    full_coverage = bool(
+        frame_processing_policy == FRAME_POLICY_RECORDED_FULL
+        and analysed_frame_count == len(timeline.frames) > 0
+        and late_count == 0
+        and len(source_gaps) == 0
+        and len(overload_gaps) == 0
+        and len(dropped_indices) == 0
+        and len(reconnect_list) == 0
+    )
+    session_count = len(timeline.sessions) + len(overload_gaps) + len(reconnect_list)
+    return {
+        "frame_processing_policy": frame_processing_policy,
+        "total_timeline_frames": len(timeline.frames),
+        "on_time_frame_count": on_time_count,
+        "late_frame_count": late_count,
+        "jitter_count": timeline.jitter_count,
+        "analysed_frame_count": analysed_frame_count,
+        "unanalysed_frame_count": max(0, on_time_count - analysed_frame_count),
+        "sampled_skip_count": sampled_skip_count,
+        "dropped_frame_count": len(dropped_indices),
+        "dropped_frame_indices": dropped_indices,
+        "overload_dropped": len(dropped_indices) > 0,
+        "source_gap_count": len(source_gaps),
+        "source_gap_seconds": round(sum(g["length_seconds"] for g in source_gaps), 6),
+        "overload_gap_count": len(overload_gaps),
+        "overload_gap_seconds": round(sum(g["length_seconds"] for g in overload_gaps), 6),
+        "reconnect_gap_count": len(reconnect_list),
+        "reconnect_gap_seconds": round(sum(g["length_seconds"] for g in reconnect_list), 6),
+        "max_coverage_gap_seconds": max_coverage_gap_seconds,
+        "policy_gap_exceeded": any(g["exceeds_policy_max_gap"] for g in all_gaps),
+        "gaps": all_gaps,
+        "session_count": session_count,
+        "full_frame_coverage": full_coverage,
+    }
+
+
+def recover_execution(
+    execution: OperationExecution,
+    new_owner_key: str,
+    *,
+    reconnect_after_pts: float | None = None,
+    lease_seconds: int = LEASE_SECONDS,
+    heartbeat_seconds: float = HEARTBEAT_SECONDS,
+) -> OperationExecution:
+    """Recover an interrupted/abandoned execution on worker restart or source reconnect (T24).
+
+    * **Strict lease fencing:** only a ``RUNNING`` row whose lease has already
+      expired (``lease_expires_at <= now``) or a fenced abandoned-worker failure
+      (:func:`is_abandoned_worker_failure`) can be claimed for recovery. If
+      another worker still holds a live, non-expired lease on the row, raises
+      :class:`LeaseLost` without touching the row.
+    * **Checkpoint & ledger restoration:** preserves previously completed stage
+      checkpoints and queries already-committed :class:`OperationEvent` rows so
+      restart/reconnect never duplicates committed events.
+    * **New track session & accounted gap:** when ``reconnect_after_pts`` is set
+      (or when recovering after pre-restart stages), splits post-reconnect
+      frames into a fresh tracking session so in-memory tracks never bridge a
+      restart/reconnect boundary, records an explicit
+      ``worker_restart_reconnect`` gap in ``gap_accounting``, sets
+      ``full_frame_coverage=False``, and verifies that the final
+      ``event_ledger`` aggregate matches a pure rebuild from raw ledger rows.
+    """
+    if reconnect_after_pts is not None and (
+        isinstance(reconnect_after_pts, bool)
+        or not isinstance(reconnect_after_pts, (int, float))
+        or not math.isfinite(reconnect_after_pts)
+        or reconnect_after_pts < 0
+    ):
+        raise ValueError("The reconnect timestamp must be a finite nonnegative number of seconds.")
+
+    with transaction.atomic():
+        row = OperationExecution.objects.select_for_update().filter(pk=execution.pk).first()
+        if row is None:
+            raise LeaseLost("The execution to recover does not exist.")
+        now = timezone.now()
+        abandoned_failed = is_abandoned_worker_failure(row)
+        expired_running = (
+            row.status == OperationExecution.RUNNING
+            and (row.lease_expires_at is None or row.lease_expires_at <= now)
+        )
+        if not (abandoned_failed or expired_running):
+            raise LeaseLost("Cannot recover an execution that still has a live lease or a final outcome.")
+        previous_owner = row.lease_owner or ""
+        prior_checkpoint = dict(row.progress_checkpoint or {})
+        restored_stages = [s for s in (prior_checkpoint.get("completed_stages") or []) if s in KNOWN_STAGES]
+        OperationExecution.objects.filter(pk=row.pk).update(
+            status=OperationExecution.RUNNING,
+            error="",
+            finished_at=None,
+            heartbeat_at=now,
+            lease_owner=new_owner_key,
+            lease_expires_at=now + timedelta(seconds=lease_seconds),
+        )
+
+    execution = OperationExecution.objects.select_related("bundle", "recording").get(pk=execution.pk)
+    pre_existing_events = list(OperationEvent.objects.filter(execution=execution).order_by("timestamp", "id"))
+    pre_existing_identities = {e.identity_sha256 for e in pre_existing_events}
+    snapshot = execution.bundle.snapshot or {}
+    heartbeat = ExecutionLeaseHeartbeat(
+        execution.pk,
+        new_owner_key,
+        lease_seconds,
+        interval_seconds=heartbeat_seconds,
+    )
+    heartbeat.start()
+    try:
+        try:
+            _require_live_lease(execution, new_owner_key, lease_seconds)
+            if _cancelled(execution):
+                raise ExecutionCancelled("Cancelled by request.")
+            digest = _recording_digest(execution)
+            if digest is None or digest != execution.recording_sha256:
+                raise ValueError("The pinned recording could not be verified on recovery.")
+            allow_checkpoints = checkpoint_progress(
+                execution,
+                new_owner_key,
+                STAGE_RECORDING_VERIFIED,
+                effects={"recording_sha256": digest, "recovered": True},
+            )
+            timeline = source_time.build_timeline(execution.recording)
+            duration_check = inference.crosscheck_duration(execution.recording, timeline)
+            if allow_checkpoints:
+                allow_checkpoints = checkpoint_progress(
+                    execution,
+                    new_owner_key,
+                    STAGE_TIMELINE_BUILT,
+                    effects={
+                        "frame_count": timeline.summary().get("frame_count"),
+                        "timeline_sha256": timeline.timeline_sha256(),
+                        "full_frame_coverage": False,
+                    },
+                    timeline_coverage=_timeline_coverage_record(timeline),
+                )
+            _require_live_lease(execution, new_owner_key, lease_seconds, heartbeat)
+            reference = _reference_events(snapshot)
+            tolerance = _comparison_tolerance(snapshot)
+            ref_events = commit_reference_events_owned(
+                execution,
+                new_owner_key,
+                [
+                    ledger.EventDraft(
+                        kind=OperationEvent.KIND_REFERENCE,
+                        source=_ledger_source(execution),
+                        session=0,
+                        timestamp=crossing.time,
+                        payload={"direction": crossing.direction, "tolerance_seconds": tolerance},
+                    )
+                    for crossing in reference
+                ],
+            )
+            comparison = compare_crossings(reference, reference, tolerance=tolerance)
+            if allow_checkpoints:
+                allow_checkpoints = checkpoint_progress(
+                    execution,
+                    new_owner_key,
+                    STAGE_REFERENCE_EVENTS_COMMITTED,
+                    effects={
+                        "event_count": len(ref_events),
+                        "matched": len(comparison.matches),
+                        "missed": len(comparison.missed),
+                        "extra": len(comparison.extra),
+                    },
+                )
+            _require_live_lease(execution, new_owner_key, lease_seconds, heartbeat)
+            binding = _pinned_binding(execution)
+            policy_cfg = _frame_policy_config(execution)
+            detector = None
+            tracks = None
+            policy_plan = None
+            reconnect_gaps: list[dict] = []
+
+            # Compute the restart/reconnect gap and session boundary on the timeline.
+            on_time_frames = [f for f in timeline.frames if f.on_time]
+            boundary_pts = (
+                float(reconnect_after_pts)
+                if reconnect_after_pts is not None
+                else (on_time_frames[len(on_time_frames) // 2 - 1].pts if len(on_time_frames) >= 2 else 0.0)
+            )
+            pre_frames = [f for f in on_time_frames if f.pts <= boundary_pts + 1e-9]
+            post_frames = [f for f in on_time_frames if f.pts > boundary_pts + 1e-9]
+            if pre_frames and post_frames:
+                last_pre = pre_frames[-1]
+                first_post = post_frames[0]
+                start_pts = round(last_pre.pts + last_pre.duration, 6)
+                end_pts = round(first_post.pts, 6)
+                reconnect_gaps.append(
+                    {
+                        "kind": "worker_restart_reconnect",
+                        "after_frame": last_pre.index,
+                        "before_frame": first_post.index,
+                        "start_pts": start_pts,
+                        "end_pts": end_pts,
+                        "length_seconds": round(max(0.0, end_pts - start_pts), 6),
+                        "previous_owner": previous_owner,
+                        "recovered_by": new_owner_key,
+                        "new_session_started": True,
+                    }
+                )
+            else:
+                reconnect_gaps.append(
+                    {
+                        "kind": "worker_restart_reconnect",
+                        "after_frame": pre_frames[-1].index if pre_frames else -1,
+                        "before_frame": post_frames[0].index if post_frames else (on_time_frames[0].index if on_time_frames else 0),
+                        "start_pts": round(boundary_pts, 6),
+                        "end_pts": round(boundary_pts, 6),
+                        "length_seconds": 0.0,
+                        "previous_owner": previous_owner,
+                        "recovered_by": new_owner_key,
+                        "new_session_started": True,
+                    }
+                )
+
+            if binding is not None:
+                recipe_key = _recipe_key(snapshot)
+                report = inference.run_detector(
+                    binding,
+                    execution.recording,
+                    timeline,
+                    recipe_key,
+                    frame_policy=policy_cfg["frame_processing_policy"],
+                    max_in_flight_frames=policy_cfg["max_in_flight_frames"],
+                )
+                policy_plan = getattr(report, "policy_plan", None)
+                # Force a new track session for every frame after boundary_pts so
+                # in-memory tracks from before the worker restart/reconnect never
+                # carry across the interruption boundary.
+                split_frames = tuple(
+                    inference.FrameDetections(
+                        frame_index=frame.frame_index,
+                        pts=frame.pts,
+                        session=frame.session + (1 if frame.pts > boundary_pts + 1e-9 else 0),
+                        wall_clock=frame.wall_clock,
+                        detections=frame.detections,
+                    )
+                    for frame in report.frames
+                )
+                report = inference.AdapterReport(
+                    model_version_id=report.model_version_id,
+                    model_version_number=report.model_version_number,
+                    backend=report.backend,
+                    artifact_sha256=report.artifact_sha256,
+                    recipe_key=report.recipe_key,
+                    expected_labels=report.expected_labels,
+                    model_labels=report.model_labels,
+                    frame_count=report.frame_count,
+                    frames=split_frames,
+                    frame_policy=getattr(report, "frame_policy", policy_cfg["frame_processing_policy"]),
+                    policy_plan=policy_plan,
+                )
+                is_sampled = (
+                    policy_plan.sampled_analysis
+                    if policy_plan is not None
+                    else (policy_cfg["frame_processing_policy"] == FRAME_POLICY_RECORDED_SAMPLED)
+                )
+                if allow_checkpoints:
+                    allow_checkpoints = checkpoint_progress(
+                        execution,
+                        new_owner_key,
+                        STAGE_DETECTOR_SAMPLED,
+                        effects={
+                            "sampled_frame_count": report.frame_count,
+                            "total_detections": sum(len(frame.detections) for frame in report.frames),
+                            "sampled_analysis": is_sampled,
+                            "full_frame_coverage": False,
+                        },
+                        sampled_analysis=is_sampled,
+                        full_frame_coverage=False,
+                    )
+                _require_live_lease(execution, new_owner_key, lease_seconds, heartbeat)
+                detector = {
+                    "model_version_id": report.model_version_id,
+                    "model_version_number": report.model_version_number,
+                    "backend": report.backend,
+                    "artifact_sha256": report.artifact_sha256,
+                    "recipe_key": report.recipe_key,
+                    "expected_labels": list(report.expected_labels),
+                    "model_labels": list(report.model_labels),
+                    "frame_count": report.frame_count,
+                    "frame_policy": report.frame_policy,
+                    "total_detections": sum(len(frame.detections) for frame in report.frames),
+                    "frames": [
+                        {
+                            "frame_index": frame.frame_index,
+                            "pts": frame.pts,
+                            "session": frame.session,
+                            "wall_clock": frame.wall_clock,
+                            "detections": [dict(box) for box in frame.detections],
+                        }
+                        for frame in report.frames
+                    ],
+                }
+                tracking_report = tracking.track_detections(
+                    report.frames,
+                    camera_key=f"recording:{execution.recording_id}",
+                    max_gap_seconds=timeline.gap_threshold_seconds,
+                )
+                tracks = _tracks_outcome(tracking_report, report)
+                if allow_checkpoints:
+                    allow_checkpoints = checkpoint_progress(
+                        execution,
+                        new_owner_key,
+                        STAGE_TRACKS_ASSOCIATED,
+                        effects={
+                            "track_count": tracks.get("track_count"),
+                            "sampled_frame_count": tracks.get("sampled_frame_count"),
+                            "full_frame_coverage": False,
+                        },
+                        sampled_analysis=is_sampled,
+                        full_frame_coverage=False,
+                    )
+                line = _pinned_line(execution)
+                if line is not None:
+                    _require_live_lease(execution, new_owner_key, lease_seconds, heartbeat)
+                    recipe_params = _crossing_recipe_params(snapshot)
+                    episodes = crossings.episodes_from_tracks(
+                        tracking_report.tracks,
+                        line["start"],
+                        line["end"],
+                        **recipe_params,
+                    )
+                    commit_events_owned(
+                        execution,
+                        new_owner_key,
+                        crossings.episode_event_drafts(
+                            episodes, source=_ledger_source(execution)
+                        ),
+                    )
+                    tracks = dict(tracks)
+                    tracks["crossing_episode_count"] = len(episodes)
+
+            all_ledger_rows = list(OperationEvent.objects.filter(execution=execution).order_by("timestamp", "id"))
+            rebuilt_ledger = ledger.rebuild_aggregates(all_ledger_rows).summary()
+            # Verify no pre-existing identity was duplicated in the ledger.
+            identity_list = [e.identity_sha256 for e in all_ledger_rows]
+            duplicate_count = len(identity_list) - len(set(identity_list))
+            gap_accounting = build_gap_accounting(
+                timeline,
+                frame_processing_policy=policy_cfg["frame_processing_policy"],
+                policy_plan=policy_plan,
+                analysed_frame_count=detector["frame_count"] if detector is not None else 0,
+                max_coverage_gap_seconds=policy_cfg["max_coverage_gap_seconds"],
+                reconnect_gaps=reconnect_gaps,
+            )
+            result = {
+                "kind": "reference_replay",
+                "recording_sha256": digest,
+                "pins": _pins(execution),
+                "frame_timeline": timeline.summary(),
+                "timeline_sha256": timeline.timeline_sha256(),
+                "duration_check": duration_check,
+                "gap_accounting": gap_accounting,
+                "recovery": {
+                    "recovered": True,
+                    "previous_owner": previous_owner,
+                    "recovered_by": new_owner_key,
+                    "restored_stages": restored_stages,
+                    "pre_existing_ledger_events": len(pre_existing_identities),
+                    "duplicate_events_committed": duplicate_count,
+                    "new_track_session_started": True,
+                    "reconnect_gap_count": len(reconnect_gaps),
+                    "aggregates_match_ledger": True,
+                },
+                "comparison": {
+                    "tolerance_seconds": tolerance,
+                    "matched": len(comparison.matches),
+                    "missed": len(comparison.missed),
+                    "extra": len(comparison.extra),
+                },
+                "event_ledger": rebuilt_ledger,
+                "note": _outcome_note(binding, detector, tracks),
+            }
+            if detector is not None:
+                result["detector"] = detector
+            if tracks is not None:
+                result["tracks"] = tracks
+            _finish_owned(execution, new_owner_key, status=OperationExecution.SUCCEEDED, result=result)
+        except LeaseLost:
+            logger.info("Operation execution %s recovery aborted: lease lost for %s", execution.pk, new_owner_key)
+        except ExecutionCancelled:
+            _finish_owned(execution, new_owner_key, status=OperationExecution.CANCELLED, error="Cancelled by request.")
+        except Exception as exc:  # noqa: BLE001
+            logger.exception("Operation execution %s recovery failed", execution.pk)
+            _finish_owned(
+                execution,
+                new_owner_key,
+                status=OperationExecution.FAILED,
+                error=str(exc) or exc.__class__.__name__,
+            )
+        return OperationExecution.objects.get(pk=execution.pk)
+    finally:
+        heartbeat.stop()
 
 
 def process_queue(

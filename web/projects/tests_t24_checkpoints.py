@@ -1362,3 +1362,453 @@ class SuccessorQueueAccountedInterruptionTests(TransactionTestCase):
         self.assertNotIn("sessions", stored_coverage)
         self.assertEqual(serialized["timeline_coverage"]["gap_count"], 1)
         self.assertNotIn("missing_frame_count", serialized["timeline_coverage"])
+
+
+class FramePolicyAndGapAccountingTests(DurableExecutionBase):
+    """Recorded full analysis vs live frame-dropping policies and full gap accounting (T24)."""
+
+    _pin_fake_detector = CheckpointWorkerIntegrationTests._pin_fake_detector
+
+    def _pin_clean_3s_clip(self) -> None:
+        """Replace the 1s (5-frame) fixture with a clean 3s (15-frame) clip (> DEFAULT_SAMPLE_FRAMES=6)."""
+        import shutil
+
+        from django.core.files.storage import default_storage
+
+        from .models import OperationDraft
+        from .tests_t19_durable import _NamedBytes
+        from .tests_t20_source_time import make_clip
+
+        tmp = tempfile.mkdtemp(prefix="t24-clean-3s-")
+        self.addCleanup(shutil.rmtree, tmp, ignore_errors=True)
+        body = make_clip(tmp, seconds=3, creation_time="2026-11-01T09:30:00Z")
+        default_storage.delete(self.recording.storage_key)
+        key = default_storage.save(self.recording.storage_key, _NamedBytes(body))
+        self.addCleanup(default_storage.delete, key)
+        self.recording.storage_key = key
+        self.recording.sha256 = hashlib.sha256(body).hexdigest()
+        self.recording.size_bytes = len(body)
+        self.recording.duration_seconds = 3.0
+        self.recording.save(update_fields=["storage_key", "sha256", "size_bytes", "duration_seconds"])
+        snapshot = dict(self.bundle.snapshot)
+        recording_pin = dict(snapshot.get("recording") or {})
+        recording_pin["sha256"] = self.recording.sha256
+        recording_pin["size_bytes"] = self.recording.size_bytes
+        recording_pin["duration_seconds"] = 3.0
+        snapshot["recording"] = recording_pin
+        encoded = json.dumps(
+            snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
+        draft = OperationDraft.objects.create(
+            created_by=self.user, operation=self.operation, name="Gate count clean 3s"
+        )
+        self.bundle = OperationReleaseBundle.objects.create(
+            operation=self.operation,
+            draft=draft,
+            draft_revision=1,
+            number=OperationReleaseBundle.objects.filter(operation=self.operation).count() + 1,
+            created_by=self.user,
+            snapshot=snapshot,
+            snapshot_sha256=hashlib.sha256(encoded.encode()).hexdigest(),
+        )
+
+    def _pin_policy_bundle(
+        self,
+        *,
+        frame_processing_policy: str,
+        max_in_flight_frames: int | None = None,
+        max_coverage_gap_seconds: float = 5.0,
+    ) -> None:
+        from .models import OperationDraft, PolicyVersion
+
+        self._pin_fake_detector()
+        policy_cfg = {
+            "evidence_retention_days": 90,
+            "max_coverage_gap_seconds": max_coverage_gap_seconds,
+            "frame_processing_policy": frame_processing_policy,
+        }
+        if max_in_flight_frames is not None:
+            policy_cfg["max_in_flight_frames"] = max_in_flight_frames
+        encoded_cfg = json.dumps(policy_cfg, sort_keys=True, separators=(",", ":"))
+        policy_row = PolicyVersion.objects.create(
+            operation=self.operation,
+            version=PolicyVersion.objects.filter(operation=self.operation).count() + 1,
+            created_by=self.user,
+            configuration=policy_cfg,
+            configuration_sha256=hashlib.sha256(encoded_cfg.encode()).hexdigest(),
+        )
+        snapshot = dict(self.bundle.snapshot)
+        pins = dict(snapshot.get("component_pins") or {})
+        pins["policy"] = {
+            "id": str(policy_row.id),
+            "version": policy_row.version,
+            "sha256": policy_row.configuration_sha256,
+            "configuration": policy_cfg,
+        }
+        snapshot["component_pins"] = pins
+        encoded = json.dumps(
+            snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
+        draft = OperationDraft.objects.create(
+            created_by=self.user,
+            operation=self.operation,
+            name=f"Policy {frame_processing_policy}",
+        )
+        self.bundle = OperationReleaseBundle.objects.create(
+            operation=self.operation,
+            draft=draft,
+            draft_revision=1,
+            number=OperationReleaseBundle.objects.filter(operation=self.operation).count() + 1,
+            created_by=self.user,
+            snapshot=snapshot,
+            snapshot_sha256=hashlib.sha256(encoded.encode()).hexdigest(),
+        )
+
+    @skipUnless(REQUIRE_FFMPEG, "running an execution needs a decodable recording (ffmpeg)")
+    def test_recorded_full_policy_analyses_every_frame_and_reports_full_coverage_when_clean(self) -> None:
+        register_backend(_T24FakeDetector)
+        self.addCleanup(lambda: unregister_backend("t24-fake-detector"))
+        self._pin_clean_3s_clip()
+        self._pin_policy_bundle(frame_processing_policy=executions.FRAME_POLICY_RECORDED_FULL)
+        execution = self.enqueue_and_claim("worker-a")
+        finished = executions.run_execution(execution, "worker-a")
+        self.assertEqual(finished.status, OperationExecution.SUCCEEDED, finished.error)
+        total_frames = finished.result["frame_timeline"]["frame_count"]
+        self.assertEqual(total_frames, 15)
+        self.assertGreater(total_frames, executions.inference.DEFAULT_SAMPLE_FRAMES)
+        self.assertEqual(finished.result["detector"]["frame_count"], total_frames)
+        self.assertEqual(
+            finished.result["detector"]["frame_policy"],
+            executions.FRAME_POLICY_RECORDED_FULL,
+        )
+        gap_acc = finished.result["gap_accounting"]
+        self.assertEqual(gap_acc["frame_processing_policy"], executions.FRAME_POLICY_RECORDED_FULL)
+        self.assertEqual(gap_acc["analysed_frame_count"], total_frames)
+        self.assertEqual(gap_acc["unanalysed_frame_count"], 0)
+        self.assertEqual(gap_acc["sampled_skip_count"], 0)
+        self.assertEqual(gap_acc["dropped_frame_count"], 0)
+        self.assertFalse(gap_acc["overload_dropped"])
+        self.assertEqual(gap_acc["source_gap_count"], 0)
+        self.assertTrue(gap_acc["full_frame_coverage"])
+        self.assertFalse(finished.progress_checkpoint["sampled_analysis"])
+        self.assertTrue(finished.progress_checkpoint["full_frame_coverage"])
+
+    @skipUnless(REQUIRE_FFMPEG, "running an execution needs a decodable recording (ffmpeg)")
+    def test_recorded_full_on_gapped_clip_never_claims_full_coverage_and_flags_policy_gap(self) -> None:
+        register_backend(_T24FakeDetector)
+        self.addCleanup(lambda: unregister_backend("t24-fake-detector"))
+        SuccessorQueueAccountedInterruptionTests._pin_gapped_t20_clip(self)
+        self._pin_policy_bundle(
+            frame_processing_policy=executions.FRAME_POLICY_RECORDED_FULL,
+            max_coverage_gap_seconds=0.5,
+        )
+        execution = self.enqueue_and_claim("worker-a")
+        finished = executions.run_execution(execution, "worker-a")
+        self.assertEqual(finished.status, OperationExecution.SUCCEEDED, finished.error)
+        gap_acc = finished.result["gap_accounting"]
+        self.assertEqual(gap_acc["total_timeline_frames"], 9)
+        self.assertEqual(gap_acc["analysed_frame_count"], gap_acc["on_time_frame_count"])
+        self.assertEqual(gap_acc["source_gap_count"], 1)
+        self.assertTrue(gap_acc["policy_gap_exceeded"])
+        self.assertTrue(gap_acc["gaps"][0]["exceeds_policy_max_gap"])
+        self.assertFalse(gap_acc["full_frame_coverage"])
+        self.assertFalse(finished.progress_checkpoint["full_frame_coverage"])
+
+    @skipUnless(REQUIRE_FFMPEG, "running an execution needs a decodable recording (ffmpeg)")
+    def test_recorded_full_refuses_to_drop_frames_when_queue_limit_exceeded(self) -> None:
+        register_backend(_T24FakeDetector)
+        self.addCleanup(lambda: unregister_backend("t24-fake-detector"))
+        self._pin_policy_bundle(
+            frame_processing_policy=executions.FRAME_POLICY_RECORDED_FULL,
+            max_in_flight_frames=3,
+        )
+        execution = self.enqueue_and_claim("worker-a")
+        finished = executions.run_execution(execution, "worker-a")
+        self.assertEqual(finished.status, OperationExecution.FAILED)
+        self.assertIn("refuses to drop frames", finished.error.lower())
+        self.assertFalse(finished.progress_checkpoint.get("full_frame_coverage", True))
+
+    @skipUnless(REQUIRE_FFMPEG, "running an execution needs a decodable recording (ffmpeg)")
+    def test_live_frame_drop_policy_bounds_queue_splits_sessions_and_never_claims_full_coverage(
+        self,
+    ) -> None:
+        register_backend(_T24FakeDetector)
+        self.addCleanup(lambda: unregister_backend("t24-fake-detector"))
+        self._pin_policy_bundle(
+            frame_processing_policy=executions.FRAME_POLICY_LIVE_DROP,
+            max_in_flight_frames=3,
+        )
+        execution = self.enqueue_and_claim("worker-a")
+        finished = executions.run_execution(execution, "worker-a")
+        self.assertEqual(finished.status, OperationExecution.SUCCEEDED, finished.error)
+        total_frames = finished.result["frame_timeline"]["frame_count"]
+        gap_acc = finished.result["gap_accounting"]
+        self.assertEqual(gap_acc["frame_processing_policy"], executions.FRAME_POLICY_LIVE_DROP)
+        self.assertEqual(gap_acc["analysed_frame_count"], 3)
+        self.assertEqual(gap_acc["dropped_frame_count"], total_frames - 3)
+        self.assertTrue(gap_acc["overload_dropped"])
+        self.assertEqual(gap_acc["overload_gap_count"], 2)
+        self.assertFalse(gap_acc["full_frame_coverage"])
+        self.assertFalse(finished.progress_checkpoint["full_frame_coverage"])
+        self.assertFalse(finished.progress_checkpoint["sampled_analysis"])
+        # Overload drop gaps split tracking into 3 distinct sessions so tracks never bridge dropped frames.
+        self.assertEqual(finished.result["tracks"]["sessions"], 3)
+        self.assertTrue(
+            all(g["kind"] == "live_overload_drop" for g in gap_acc["gaps"]),
+            gap_acc["gaps"],
+        )
+
+
+class WorkerRestartAndReconnectRecoveryTests(DurableExecutionBase):
+    """Worker restart and source reconnect drills recover state, account gaps, and deduplicate ledger rows."""
+
+    _pin_fake_detector = CheckpointWorkerIntegrationTests._pin_fake_detector
+
+    def _pin_detector_and_line(self) -> None:
+        from .models import GeometryVersion, OperationDraft, SourceViewVersion
+
+        self._pin_fake_detector()
+        source_view = SourceViewVersion.objects.create(
+            source=self.source,
+            version=1,
+            created_by=self.user,
+            configuration={"width": 320, "height": 240, "rotation": 0, "horizontal_flip": False, "vertical_flip": False},
+            configuration_sha256="1" * 64,
+        )
+        geometry = GeometryVersion.objects.create(
+            operation=self.operation,
+            source_view_version=source_view,
+            version=1,
+            created_by=self.user,
+            geometry={"line": {"start": [0.1, 0.5], "end": [0.9, 0.5]}},
+            geometry_sha256="2" * 64,
+        )
+        snapshot = dict(self.bundle.snapshot)
+        pins = dict(snapshot.get("component_pins") or {})
+        pins["geometry"] = {
+            "id": str(geometry.id),
+            "version": geometry.version,
+            "sha256": geometry.geometry_sha256,
+        }
+        snapshot["component_pins"] = pins
+        encoded = json.dumps(
+            snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
+        draft = OperationDraft.objects.create(
+            created_by=self.user, operation=self.operation, name="Restart recovery draft"
+        )
+        self.bundle = OperationReleaseBundle.objects.create(
+            operation=self.operation,
+            draft=draft,
+            draft_revision=1,
+            number=OperationReleaseBundle.objects.filter(operation=self.operation).count() + 1,
+            created_by=self.user,
+            snapshot=snapshot,
+            snapshot_sha256=hashlib.sha256(encoded.encode()).hexdigest(),
+        )
+
+    def test_recover_execution_refuses_to_steal_a_live_lease(self) -> None:
+        execution = self.enqueue_and_claim("worker-a")
+        with self.assertRaises(executions.LeaseLost):
+            executions.recover_execution(execution, "worker-b")
+        execution.refresh_from_db()
+        self.assertEqual(execution.status, OperationExecution.RUNNING)
+        self.assertEqual(execution.lease_owner, "worker-a")
+
+    @skipUnless(REQUIRE_FFMPEG, "running an execution needs a decodable recording (ffmpeg)")
+    def test_worker_restart_and_reconnect_recovers_checkpoint_deduplicates_events_and_accounts_gap(
+        self,
+    ) -> None:
+        register_backend(_T24FakeDetector)
+        self.addCleanup(lambda: unregister_backend("t24-fake-detector"))
+        self._pin_detector_and_line()
+        execution = self.enqueue_and_claim("worker-a")
+
+        # Worker A completes early stages and commits reference events before dying.
+        self.assertTrue(
+            executions.checkpoint_progress(
+                execution, "worker-a", executions.STAGE_RECORDING_VERIFIED
+            )
+        )
+        self.assertTrue(
+            executions.checkpoint_progress(
+                execution, "worker-a", executions.STAGE_TIMELINE_BUILT
+            )
+        )
+        snapshot = execution.bundle.snapshot or {}
+        reference = executions._reference_events(snapshot)
+        tolerance = executions._comparison_tolerance(snapshot)
+        pre_events = executions.commit_reference_events_owned(
+            execution,
+            "worker-a",
+            [
+                executions.ledger.EventDraft(
+                    kind=OperationEvent.KIND_REFERENCE,
+                    source=executions._ledger_source(execution),
+                    session=0,
+                    timestamp=crossing.time,
+                    payload={"direction": crossing.direction, "tolerance_seconds": tolerance},
+                )
+                for crossing in reference
+            ],
+        )
+        self.assertGreater(len(pre_events), 0)
+        self.assertTrue(
+            executions.checkpoint_progress(
+                execution, "worker-a", executions.STAGE_REFERENCE_EVENTS_COMMITTED
+            )
+        )
+
+        # Simulate worker death and stale-lease abandonment reaping.
+        past = timezone.now() - timedelta(seconds=3 * executions.LEASE_SECONDS)
+        OperationExecution.objects.filter(pk=execution.pk).update(
+            lease_expires_at=past, heartbeat_at=past
+        )
+        self.assertEqual(executions.fail_abandoned_executions(), 1)
+        execution.refresh_from_db()
+        self.assertEqual(execution.status, OperationExecution.FAILED)
+
+        # Worker B restarts/reconnects and recovers the execution with a reconnect boundary at 0.4s.
+        recovered = executions.recover_execution(
+            execution, "worker-b", reconnect_after_pts=0.4
+        )
+        self.assertEqual(recovered.status, OperationExecution.SUCCEEDED, recovered.error)
+        recovery_info = recovered.result["recovery"]
+        self.assertTrue(recovery_info["recovered"])
+        self.assertEqual(recovery_info["recovered_by"], "worker-b")
+        self.assertIn(executions.STAGE_REFERENCE_EVENTS_COMMITTED, recovery_info["restored_stages"])
+        self.assertEqual(recovery_info["pre_existing_ledger_events"], len(pre_events))
+        self.assertEqual(recovery_info["duplicate_events_committed"], 0)
+        self.assertTrue(recovery_info["new_track_session_started"])
+        self.assertEqual(recovery_info["reconnect_gap_count"], 1)
+        self.assertTrue(recovery_info["aggregates_match_ledger"])
+
+        # Gap accounting records the explicit worker_restart_reconnect gap and keeps full_frame_coverage False.
+        gap_acc = recovered.result["gap_accounting"]
+        self.assertEqual(gap_acc["reconnect_gap_count"], 1)
+        self.assertFalse(gap_acc["full_frame_coverage"])
+        reconnect_gaps = [g for g in gap_acc["gaps"] if g["kind"] == "worker_restart_reconnect"]
+        self.assertEqual(len(reconnect_gaps), 1)
+        self.assertTrue(reconnect_gaps[0]["new_session_started"])
+
+        # Tracking was split into two sessions across the reconnect boundary.
+        self.assertEqual(recovered.result["tracks"]["sessions"], 2)
+
+        # Stored ledger rows have no duplicates and rebuild to the exact recorded aggregate.
+        raw_rows = list(OperationEvent.objects.filter(execution=recovered))
+        self.assertEqual(
+            recovered.result["event_ledger"],
+            executions.ledger.rebuild_aggregates(raw_rows).summary(),
+        )
+        ref_rows = [r for r in raw_rows if r.kind == OperationEvent.KIND_REFERENCE]
+        self.assertEqual(len(ref_rows), len(pre_events))
+
+
+class MultiProcessQueueLockTests(DurableExecutionBase):
+    """Two separate OS processes enqueuing concurrently against a shared SQLite DB at limit=1."""
+
+    def test_two_os_processes_enqueuing_at_limit_one_never_exceed_cap(self) -> None:
+        with tempfile.TemporaryDirectory(prefix="t24-mp-queue-") as tmp_dir:
+            db_path = Path(tmp_dir) / "mp_queue.sqlite3"
+            ready_dir = Path(tmp_dir) / "ready"
+            ready_dir.mkdir()
+            go_file = Path(tmp_dir) / "go"
+
+            setup_code = f"""
+import os, django
+from pathlib import Path
+os.environ["DJANGO_SETTINGS_MODULE"] = "athena_web.settings"
+os.environ["ATHENA_DATA_HOME"] = {str(tmp_dir)!r}
+django.setup()
+from django.conf import settings
+from django.core.management import call_command
+settings.DATABASES["default"]["NAME"] = {str(db_path)!r}
+call_command("migrate", verbosity=0)
+from django.contrib.auth import get_user_model
+from projects.models import Operation, OperationDraft, OperationReleaseBundle, OperationSource, OperationSourceRecording, Site
+from projects.tests import grant
+user = get_user_model().objects.create_user("mp-owner")
+grant(user, "labeler")
+site = Site.objects.create(name="MP Site", created_by=user)
+source = OperationSource.objects.create(site=site, name="MP Cam", kind="recorded_video")
+operation = Operation.objects.create(site=site, source=source, name="MP Op", created_by=user)
+draft = OperationDraft.objects.create(created_by=user, operation=operation, name="MP Draft")
+rec = OperationSourceRecording.objects.create(
+    source=source, created_by=user, storage_key="k.mp4", filename="k.mp4",
+    sha256="a"*64, size_bytes=100, width=320, height=240, duration_seconds=1.0
+)
+bundle = OperationReleaseBundle.objects.create(
+    operation=operation, draft=draft, draft_revision=1, number=1, created_by=user,
+    snapshot={{"component_pins": {{}}}}, snapshot_sha256="b"*64
+)
+import json as _json
+Path({str(Path(tmp_dir) / "ids.json")!r}).write_text(
+    _json.dumps({{"bundle_id": str(bundle.id), "recording_id": str(rec.id)}})
+)
+"""
+            web_dir = Path(__file__).resolve().parents[1]
+            setup_res = subprocess.run(
+                [sys.executable, "-c", setup_code],
+                cwd=web_dir,
+                capture_output=True,
+                text=True,
+                check=False,
+                timeout=60,
+            )
+            self.assertEqual(setup_res.returncode, 0, setup_res.stdout + setup_res.stderr)
+            ids = json.loads((Path(tmp_dir) / "ids.json").read_text())
+
+            worker_code = f"""
+import json, os, sys, time, django
+from pathlib import Path
+idx = sys.argv[1]
+os.environ["DJANGO_SETTINGS_MODULE"] = "athena_web.settings"
+os.environ["ATHENA_DATA_HOME"] = {str(tmp_dir)!r}
+django.setup()
+from django.conf import settings
+from django.db import connections
+settings.DATABASES["default"]["NAME"] = {str(db_path)!r}
+settings.TRAINING["OPERATION_EXECUTION_QUEUE_LIMIT"] = 1
+connections.close_all()
+from django.contrib.auth import get_user_model
+from django.test import Client
+user = get_user_model().objects.get(username="mp-owner")
+client = Client()
+client.force_login(user)
+(Path({str(ready_dir)!r}) / f"ready-{{idx}}").write_text("1")
+deadline = time.monotonic() + 10.0
+while not Path({str(go_file)!r}).exists() and time.monotonic() < deadline:
+    time.sleep(0.005)
+resp = client.post(
+    f"/api/operation-release-bundles/{ids['bundle_id']}/executions",
+    json.dumps({{"recording_id": {ids['recording_id']!r}}}),
+    content_type="application/json",
+)
+print(json.dumps({{"status": resp.status_code, "body": resp.json()}}))
+"""
+            procs = [
+                subprocess.Popen(
+                    [sys.executable, "-c", worker_code, str(i)],
+                    cwd=web_dir,
+                    stdout=subprocess.PIPE,
+                    stderr=subprocess.PIPE,
+                    text=True,
+                )
+                for i in (1, 2)
+            ]
+            try:
+                deadline = timezone.now() + timedelta(seconds=15)
+                while len(list(ready_dir.glob("ready-*"))) < 2 and timezone.now() < deadline:
+                    pass
+                go_file.write_text("1")
+                outputs = [p.communicate(timeout=30) for p in procs]
+            finally:
+                for p in procs:
+                    if p.poll() is None:
+                        p.kill()
+
+            for index, (out, err) in enumerate(outputs):
+                self.assertEqual(procs[index].returncode, 0, f"proc {index}: {out}\n{err}")
+            parsed = [json.loads(out.strip().splitlines()[-1]) for out, _ in outputs]
+            statuses = sorted(item["status"] for item in parsed)
+            self.assertEqual(statuses, [202, 429], parsed)

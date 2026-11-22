@@ -20,10 +20,17 @@ from django.views.decorators.http import require_http_methods
 
 from . import credentials as credential_store
 from .bays import (
+    BAY_CAPACITY_MAX,
     BAY_COUNT_LIMIT,
+    BAY_DISABLED,
+    BAY_OBSERVABILITY_STATES,
+    BAY_REASON_MAX,
+    BAY_UNOBSERVABLE,
+    BAY_ZONE_MAX,
     duplicate_bay_name,
     new_bay_id,
     operation_bays,
+    summarize_bays_and_zones,
 )
 from .calibration import (
     SCALE_LIMIT_NOTE,
@@ -97,6 +104,7 @@ def _data(row, view_reviews=None):
         "name": row.name,
         "line": row.line,
         "bays": row.bays,
+        "bay_summary": summarize_bays_and_zones(row.bays),
         "reference_events": row.reference_events,
         "revision": row.revision,
         "outcome": "people_counting",
@@ -295,6 +303,7 @@ def _geometry_data(version):
         "version": version.version,
         "source_view_version_id": str(version.source_view_version_id),
         "geometry": version.geometry,
+        "bay_summary": summarize_bays_and_zones((version.geometry or {}).get("bays") or []),
         "sha256": version.geometry_sha256,
         "created_at": version.created_at.isoformat(),
     }
@@ -362,14 +371,24 @@ def _recipe_configuration(value):
 
 
 def _policy_configuration(value):
-    fields = {"evidence_retention_days", "max_coverage_gap_seconds"}
-    if not isinstance(value, dict) or value.keys() != fields:
+    required = {"evidence_retention_days", "max_coverage_gap_seconds"}
+    optional = {"frame_processing_policy", "max_in_flight_frames"}
+    if not isinstance(value, dict) or not required.issubset(value.keys()) or (value.keys() - (required | optional)):
         raise ValueError("Provide the evidence retention period and the maximum coverage gap.")
     if type(value["evidence_retention_days"]) is not int or not 1 <= value["evidence_retention_days"] <= 3650:
         raise ValueError("Evidence retention must be an integer from 1 to 3,650 days.")
     gap = value["max_coverage_gap_seconds"]
     if isinstance(gap, bool) or not isinstance(gap, (int, float)) or not math.isfinite(gap) or gap <= 0:
         raise ValueError("The maximum coverage gap must be a positive number of seconds.")
+    if "frame_processing_policy" in value:
+        if value["frame_processing_policy"] not in {"recorded_sampled", "recorded_full", "live_frame_drop"}:
+            raise ValueError(
+                "Frame processing policy must be 'recorded_sampled', 'recorded_full', or 'live_frame_drop'."
+            )
+    if "max_in_flight_frames" in value:
+        limit = value["max_in_flight_frames"]
+        if type(limit) is not int or not 1 <= limit <= 10000:
+            raise ValueError("The maximum in-flight frame queue must be an integer from 1 to 10,000.")
     return value
 
 
@@ -1161,23 +1180,32 @@ def operation_draft_versions(request: HttpRequest, draft_id):
 @access(POST="label")
 @require_http_methods(["POST"])
 def operation_draft_bay_actions(request: HttpRequest, draft_id):
-    """Named single-purpose bay actions on one draft (T17): duplicate and rename.
+    """Named single-purpose bay actions on one draft (T17/T18): duplicate, rename, zone, observability, capacity.
 
-    Both actions exist because they are about *identity*, which a plain draft
-    save cannot express on its own: duplicating mints a fresh stable bay ID
-    (the copy is a new bay, not a second name for the old one) with a plainly
-    unique "… (copy)" name, and renaming changes only the display name while
-    the stable ID — and therefore the bay's identity and history — is kept.
-    Each action records a new draft revision and snapshot like every save.
+    Every action preserves the bay's stable identity (or mints a fresh ID on
+    ``duplicate``) and records a new immutable draft revision and snapshot so
+    historical versions keep the zone, observability, and capacity they were
+    saved with.
     """
     draft = get_object_or_404(OperationDraft.objects.filter(created_by=request.user), id=draft_id)
     try:
         payload = _json_body(request)
-        if not isinstance(payload, dict) or "action" not in payload or payload.keys() - {"action", "bay_id", "name"}:
+        allowed_keys = {
+            "action",
+            "bay_id",
+            "name",
+            "zone",
+            "observability",
+            "disabled_reason",
+            "capacity",
+        }
+        if not isinstance(payload, dict) or "action" not in payload or (payload.keys() - allowed_keys):
             raise ValueError("Provide one bay action.")
         action = payload["action"]
-        if action not in ("duplicate", "rename"):
-            raise ValueError("Choose the duplicate or rename bay action.")
+        if action not in ("duplicate", "rename", "set_zone", "set_observability", "set_capacity"):
+            raise ValueError(
+                "Choose the duplicate, rename, set_zone, set_observability, or set_capacity bay action."
+            )
         bay_id = payload.get("bay_id")
         if not isinstance(bay_id, str) or not bay_id:
             raise ValueError("Choose which bay this action applies to.")
@@ -1185,17 +1213,27 @@ def operation_draft_bay_actions(request: HttpRequest, draft_id):
         if index is None:
             raise ValueError("Choose a bay that exists on this draft.")
         if action == "duplicate":
+            if payload.keys() - {"action", "bay_id"}:
+                raise ValueError("Provide only the bay to duplicate.")
             if len(draft.bays) + 1 > BAY_COUNT_LIMIT:
                 raise ValueError(f"A draft keeps at most {BAY_COUNT_LIMIT} bays.")
             source = draft.bays[index]
+            preserved = {
+                k: v
+                for k, v in source.items()
+                if k in {"zone", "observability", "disabled", "unobservable", "disabled_reason", "capacity"}
+            }
             copy = {
                 "id": new_bay_id(),
                 "name": duplicate_bay_name(source["name"], {bay["name"] for bay in draft.bays}),
                 "corners": [list(corner) for corner in source["corners"]],
+                **preserved,
             }
             bays = [*draft.bays, copy]
             message = f"Duplicated the bay as {copy['name']} with its own new ID."
-        else:
+        elif action == "rename":
+            if payload.keys() - {"action", "bay_id", "name"}:
+                raise ValueError("Provide only the bay and its new name.")
             name = payload.get("name")
             if not isinstance(name, str) or not name.strip() or len(name.strip()) > 80:
                 raise ValueError("Name the bay using up to 80 characters.")
@@ -1204,7 +1242,86 @@ def operation_draft_bay_actions(request: HttpRequest, draft_id):
                 for bay in draft.bays
             ]
             message = "Bay renamed. The ID — and the bay's history — is unchanged."
-        operation_bays(bays)  # the stored shape stays valid after the action
+        elif action == "set_zone":
+            if payload.keys() - {"action", "bay_id", "zone"}:
+                raise ValueError("Provide only the bay and its zone name.")
+            zone = payload.get("zone")
+            if zone is not None and (not isinstance(zone, str) or len(zone.strip()) > BAY_ZONE_MAX):
+                raise ValueError(f"Zone names may contain up to {BAY_ZONE_MAX} characters.")
+            clean_zone = zone.strip() if isinstance(zone, str) else ""
+            bays = []
+            for bay in draft.bays:
+                if bay["id"] != bay_id:
+                    bays.append(bay)
+                    continue
+                updated_bay = {k: v for k, v in bay.items() if k != "zone"}
+                if clean_zone:
+                    updated_bay["zone"] = clean_zone
+                bays.append(updated_bay)
+            message = (
+                f"Assigned bay to zone {clean_zone}. Historical revisions keep their prior zone."
+                if clean_zone
+                else "Cleared the bay's zone assignment. Historical revisions are unchanged."
+            )
+        elif action == "set_observability":
+            if payload.keys() - {"action", "bay_id", "observability", "disabled_reason"}:
+                raise ValueError("Provide the bay, its observability state, and an optional reason.")
+            obs = payload.get("observability")
+            if obs not in BAY_OBSERVABILITY_STATES:
+                raise ValueError(
+                    "Bay observability must be 'observable', 'unobservable', or 'disabled' "
+                    "('unknown' is a runtime state, not a configuration mode)."
+                )
+            reason = payload.get("disabled_reason")
+            if reason is not None and (not isinstance(reason, str) or len(reason.strip()) > BAY_REASON_MAX):
+                raise ValueError(f"The bay status reason may contain up to {BAY_REASON_MAX} characters.")
+            clean_reason = reason.strip() if isinstance(reason, str) else ""
+            bays = []
+            for bay in draft.bays:
+                if bay["id"] != bay_id:
+                    bays.append(bay)
+                    continue
+                updated_bay = {
+                    k: v
+                    for k, v in bay.items()
+                    if k not in {"observability", "disabled", "unobservable", "disabled_reason"}
+                }
+                if obs == BAY_DISABLED:
+                    updated_bay["observability"] = BAY_DISABLED
+                    updated_bay["disabled"] = True
+                    if clean_reason:
+                        updated_bay["disabled_reason"] = clean_reason
+                elif obs == BAY_UNOBSERVABLE:
+                    updated_bay["observability"] = BAY_UNOBSERVABLE
+                    updated_bay["unobservable"] = True
+                    if clean_reason:
+                        updated_bay["disabled_reason"] = clean_reason
+                bays.append(updated_bay)
+            if obs == BAY_DISABLED:
+                message = "Bay marked Disabled and excluded from usable capacity. Historical revisions are unchanged."
+            elif obs == BAY_UNOBSERVABLE:
+                message = (
+                    "Bay marked Unobservable: it stays distinct from Disabled and reports as Unknown (never Free). "
+                    "Historical revisions are unchanged."
+                )
+            else:
+                message = "Bay marked Observable and included in usable capacity. Historical revisions are unchanged."
+        else:  # set_capacity
+            if payload.keys() - {"action", "bay_id", "capacity"}:
+                raise ValueError("Provide only the bay and its capacity.")
+            cap = payload.get("capacity")
+            if isinstance(cap, bool) or not isinstance(cap, int) or not 1 <= cap <= BAY_CAPACITY_MAX:
+                raise ValueError(f"Bay or zone capacity must be a whole number from 1 to {BAY_CAPACITY_MAX}.")
+            bays = []
+            for bay in draft.bays:
+                if bay["id"] != bay_id:
+                    bays.append(bay)
+                    continue
+                updated_bay = {k: v for k, v in bay.items() if k != "capacity"}
+                updated_bay["capacity"] = cap
+                bays.append(updated_bay)
+            message = f"Bay capacity set to {cap}. Historical revisions keep their prior capacity."
+        bays = operation_bays(bays)  # the stored shape stays valid after the action
     except ValueError as error:
         return _error(str(error))
     updates: dict[str, object] = {"bays": bays}

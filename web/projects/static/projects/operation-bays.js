@@ -19,6 +19,10 @@
     const ctx = canvas.getContext("2d");
     const snapshot = document.createElement("canvas");
     const name = document.getElementById("bay-name");
+    const zoneInput = document.getElementById("bay-zone");
+    const observabilityInput = document.getElementById("bay-observability");
+    const reasonInput = document.getElementById("bay-disabled-reason");
+    const capacityInput = document.getElementById("bay-capacity");
     const frame = document.getElementById("bay-frame");
     const save = document.getElementById("bay-save");
     const clear = document.getElementById("bay-clear");
@@ -172,7 +176,19 @@
       if (!current) return `${listText} Named: ${names}.${saveState}`;
       const c = coords();
       const problem = [c[0], c[1], c[2], c[3], c[4], c[5], c[6], c[7]].every(v => v !== null) && bayProblem([[c[0], c[1]], [c[2], c[3]], [c[4], c[5]], [c[6], c[7]]]);
-      return `${listText} Editing bay "${current.name || "unnamed"}". `
+      const zonePart = current.zone ? ` Zone: "${current.zone}".` : "";
+      const obsMode = current.observability || (current.disabled ? "disabled" : current.unobservable ? "unobservable" : "observable");
+      const obsPart = obsMode === "disabled"
+        ? ` Status: Disabled (out of service, excluded from usable capacity${current.disabled_reason ? ": " + current.disabled_reason : ""}).`
+        : obsMode === "unobservable"
+          ? ` Status: Unobservable (reports as Unknown, never Free and distinct from Disabled${current.disabled_reason ? ": " + current.disabled_reason : ""}).`
+          : "";
+      const capPart = current.capacity && Number(current.capacity) !== 1 ? ` Capacity: ${current.capacity}.` : "";
+      return `${listText} Editing bay "${current.name || "unnamed"}".`
+        + zonePart
+        + obsPart
+        + capPart
+        + " "
         + [0, 1, 2, 3].map(i => `Corner ${i + 1}: ${point(i, c[i * 2], c[i * 2 + 1])}.`).join(" ")
         + (problem ? ` Warning: ${problem}` : "")
         + saveState;
@@ -297,10 +313,46 @@
           inputs[index * 2 + 1].value = corner[1] === null || corner[1] === undefined ? "" : String(corner[1]);
         });
         if (name && document.activeElement !== name) name.value = bay.name || "";
+        if (zoneInput && document.activeElement !== zoneInput) zoneInput.value = bay.zone || "";
+        if (observabilityInput && document.activeElement !== observabilityInput) {
+          observabilityInput.value = bay.observability || (bay.disabled ? "disabled" : bay.unobservable ? "unobservable" : "observable");
+        }
+        if (reasonInput && document.activeElement !== reasonInput) reasonInput.value = bay.disabled_reason || "";
+        if (capacityInput && document.activeElement !== capacityInput) {
+          capacityInput.value = bay.capacity ? String(bay.capacity) : "";
+        }
       } else {
         inputs.forEach(input => { input.value = ""; });
         if (name) name.value = "";
+        if (zoneInput) zoneInput.value = "";
+        if (observabilityInput) observabilityInput.value = "observable";
+        if (reasonInput) reasonInput.value = "";
+        if (capacityInput) capacityInput.value = "";
       }
+    }
+
+    function applyOptionalMetadata(target, source) {
+      delete target.zone;
+      delete target.observability;
+      delete target.disabled;
+      delete target.unobservable;
+      delete target.disabled_reason;
+      delete target.capacity;
+      if (source.zone) target.zone = source.zone;
+      if (source.observability === "disabled" || source.disabled === true) {
+        target.observability = "disabled";
+        target.disabled = true;
+      } else if (source.observability === "unobservable" || source.unobservable === true) {
+        target.observability = "unobservable";
+        target.unobservable = true;
+      } else if (source.observability === "observable") {
+        target.observability = "observable";
+      }
+      if (source.disabled_reason) target.disabled_reason = source.disabled_reason;
+      if (source.capacity !== undefined && source.capacity !== null && source.capacity !== "") {
+        target.capacity = Number(source.capacity);
+      }
+      return target;
     }
 
     function writeFieldsIntoSelected() {
@@ -309,6 +361,16 @@
       const c = coords();
       bay.corners = [[c[0], c[1]], [c[2], c[3]], [c[4], c[5]], [c[6], c[7]]];
       bay.name = name ? name.value.trim() : bay.name;
+      const z = zoneInput ? zoneInput.value.trim() : (bay.zone || "");
+      const obs = observabilityInput ? observabilityInput.value : (bay.observability || "observable");
+      const rsn = reasonInput ? reasonInput.value.trim() : (bay.disabled_reason || "");
+      const capRaw = capacityInput ? capacityInput.value.trim() : (bay.capacity ? String(bay.capacity) : "");
+      applyOptionalMetadata(bay, {
+        zone: z || undefined,
+        observability: obs !== "observable" ? obs : undefined,
+        disabled_reason: rsn || undefined,
+        capacity: capRaw ? Number(capRaw) : undefined
+      });
     }
 
     if (select) select.addEventListener("change", () => {
@@ -402,7 +464,7 @@
 
     /* Field edits write into the selected bay; entering a field opens an
        editing run, leaving the editor's controls settles it. */
-    const allInputs = [...inputs, name].filter(Boolean);
+    const allInputs = [...inputs, name, zoneInput, observabilityInput, reasonInput, capacityInput].filter(Boolean);
     allInputs.forEach(input => {
       input.addEventListener("focus", () => {
         if (editFromState == null) editFromState = snapshotState();
@@ -701,11 +763,11 @@
       const previousSelectedId = selectedId;
       draft = nextDraft;
       section.hidden = !draft?.recording;
-      bays = (draft?.bays || []).map(bay => ({
+      bays = (draft?.bays || []).map(bay => applyOptionalMetadata({
         id: bay.id,
         name: bay.name,
         corners: bay.corners.map(corner => [Number((corner[0] * 100).toFixed(6)), Number((corner[1] * 100).toFixed(6))])
-      }));
+      }, bay));
       original = JSON.stringify(bays);
       selectedId = savingSameDraft && bays.some(bay => bay.id === previousSelectedId)
         ? previousSelectedId
@@ -732,11 +794,11 @@
 
     function read() {
       if (!draft?.recording) return (draft?.bays ?? []);
-      const result = bays.map(bay => ({
+      const result = bays.map(bay => applyOptionalMetadata({
         id: bay.id,
         name: bay.name,
         corners: bay.corners.map(corner => [corner[0] / 100, corner[1] / 100])
-      }));
+      }, bay));
       for (const bay of result) {
         if (!bay.name) throw new Error("Name every bay before saving.");
         if (bay.name.length > 80) throw new Error("Name each bay using up to 80 characters.");
@@ -753,7 +815,7 @@
 
     function setBusy(value) {
       busy = value;
-      [...inputs, name, frame, save, clear, add, remove, duplicate, rename, undoButton, redoButton, select, ...Object.values(nudgeButtons)].forEach(input => { if (input) input.disabled = value; });
+      [...inputs, name, zoneInput, observabilityInput, reasonInput, capacityInput, frame, save, clear, add, remove, duplicate, rename, undoButton, redoButton, select, ...Object.values(nudgeButtons)].forEach(input => { if (input) input.disabled = value; });
       if (!value) { renderHistoryButtons(); if (select) select.disabled = !bays.length; }
     }
 

@@ -133,6 +133,14 @@
   <p class="a-help">A bay is one named four-corner area on the same picture, like one parking space. Add a bay, set its four corners as percentages from the top-left corner, and name it — the name is yours to change later; a bay's identity is its stable ID, so renaming a bay never loses its history. An outline that crosses itself ("a bowtie") is refused — a bay's outline must not overlap itself — and corners always stay inside the picture.</p>
   <div class="line-fields">
     <div class="a-field"><label class="a-label" for="bay-name">Bay name</label><input class="a-input" id="bay-name" maxlength="80" data-needs="label" placeholder="e.g. Bay 1"></div>
+    <div class="a-field"><label class="a-label" for="bay-zone">Zone or area (optional)</label><input class="a-input" id="bay-zone" maxlength="80" data-needs="label" data-testid="bay-zone" placeholder="e.g. North row"></div>
+    <div class="a-field"><label class="a-label" for="bay-observability">Bay status &amp; observability</label><select class="a-input" id="bay-observability" data-needs="label" data-testid="bay-observability">
+      <option value="observable">Observable (active in usable capacity)</option>
+      <option value="unobservable">Unobservable (blocked view — reports as Unknown, never Free)</option>
+      <option value="disabled">Disabled (out of service — excluded from usable capacity)</option>
+    </select></div>
+    <div class="a-field"><label class="a-label" for="bay-disabled-reason">Reason when unobservable or disabled (optional)</label><input class="a-input" id="bay-disabled-reason" maxlength="160" data-needs="label" data-testid="bay-disabled-reason" placeholder="e.g. Pillar blocks view or coned off"></div>
+    <div class="a-field"><label class="a-label" for="bay-capacity">Space capacity (default 1)</label><input class="a-input" type="number" id="bay-capacity" min="1" max="10000" step="1" data-needs="label" data-testid="bay-capacity" placeholder="1"></div>
   </div>
   <button class="a-btn" id="bay-frame" type="button" data-needs="label">Use current video frame</button>
   <canvas id="bay-canvas" class="line-canvas" width="640" height="360" tabindex="0" role="img" aria-label="Video frame for choosing a bay's four corners. Drag a corner to move it, focus this picture and use the arrow keys to move the chosen corner, or type positions into the fields below. The bays' state is always written out in the text summary further down."></canvas>

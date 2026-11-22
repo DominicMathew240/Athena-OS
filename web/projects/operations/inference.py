@@ -50,6 +50,19 @@ PREDICTION_FLOOR = 0.05
 MAX_PREDICTIONS_PER_FRAME = 100
 #: How many reference frames an execution samples from the timeline.
 DEFAULT_SAMPLE_FRAMES = 6
+#: Explicit frame-processing policies (T24):
+#: - ``recorded_sampled``: deterministic evenly spaced reference sampling; never claims full coverage.
+#: - ``recorded_full``: recorded full-frame analysis; decodes every on-time frame and refuses to drop frames under queue limits.
+#: - ``live_frame_drop``: live bounded-queue backpressure policy; drops intermediate frames when arrival exceeds ``max_in_flight_frames``,
+#:   accounts every dropped frame and overload gap, starts a new tracking session across drop gaps, and never claims full coverage.
+FRAME_POLICY_RECORDED_SAMPLED = "recorded_sampled"
+FRAME_POLICY_RECORDED_FULL = "recorded_full"
+FRAME_POLICY_LIVE_DROP = "live_frame_drop"
+SUPPORTED_FRAME_POLICIES = (
+    FRAME_POLICY_RECORDED_SAMPLED,
+    FRAME_POLICY_RECORDED_FULL,
+    FRAME_POLICY_LIVE_DROP,
+)
 #: Extracting one frame must finish within this budget (the same order as the
 #: timeline build's decode budget).
 _FRAME_TIMEOUT_SECONDS = 120
@@ -90,6 +103,22 @@ class FrameDetections:
 
 
 @dataclass(frozen=True)
+class FramePolicyPlan:
+    """Explicit frame-selection plan and drop/skip accounting for one timeline (T24)."""
+
+    policy: str
+    total_on_time_frames: int
+    selected_indices: tuple[int, ...]
+    sampled_skip_count: int
+    dropped_frame_indices: tuple[int, ...]
+    overload_gaps: tuple[dict, ...]
+    session_overrides: dict[int, int]
+    sampled_analysis: bool
+    overload_dropped: bool
+    full_frame_coverage: bool
+
+
+@dataclass(frozen=True)
 class AdapterReport:
     """The normalized outcome of one adapter run, recorded on the execution row."""
 
@@ -102,6 +131,8 @@ class AdapterReport:
     model_labels: tuple[str, ...]
     frame_count: int
     frames: tuple[FrameDetections, ...]
+    frame_policy: str = FRAME_POLICY_RECORDED_SAMPLED
+    policy_plan: FramePolicyPlan | None = None
 
     def summary(self) -> dict:
         """A plain JSON-serializable summary for execution outcomes."""
@@ -115,6 +146,7 @@ class AdapterReport:
             "model_labels": list(self.model_labels),
             "frame_count": self.frame_count,
             "total_detections": sum(len(frame.detections) for frame in self.frames),
+            "frame_policy": self.frame_policy,
         }
 
 
@@ -227,6 +259,132 @@ def sample_frame_indices(timeline: FrameTimeline, count: int = DEFAULT_SAMPLE_FR
     return [candidates[i] for i in chosen]
 
 
+def plan_frame_selection(
+    timeline: FrameTimeline,
+    *,
+    policy: str = FRAME_POLICY_RECORDED_SAMPLED,
+    sample_frames: int = DEFAULT_SAMPLE_FRAMES,
+    max_in_flight_frames: int | None = None,
+) -> FramePolicyPlan:
+    """Plan which frames to decode/analyse under an explicit T24 processing policy.
+
+    * ``recorded_sampled``: deterministic evenly spaced reference frames; never claims
+      full-frame coverage.
+    * ``recorded_full``: recorded full-frame analysis; selects every on-time frame in
+      monotonic PTS order and refuses to drop frames when ``max_in_flight_frames`` is
+      exceeded. Reports ``full_frame_coverage=True`` only when every frame in the
+      timeline is selected and the timeline has zero gaps and zero late frames.
+    * ``live_frame_drop``: bounded-queue live backpressure policy; when on-time frames
+      exceed ``max_in_flight_frames`` (default ``sample_frames``), sheds intermediate
+      frames, records every dropped frame and contiguous overload gap, advances tracking
+      session numbers across each drop interval so tracks never bridge dropped frames,
+      and always sets ``full_frame_coverage=False``.
+    """
+    if policy not in SUPPORTED_FRAME_POLICIES:
+        raise InferenceAdapterError(
+            f"Unsupported frame processing policy '{policy}'. Choose one of: {', '.join(SUPPORTED_FRAME_POLICIES)}."
+        )
+    if max_in_flight_frames is not None and (
+        isinstance(max_in_flight_frames, bool)
+        or not isinstance(max_in_flight_frames, int)
+        or max_in_flight_frames < 1
+    ):
+        raise InferenceAdapterError("The maximum in-flight frame queue limit must be a positive whole number.")
+    on_time = [frame for frame in timeline.frames if frame.on_time]
+    if not on_time:
+        raise InferenceAdapterError("The recording has no usable frames to analyse.")
+
+    if policy == FRAME_POLICY_RECORDED_SAMPLED:
+        selected = tuple(sample_frame_indices(timeline, sample_frames))
+        return FramePolicyPlan(
+            policy=policy,
+            total_on_time_frames=len(on_time),
+            selected_indices=selected,
+            sampled_skip_count=max(0, len(on_time) - len(selected)),
+            dropped_frame_indices=(),
+            overload_gaps=(),
+            session_overrides={},
+            sampled_analysis=True,
+            overload_dropped=False,
+            full_frame_coverage=False,
+        )
+
+    if policy == FRAME_POLICY_RECORDED_FULL:
+        if max_in_flight_frames is not None and len(on_time) > max_in_flight_frames:
+            raise InferenceAdapterError(
+                f"Recorded full-frame analysis refuses to drop frames when the recording ({len(on_time)} frames) "
+                f"exceeds the configured in-flight queue limit ({max_in_flight_frames}). Raise the queue limit or "
+                "use the explicit 'live_frame_drop' policy."
+            )
+        selected = tuple(frame.index for frame in on_time)
+        full_coverage = (
+            len(selected) == len(timeline.frames) > 0
+            and len(timeline.gaps) == 0
+            and len(timeline.late_frames) == 0
+        )
+        return FramePolicyPlan(
+            policy=policy,
+            total_on_time_frames=len(on_time),
+            selected_indices=selected,
+            sampled_skip_count=0,
+            dropped_frame_indices=(),
+            overload_gaps=(),
+            session_overrides={},
+            sampled_analysis=False,
+            overload_dropped=False,
+            full_frame_coverage=full_coverage,
+        )
+
+    # FRAME_POLICY_LIVE_DROP
+    budget = max_in_flight_frames if max_in_flight_frames is not None else sample_frames
+    selected = tuple(sample_frame_indices(timeline, budget))
+    selected_set = set(selected)
+    dropped = tuple(frame.index for frame in on_time if frame.index not in selected_set)
+    overload_gaps: list[dict] = []
+    session_overrides: dict[int, int] = {}
+    session_offset = 0
+    prev_kept = None
+    pending_dropped: list = []
+    for frame in on_time:
+        if frame.index not in selected_set:
+            pending_dropped.append(frame)
+            continue
+        if pending_dropped and prev_kept is not None:
+            start_pts = round(prev_kept.pts + prev_kept.duration, 6)
+            end_pts = round(frame.pts, 6)
+            overload_gaps.append(
+                {
+                    "kind": "live_overload_drop",
+                    "after_frame": prev_kept.index,
+                    "before_frame": frame.index,
+                    "start_pts": start_pts,
+                    "end_pts": end_pts,
+                    "length_seconds": round(max(0.0, end_pts - start_pts), 6),
+                    "dropped_frame_count": len(pending_dropped),
+                    "dropped_frame_indices": [f.index for f in pending_dropped],
+                }
+            )
+            session_offset += 1
+            pending_dropped = []
+        elif pending_dropped:
+            pending_dropped = []
+        session_overrides[frame.index] = frame.session + session_offset
+        prev_kept = frame
+
+    return FramePolicyPlan(
+        policy=policy,
+        total_on_time_frames=len(on_time),
+        selected_indices=selected,
+        sampled_skip_count=0,
+        dropped_frame_indices=dropped,
+        overload_gaps=tuple(overload_gaps),
+        session_overrides=session_overrides,
+        sampled_analysis=False,
+        overload_dropped=len(dropped) > 0,
+        full_frame_coverage=False,
+    )
+
+
 @dataclass(frozen=True)
 class ExtractedFrame:
     """One decoded reference frame: its bytes on disk and its timeline entry."""
@@ -334,9 +492,16 @@ def _extract_frames(recording, timeline: FrameTimeline, indices: list[int]):
 
 # -- the adapter --------------------------------------------------------------------------------
 def run_detector(
-    binding, recording, timeline: FrameTimeline, recipe_key: str, *, sample_frames: int = DEFAULT_SAMPLE_FRAMES
+    binding,
+    recording,
+    timeline: FrameTimeline,
+    recipe_key: str,
+    *,
+    sample_frames: int = DEFAULT_SAMPLE_FRAMES,
+    frame_policy: str = FRAME_POLICY_RECORDED_SAMPLED,
+    max_in_flight_frames: int | None = None,
 ) -> AdapterReport:
-    """Run the bound model on sampled reference frames. Raises InferenceAdapterError; never fakes.
+    """Run the bound model under the selected frame-processing policy. Raises InferenceAdapterError; never fakes.
 
     ``binding`` is the ``OperationModelBinding`` the execution's bundle pinned;
     ``recording`` is the ``OperationSourceRecording`` the execution runs against;
@@ -363,7 +528,13 @@ def run_detector(
             "can run. Ask an administrator to install it in the operation worker's environment."
         ) from None
 
-    indices = sample_frame_indices(timeline, sample_frames)
+    plan = plan_frame_selection(
+        timeline,
+        policy=frame_policy,
+        sample_frames=sample_frames,
+        max_in_flight_frames=max_in_flight_frames,
+    )
+    indices = list(plan.selected_indices)
     results: list[FrameDetections] = []
     with _extract_frames(recording, timeline, indices) as frames:
         for frame in frames:
@@ -400,7 +571,7 @@ def run_detector(
                 FrameDetections(
                     frame_index=frame.index,
                     pts=round(frame.pts, 6),
-                    session=frame.session,
+                    session=plan.session_overrides.get(frame.index, frame.session),
                     wall_clock=frame.wall_clock,
                     detections=detections,
                 )
@@ -416,6 +587,8 @@ def run_detector(
         model_labels=tuple(checks["model_labels"]),
         frame_count=len(results),
         frames=tuple(results),
+        frame_policy=plan.policy,
+        policy_plan=plan,
     )
 
 
@@ -483,10 +656,16 @@ __all__ = [
     "AdapterReport",
     "DEFAULT_SAMPLE_FRAMES",
     "DETECTION_TASKS",
+    "FRAME_POLICY_LIVE_DROP",
+    "FRAME_POLICY_RECORDED_FULL",
+    "FRAME_POLICY_RECORDED_SAMPLED",
     "FrameDetections",
+    "FramePolicyPlan",
     "InferenceAdapterError",
     "RECIPE_EXPECTED_LABELS",
+    "SUPPORTED_FRAME_POLICIES",
     "crosscheck_duration",
+    "plan_frame_selection",
     "run_detector",
     "sample_frame_indices",
     "validate_compatibility",
