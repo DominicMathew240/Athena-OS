@@ -1207,12 +1207,11 @@ def operation_draft_bay_actions(request: HttpRequest, draft_id):
         operation_bays(bays)  # the stored shape stays valid after the action
     except ValueError as error:
         return _error(str(error))
-    updates = {
-        "bays": bays,
+    updates: dict[str, object] = {"bays": bays}
+    if bays != draft.bays and draft.geometry_version_id:
         # A changed bay list invalidates a kept geometry pin, exactly as a changed
         # line does; the pin can be re-pinned once the geometry version matches.
-        "geometry_version": None if bays != draft.bays and draft.geometry_version_id else draft.geometry_version_id,
-    }
+        updates["geometry_version"] = None
     with transaction.atomic():
         changed = OperationDraft.objects.filter(id=draft.id, revision=draft.revision).update(
             **updates, revision=F("revision") + 1, updated_at=timezone.now()

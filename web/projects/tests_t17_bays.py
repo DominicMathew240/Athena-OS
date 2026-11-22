@@ -717,3 +717,13 @@ class BayPageSurfaceTests(TestCase):
         ):
             with self.subTest(needle=needle):
                 self.assertContains(page, needle)
+
+    def test_recording_removal_guards_unsaved_bays_and_warns_before_clearing(self):
+        from pathlib import Path
+
+        drafts_js = (Path(__file__).resolve().parent / "static/projects/operation-drafts.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("bayEditor ? bayEditor.dirty() : false", drafts_js)
+        self.assertIn("Save the draft, line and bays before removing the recording.", drafts_js)
+        self.assertIn("This also clears any line and bays saved for this view.", drafts_js)

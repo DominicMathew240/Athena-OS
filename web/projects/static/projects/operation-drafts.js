@@ -263,10 +263,10 @@
   recordingDelete.addEventListener("click", async () => {
     if (busy || !current?.recording) return;
     recordingError.textContent = "";
-    if (name.value !== savedName || lineEditor.dirty()) { recordingError.textContent = "Save the draft and line before removing the recording."; return; }
+    if (name.value !== savedName || lineEditor.dirty() || (bayEditor ? bayEditor.dirty() : false)) { recordingError.textContent = "Save the draft, line and bays before removing the recording."; return; }
     setBusy(true);
     try {
-      const accepted = await window.Athena.askConfirm({ title: "Remove recording?", message: "This also clears any line saved for this view.", keepLabel: "Keep recording", confirmLabel: "Remove recording" });
+      const accepted = await window.Athena.askConfirm({ title: "Remove recording?", message: "This also clears any line and bays saved for this view.", keepLabel: "Keep recording", confirmLabel: "Remove recording" });
       if (!accepted) return;
       name.disabled = true;
       const result = await api(`/api/operation-drafts/${current.id}/recording`, { method: "DELETE", json: { revision: current.revision } });
