@@ -19,6 +19,12 @@ from django.utils import timezone
 from django.views.decorators.http import require_http_methods
 
 from . import credentials as credential_store
+from .bays import (
+    BAY_COUNT_LIMIT,
+    duplicate_bay_name,
+    new_bay_id,
+    operation_bays,
+)
 from .calibration import (
     SCALE_LIMIT_NOTE,
     CalibrationError,
@@ -90,6 +96,7 @@ def _data(row, view_reviews=None):
         "operation_id": None if row.operation_id is None else str(row.operation_id),
         "name": row.name,
         "line": row.line,
+        "bays": row.bays,
         "reference_events": row.reference_events,
         "revision": row.revision,
         "outcome": "people_counting",
@@ -190,7 +197,11 @@ def _version_snapshot(row):
             "operation_id": None if row.operation_id is None else str(row.operation_id),
         },
         "source": source,
-        "geometry": {"line": row.line, "state": "pinned_version" if pins["geometry"] else "draft_configuration"},
+        "geometry": {
+            "line": row.line,
+            "bays": row.bays,
+            "state": "pinned_version" if pins["geometry"] else "draft_configuration",
+        },
         "recipe": {
             "key": "people_counting",
             "state": "pinned_version" if pins["recipe"] else "specification_only",
@@ -437,7 +448,9 @@ def _version_data(version):
 
 
 def _validate(payload, *, update=False, recording_duration=None, existing_events=None, existing_line=None):
-    allowed = {"name", "line", "reference_events"} | set(_PIN_FIELDS) | ({"revision"} if update else set())
+    allowed = (
+        {"name", "line", "bays", "reference_events"} | set(_PIN_FIELDS) | ({"revision"} if update else set())
+    )
     if payload.keys() - allowed:
         raise ValueError("These draft details are not supported.")
     name = payload.get("name")
@@ -448,6 +461,11 @@ def _validate(payload, *, update=False, recording_duration=None, existing_events
         # The same geometry rules as a frozen geometry version, including the
         # degenerate-line refusal; the messages are plain on purpose.
         line = _operation_line(line)
+    bays = payload.get("bays")
+    if bays is not None:
+        # The same bay rules as a frozen geometry version: four good corners per
+        # bay, unique stable IDs, and the same plain refusals.
+        bays = operation_bays(bays)
     line_changed = update and line != existing_line
     if line_changed and existing_line is not None and line is None and payload.get("reference_events"):
         raise ValueError("Save the changed line before clearing its reference crossings.")
@@ -480,7 +498,7 @@ def _validate(payload, *, update=False, recording_duration=None, existing_events
     revision = payload.get("revision")
     if update and (type(revision) is not int or revision < 1):
         raise ValueError("Provide the current draft revision.")
-    return name.strip(), line, normalized_events, revision
+    return name.strip(), line, bays, normalized_events, revision
 
 
 _PIN_FIELDS = (
@@ -492,12 +510,12 @@ _PIN_FIELDS = (
 )
 
 
-def _validate_pins(payload, operation, line):
+def _validate_pins(payload, operation, line, bays=None):
     """Resolve optional component-version pins for one draft save.
 
     Pins must reference immutable versions of the draft's own operation, and a
-    geometry pin is only valid while the draft line still matches the pinned
-    geometry. The caller resolves ownership; this returns the model instances.
+    geometry pin is only valid while the draft line and bay list still match the
+    pinned geometry. The caller resolves ownership; this returns the model instances.
     """
     pins = {}
     for field in _PIN_FIELDS:
@@ -529,6 +547,8 @@ def _validate_pins(payload, operation, line):
                 raise ValueError("Choose a geometry version that belongs to this draft's operation.")
             if line is None or geometry.geometry.get("line") != line:
                 raise ValueError("Save the matching counting line before pinning this geometry version.")
+            if (geometry.geometry.get("bays") or []) != (bays or []):
+                raise ValueError("Save the matching bays before pinning this geometry version.")
             resolved["geometry"] = geometry
     if "recipe_version_id" in pins:
         recipe_id = pins["recipe_version_id"]
@@ -827,9 +847,14 @@ def operation_geometry_versions(request: HttpRequest, operation_id):
             raise ValueError("Provide a source-view version and geometry, or an explicit remap.")
         source_view_id = _scope_uuid(payload, "source_view_version_id")
         geometry_payload = payload["geometry"]
-        if not isinstance(geometry_payload, dict) or geometry_payload.keys() != {"line"}:
-            raise ValueError("Provide the supported counting-line geometry.")
-        geometry = {"line": _operation_line(geometry_payload["line"])}
+        if not isinstance(geometry_payload, dict) or "line" not in geometry_payload:
+            raise ValueError("Provide the counting-line geometry and its bays.")
+        if geometry_payload.keys() - {"line", "bays"}:
+            raise ValueError("Provide the supported counting-line geometry and bays only.")
+        geometry = {
+            "line": _operation_line(geometry_payload["line"]),
+            "bays": operation_bays(geometry_payload.get("bays") or []),
+        }
     except ValueError as error:
         return _error(str(error))
     source_view = get_object_or_404(
@@ -857,7 +882,13 @@ def _remap_geometry(request, operation, versions, remap_payload):
     changed dimensions, changed flips, no step at all — is refused with a plain
     message: the person re-draws. The result is a NEW immutable geometry
     version pinned to the NEW source-view version; the old one is untouched.
+
+    Bays ride the same remap (T17): each bay's four corners go through the same
+    pure rotation the line endpoints do, while the bay's stable ID and name
+    survive untouched — so a remapped bay keeps its identity and history.
     """
+    from .bays import remap_bay
+
     try:
         if not isinstance(remap_payload, dict) or remap_payload.keys() != {
             "from_geometry_version_id",
@@ -883,9 +914,13 @@ def _remap_geometry(request, operation, versions, remap_payload):
         remapped_line = remap_line(
             old_geometry.geometry["line"], old_view.configuration["rotation"], new_view.configuration["rotation"]
         )
+        remapped_bays = [
+            remap_bay(bay, old_view.configuration["rotation"], new_view.configuration["rotation"])
+            for bay in (old_geometry.geometry.get("bays") or [])
+        ]
     except ValueError as error:
         return _error(str(error))
-    geometry = {"line": _operation_line(remapped_line)}
+    geometry = {"line": _operation_line(remapped_line), "bays": remapped_bays}
     hash_payload = {"source_view_version_id": str(new_view.id), "geometry": geometry}
     with transaction.atomic():
         version = (versions.order_by("-version").values_list("version", flat=True).first() or 0) + 1
@@ -905,7 +940,7 @@ def _remap_geometry(request, operation, versions, remap_payload):
                     "from_source_view_version_id": str(old_view.id),
                     "to_source_view_version_id": str(new_view.id),
                     "rotation_step": (new_view.configuration["rotation"] - old_view.configuration["rotation"]) % 360,
-                    "note": "Remapped by a pure coordinate transform for the 90-degree rotation step; check both endpoints on the new view before relying on it.",
+                    "note": "Remapped by a pure coordinate transform for the 90-degree rotation step; check both endpoints and every bay's four corners on the new view before relying on it.",
                 },
             },
             status=201,
@@ -1002,8 +1037,8 @@ def operation_drafts(request: HttpRequest):
                 Operation.objects.select_related("site", "source"), id=operation_id, created_by=request.user
             )
             payload = {key: value for key, value in payload.items() if key != "operation_id"}
-        name, line, reference_events, _ = _validate(payload)
-        pins = _validate_pins(payload, operation, line)
+        name, line, bays, reference_events, _ = _validate(payload)
+        pins = _validate_pins(payload, operation, line, bays)
     except ValueError as error:
         return _error(str(error))
     with transaction.atomic():
@@ -1012,6 +1047,7 @@ def operation_drafts(request: HttpRequest):
             operation=operation,
             name=name,
             line=line,
+            bays=bays or [],
             reference_events=reference_events,
             **(
                 {}
@@ -1056,17 +1092,20 @@ def operation_draft(request: HttpRequest, draft_id):
             operation = get_object_or_404(
                 Operation.objects.select_related("site", "source"), id=bind_to, created_by=request.user
             )
-        name, line, reference_events, revision = _validate(
+        name, line, bays, reference_events, revision = _validate(
             payload,
             update=True,
             recording_duration=None if recording is None else recording.duration_seconds,
             existing_events=row.reference_events,
             existing_line=row.line,
         )
-        pins = _validate_pins(payload, operation, line)
+        # An omitted bay list keeps what is stored: bays only change when sent.
+        # (The line is historical the other way — an omitted line clears it.)
+        effective_bays = bays if bays is not None else (row.bays or [])
+        pins = _validate_pins(payload, operation, line, effective_bays)
     except ValueError as error:
         return _error(str(error))
-    updates = {"name": name, "line": line, "reference_events": reference_events}
+    updates = {"name": name, "line": line, "bays": effective_bays, "reference_events": reference_events}
     if bind_to is not None:
         updates["operation_id"] = bind_to
     if pins is not None:
@@ -1075,10 +1114,13 @@ def operation_draft(request: HttpRequest, draft_id):
         updates["policy_version"] = pins.get("policy", row.policy_version_id and row.policy_version)
         updates["model_binding"] = pins.get("model_binding", row.model_binding_id and row.model_binding)
         updates["screen_version"] = pins.get("screen", row.screen_version_id and row.screen_version)
-    if line != row.line and row.geometry_version_id and not (pins and "geometry" in pins):
-        # A geometry pin is only valid while the draft line matches the pinned geometry; a
-        # changed line invalidates a kept pin, exactly as it clears reference crossings. A
-        # pin in this same save was already checked against the new line and survives.
+    if (line != row.line or effective_bays != (row.bays or [])) and row.geometry_version_id and not (
+        pins and "geometry" in pins
+    ):
+        # A geometry pin is only valid while the draft line and bay list match the pinned
+        # geometry; a changed line or bay invalidates a kept pin, exactly as it clears
+        # reference crossings. A pin in this same save was already checked against the new
+        # geometry and survives.
         updates["geometry_version"] = None
     with transaction.atomic():
         changed = rows.filter(id=draft_id, revision=revision).update(
@@ -1114,6 +1156,76 @@ def operation_draft_versions(request: HttpRequest, draft_id):
     except (TypeError, ValueError):
         return _error("A saved draft version failed its integrity check.", 500)
     return _no_store(JsonResponse({"versions": data, "has_more": has_more}))
+
+
+@access(POST="label")
+@require_http_methods(["POST"])
+def operation_draft_bay_actions(request: HttpRequest, draft_id):
+    """Named single-purpose bay actions on one draft (T17): duplicate and rename.
+
+    Both actions exist because they are about *identity*, which a plain draft
+    save cannot express on its own: duplicating mints a fresh stable bay ID
+    (the copy is a new bay, not a second name for the old one) with a plainly
+    unique "… (copy)" name, and renaming changes only the display name while
+    the stable ID — and therefore the bay's identity and history — is kept.
+    Each action records a new draft revision and snapshot like every save.
+    """
+    draft = get_object_or_404(OperationDraft.objects.filter(created_by=request.user), id=draft_id)
+    try:
+        payload = _json_body(request)
+        if not isinstance(payload, dict) or "action" not in payload or payload.keys() - {"action", "bay_id", "name"}:
+            raise ValueError("Provide one bay action.")
+        action = payload["action"]
+        if action not in ("duplicate", "rename"):
+            raise ValueError("Choose the duplicate or rename bay action.")
+        bay_id = payload.get("bay_id")
+        if not isinstance(bay_id, str) or not bay_id:
+            raise ValueError("Choose which bay this action applies to.")
+        index = next((i for i, bay in enumerate(draft.bays or []) if bay["id"] == bay_id), None)
+        if index is None:
+            raise ValueError("Choose a bay that exists on this draft.")
+        if action == "duplicate":
+            if len(draft.bays) + 1 > BAY_COUNT_LIMIT:
+                raise ValueError(f"A draft keeps at most {BAY_COUNT_LIMIT} bays.")
+            source = draft.bays[index]
+            copy = {
+                "id": new_bay_id(),
+                "name": duplicate_bay_name(source["name"], {bay["name"] for bay in draft.bays}),
+                "corners": [list(corner) for corner in source["corners"]],
+            }
+            bays = [*draft.bays, copy]
+            message = f"Duplicated the bay as {copy['name']} with its own new ID."
+        else:
+            name = payload.get("name")
+            if not isinstance(name, str) or not name.strip() or len(name.strip()) > 80:
+                raise ValueError("Name the bay using up to 80 characters.")
+            bays = [
+                {**bay, "name": name.strip()} if bay["id"] == bay_id else bay
+                for bay in draft.bays
+            ]
+            message = "Bay renamed. The ID — and the bay's history — is unchanged."
+        operation_bays(bays)  # the stored shape stays valid after the action
+    except ValueError as error:
+        return _error(str(error))
+    updates = {
+        "bays": bays,
+        # A changed bay list invalidates a kept geometry pin, exactly as a changed
+        # line does; the pin can be re-pinned once the geometry version matches.
+        "geometry_version": None if bays != draft.bays and draft.geometry_version_id else draft.geometry_version_id,
+    }
+    with transaction.atomic():
+        changed = OperationDraft.objects.filter(id=draft.id, revision=draft.revision).update(
+            **updates, revision=F("revision") + 1, updated_at=timezone.now()
+        )
+        if not changed:
+            return _error("This draft changed elsewhere. Reload it before saving.", 409)
+        draft = get_object_or_404(
+            OperationDraft.objects.filter(created_by=request.user)
+            .select_related("operation", "recording", "geometry_version"),
+            id=draft_id,
+        )
+        _record_draft_version(draft)
+    return _no_store(JsonResponse({"draft": _data(draft), "message": message}))
 
 
 @access(POST="label")

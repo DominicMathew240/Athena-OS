@@ -9,7 +9,9 @@
    Shape of one overlay object:
      { id: string, label: string, kind: "line", start: [x, y], end: [x, y], positive_label, negative_label }
    The line is drawn exactly like the draft line editor draws it (two end dots, a stroke and a normal
-   arrow naming the positive side), so the same geometry looks the same wherever it is shown. */
+   arrow naming the positive side), so the same geometry looks the same wherever it is shown.
+   Bays (T17) draw as filled polygons:
+     { id: string, label: string, kind: "bay", corners: [[x, y] × 4], name } */
 (() => {
   "use strict";
   window.createReplaySurface = ({ root, video }) => {
@@ -64,11 +66,32 @@
       ctx.beginPath(); ctx.arc(x2, y2, radius, 0, Math.PI * 2); ctx.fill();
     }
 
+    function drawBay(object) {
+      const points = object.corners;
+      if (!Array.isArray(points) || points.length !== 4) return;
+      const radius = Math.max(2, Math.min(canvas.width, canvas.height) * .012);
+      ctx.beginPath();
+      points.forEach((point, index) => {
+        const x = point[0] * canvas.width, y = point[1] * canvas.height;
+        if (index === 0) ctx.moveTo(x, y);
+        else ctx.lineTo(x, y);
+      });
+      ctx.closePath();
+      ctx.fillStyle = "rgba(127, 209, 192, .25)";
+      ctx.fill();
+      ctx.lineWidth = Math.max(3, radius * 2); ctx.strokeStyle = "#101820"; ctx.stroke();
+      ctx.setLineDash([radius * 2, radius]);
+      ctx.lineWidth = Math.max(1.5, radius); ctx.strokeStyle = "#ffffff"; ctx.stroke();
+      ctx.setLineDash([]);
+    }
+
     function paint() {
       fit();
       ctx.clearRect(0, 0, canvas.width, canvas.height);
       for (const object of objects) {
-        if (hidden.has(object.id) || !Array.isArray(object.start) || !Array.isArray(object.end)) continue;
+        if (hidden.has(object.id)) continue;
+        if (object.kind === "bay") { drawBay(object); continue; }
+        if (!Array.isArray(object.start) || !Array.isArray(object.end)) continue;
         drawLine(object);
       }
       /* Reference marks: one small tick per saved reference event, drawn at the marked height so

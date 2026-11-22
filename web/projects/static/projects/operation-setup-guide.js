@@ -17,6 +17,7 @@
     outcome: ["draft-section"],
     recording: ["recording-section"],
     line: ["line-section"],
+    bays: ["bay-section"],
     operation: ["operation-setup"],
     versions: ["pin-section", "creator-section"],
     release: ["release-section", "preflight-section"]
@@ -40,8 +41,16 @@
     {
       id: "line", label: "Line",
       done: d => !!d?.line,
-      next: d => d?.line ? "Counting line saved — continue to the operation." : "Mark the counting line on the recording.",
+      next: d => d?.line ? "Counting line saved — continue to the bays." : "Mark the counting line on the recording.",
       focus: () => "#line-canvas"
+    },
+    {
+      id: "bays", label: "Bays", optional: true,
+      done: d => (d?.bays?.length ?? 0) > 0,
+      next: d => (d?.bays?.length ?? 0) > 0
+        ? "Bays saved — continue to the operation."
+        : "Draw the bays on the recording, or continue without bays — they are optional.",
+      focus: () => "#bay-canvas"
     },
     {
       id: "operation", label: "Operation",
@@ -71,7 +80,7 @@
   let autoSelected = false;  // one reload-resume attempt per page load
   let resuming = false;      // the guide itself re-opened the saved draft (reload resume)
 
-  const editorControlled = id => id === "recording-section" || id === "line-section";
+  const editorControlled = id => id === "recording-section" || id === "line-section" || id === "bay-section";
 
   function enforceVisibility() {
     const show = new Set(SECTIONS[stepId] || []);
@@ -89,14 +98,16 @@
   }
 
   function allDoneUpTo(index) {
-    return STEPS.slice(0, index + 1).every(s => s.done(draft));
+    // Optional steps never gate the ones after them: an operation without bays
+    // still reaches its operation and version steps.
+    return STEPS.slice(0, index + 1).every(s => s.optional || s.done(draft));
   }
 
   function render() {
     const current = STEPS.find(s => s.id === stepId) || STEPS[0];
     stepId = current.id;
     enforceVisibility();
-    const complete = STEPS.every(s => s.done(draft));
+    const complete = STEPS.every(s => s.optional || s.done(draft));
     stepsBox.replaceChildren();
     for (const step of STEPS) {
       const isCurrent = step.id === current.id;
@@ -137,7 +148,7 @@
       advance.textContent = "Exit setup";
       advance.dataset.testid = "guide-finish";
       advance.addEventListener("click", turnOff);
-    } else if (current.done(draft) && nextStep) {
+    } else if ((current.done(draft) || current.optional) && nextStep) {
       advance.textContent = `Continue to ${nextStep.label}`;
       advance.dataset.testid = "guide-continue";
       advance.addEventListener("click", () => go(nextStep.id));

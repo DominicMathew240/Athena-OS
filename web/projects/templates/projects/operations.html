@@ -128,6 +128,76 @@
     <button class="a-btn" id="line-clear" type="button" data-needs="label">Clear line</button>
   </div>
 </section>
+<section class="a-card step" id="bay-section" aria-labelledby="bay-heading" hidden>
+  <h2 class="a-h2" id="bay-heading">Draw and name bays</h2>
+  <p class="a-help">A bay is one named four-corner area on the same picture, like one parking space. Add a bay, set its four corners as percentages from the top-left corner, and name it — the name is yours to change later; a bay's identity is its stable ID, so renaming a bay never loses its history. An outline that crosses itself ("a bowtie") is refused — a bay's outline must not overlap itself — and corners always stay inside the picture.</p>
+  <div class="line-fields">
+    <div class="a-field"><label class="a-label" for="bay-name">Bay name</label><input class="a-input" id="bay-name" maxlength="80" data-needs="label" placeholder="e.g. Bay 1"></div>
+  </div>
+  <button class="a-btn" id="bay-frame" type="button" data-needs="label">Use current video frame</button>
+  <canvas id="bay-canvas" class="line-canvas" width="640" height="360" tabindex="0" role="img" aria-label="Video frame for choosing a bay's four corners. Drag a corner to move it, focus this picture and use the arrow keys to move the chosen corner, or type positions into the fields below. The bays' state is always written out in the text summary further down."></canvas>
+  <div class="bay-actions">
+    <button class="a-btn" id="bay-add" type="button" data-needs="label" data-testid="bay-add">Add a bay</button>
+    <button class="a-btn" id="bay-remove" type="button" data-needs="label" data-testid="bay-remove">Remove this bay</button>
+    <button class="a-btn" id="bay-duplicate" type="button" data-needs="label" data-testid="bay-duplicate">Duplicate this bay</button>
+    <button class="a-btn" id="bay-rename" type="button" data-needs="label" data-testid="bay-rename">Apply the name above</button>
+  </div>
+  <div class="line-fields">
+    <div class="a-field"><label class="a-label" for="bay-corner-0-x">Corner 1: left to right (%)</label><input class="a-input" type="number" id="bay-corner-0-x" min="0" max="100" step="any" data-needs="label" aria-describedby="bay-summary"></div>
+    <div class="a-field"><label class="a-label" for="bay-corner-0-y">Corner 1: top to bottom (%)</label><input class="a-input" type="number" id="bay-corner-0-y" min="0" max="100" step="any" data-needs="label" aria-describedby="bay-summary"></div>
+    <div class="a-field"><label class="a-label" for="bay-corner-1-x">Corner 2: left to right (%)</label><input class="a-input" type="number" id="bay-corner-1-x" min="0" max="100" step="any" data-needs="label" aria-describedby="bay-summary"></div>
+    <div class="a-field"><label class="a-label" for="bay-corner-1-y">Corner 2: top to bottom (%)</label><input class="a-input" type="number" id="bay-corner-1-y" min="0" max="100" step="any" data-needs="label" aria-describedby="bay-summary"></div>
+    <div class="a-field"><label class="a-label" for="bay-corner-2-x">Corner 3: left to right (%)</label><input class="a-input" type="number" id="bay-corner-2-x" min="0" max="100" step="any" data-needs="label" aria-describedby="bay-summary"></div>
+    <div class="a-field"><label class="a-label" for="bay-corner-2-y">Corner 3: top to bottom (%)</label><input class="a-input" type="number" id="bay-corner-2-y" min="0" max="100" step="any" data-needs="label" aria-describedby="bay-summary"></div>
+    <div class="a-field"><label class="a-label" for="bay-corner-3-x">Corner 4: left to right (%)</label><input class="a-input" type="number" id="bay-corner-3-x" min="0" max="100" step="any" data-needs="label" aria-describedby="bay-summary"></div>
+    <div class="a-field"><label class="a-label" for="bay-corner-3-y">Corner 4: top to bottom (%)</label><input class="a-input" type="number" id="bay-corner-3-y" min="0" max="100" step="any" data-needs="label" aria-describedby="bay-summary"></div>
+  </div>
+  <div class="line-nudge" id="bay-nudge" aria-labelledby="bay-nudge-heading">
+    <h3 class="a-h3" id="bay-nudge-heading">Move the corners with the keyboard</h3>
+    <p class="a-help">First choose a corner with its buttons, then move it with the four arrow buttons: one press is a fine step of 0.001 of the picture, and holding Shift makes it a coarse step of 0.01. The corner never leaves the picture, so a step that would cross an edge is held at that edge. Arrow keys also work directly in the position fields. Dragging a corner is never required.</p>
+    <div class="line-nudge-point">
+      <span class="a-label" id="bay-select-label">Bay to edit</span>
+      <select class="a-input" id="bay-select" data-needs="label" aria-labelledby="bay-select-label"></select>
+    </div>
+    <div class="line-nudge-point">
+      <span class="a-label" id="bay-nudge-point-label">Corner to move</span>
+      <div class="line-nudge-buttons" role="group" aria-labelledby="bay-nudge-point-label">
+        <button class="a-btn" id="bay-select-corner-0" type="button" aria-pressed="false" data-testid="bay-select-corner-0">Corner 1</button>
+        <button class="a-btn" id="bay-select-corner-1" type="button" aria-pressed="false" data-testid="bay-select-corner-1">Corner 2</button>
+        <button class="a-btn" id="bay-select-corner-2" type="button" aria-pressed="false" data-testid="bay-select-corner-2">Corner 3</button>
+        <button class="a-btn" id="bay-select-corner-3" type="button" aria-pressed="false" data-testid="bay-select-corner-3">Corner 4</button>
+      </div>
+    </div>
+    <div class="line-nudge-move">
+      <span class="a-label" id="bay-nudge-move-label">Move the chosen corner</span>
+      <div class="line-nudge-buttons" role="group" aria-labelledby="bay-nudge-move-label">
+        <button class="a-btn" id="bay-move-left" type="button" data-testid="bay-move-left">Left</button>
+        <button class="a-btn" id="bay-move-right" type="button" data-testid="bay-move-right">Right</button>
+        <button class="a-btn" id="bay-move-up" type="button" data-testid="bay-move-up">Up</button>
+        <button class="a-btn" id="bay-move-down" type="button" data-testid="bay-move-down">Down</button>
+      </div>
+    </div>
+  </div>
+  <div class="line-history" id="bay-history" aria-labelledby="bay-history-heading">
+    <h3 class="a-h3" id="bay-history-heading">Undo and redo</h3>
+    <p class="a-help">Undo steps back through this session's corner moves, additions, removals, duplicates and renames, one change at a time, up to the point where the bays were last saved or loaded. Redo puts a step back. Saving the draft does not erase the session's history, but undo never reaches past the last saved state into older work.</p>
+    <div class="line-history-buttons">
+      <button class="a-btn" id="bay-undo" type="button" data-testid="bay-undo">Undo</button>
+      <button class="a-btn" id="bay-redo" type="button" data-testid="bay-redo">Redo</button>
+    </div>
+  </div>
+  <div class="line-summary" id="bay-summary-box" aria-labelledby="bay-summary-heading">
+    <h3 class="a-h3" id="bay-summary-heading">The bays as text</h3>
+    <p class="a-help">The same geometry as above, written out: nothing here depends on colour or on the picture.</p>
+    <p id="bay-summary" class="line-summary-text" role="status" aria-live="polite" data-testid="bay-summary"></p>
+  </div>
+  <p id="bay-status" class="a-help" role="status" aria-live="polite"></p>
+  <p id="bay-error" class="a-error" role="alert"></p>
+  <div class="line-actions">
+    <button class="a-btn a-btn--primary" id="bay-save" type="button" data-needs="label" data-testid="bay-save">Save draft and bays</button>
+    <button class="a-btn" id="bay-clear" type="button" data-needs="label">Clear bays</button>
+  </div>
+</section>
 <section class="section" aria-labelledby="draft-list-heading">
   <h2 class="a-h2" id="draft-list-heading">Your saved drafts</h2>
   <p id="draft-list-status" role="status">Loading drafts…</p>
@@ -220,4 +290,4 @@
   <div id="view-health-sources"></div>
 </section>
 {% endblock %}
-{% block scripts %}<script src="{% static 'projects/replay-surface.js' %}"></script><script src="{% static 'projects/operation-line.js' %}"></script><script src="{% static 'projects/operation-drafts.js' %}"></script><script src="{% static 'projects/operation-versions.js' %}"></script><script src="{% static 'projects/operation-setup-guide.js' %}"></script><script src="{% static 'projects/operation-preflight.js' %}"></script><script src="{% static 'projects/view-health.js' %}"></script>{% endblock %}
+{% block scripts %}<script src="{% static 'projects/replay-surface.js' %}"></script><script src="{% static 'projects/operation-bays-util.js' %}"></script><script src="{% static 'projects/operation-line.js' %}"></script><script src="{% static 'projects/operation-bays.js' %}"></script><script src="{% static 'projects/operation-drafts.js' %}"></script><script src="{% static 'projects/operation-versions.js' %}"></script><script src="{% static 'projects/operation-setup-guide.js' %}"></script><script src="{% static 'projects/operation-preflight.js' %}"></script><script src="{% static 'projects/view-health.js' %}"></script>{% endblock %}

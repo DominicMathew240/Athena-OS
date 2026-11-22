@@ -28,6 +28,9 @@
 .line-nudge-buttons .a-btn[aria-pressed="true"]::after { content: " (chosen)"; font-weight: 400; font-size: 13px; }
 .line-summary-text { margin: .5rem 0 0; padding: .6rem .75rem; border-left: 3px solid var(--c-accent); border-radius: .4rem; background: var(--c-surface-2); overflow-wrap: anywhere; }
 .line-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+/* Polygon bays (T17): the same editing idioms as the line, one action row for
+   the bay list operations. */
+.bay-actions { display: flex; flex-wrap: wrap; gap: .5rem; margin: .75rem 0; }
 .reference-event-actions { display: flex; flex-wrap: wrap; gap: .5rem; }
 #reference-event-list { display: grid; gap: .5rem; padding-left: 1.5rem; }
 #reference-event-list li { display: flex; align-items: center; justify-content: space-between; gap: .75rem; }

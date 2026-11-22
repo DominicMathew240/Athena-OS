@@ -53,6 +53,7 @@ def operation_recording(request, draft_id):
                 revision=F("revision") + 1,
                 updated_at=timezone.now(),
                 line=None,
+                bays=[],
                 reference_events=[],
                 geometry_version=None,
             )
@@ -77,7 +78,7 @@ def operation_recording(request, draft_id):
     try:
         with transaction.atomic():
             changed = rows.filter(revision=revision, recording__isnull=True).update(
-                revision=F("revision") + 1, updated_at=timezone.now(), line=None, geometry_version=None
+                revision=F("revision") + 1, updated_at=timezone.now(), line=None, bays=[], geometry_version=None
             )
             if changed:
                 OperationRecording.objects.create(

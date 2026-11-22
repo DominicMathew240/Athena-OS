@@ -1196,6 +1196,13 @@ class OperationDraft(models.Model):
     operation = models.ForeignKey("Operation", null=True, blank=True, on_delete=models.PROTECT, related_name="drafts")
     name = models.CharField(max_length=120)
     line = models.JSONField(null=True, blank=True)
+    # Named four-corner bays (T17). Each bay carries a stable UUID chosen once at
+    # creation, so a rename keeps its identity and history; the name is display text.
+    bays = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Named four-corner bays, each with a stable ID so renaming keeps its identity.",
+    )
     reference_events = models.JSONField(default=list)
     # The component versions this draft currently builds on. Pins are recorded per revision
     # into the draft-version snapshot; they are configuration references, not a release.
