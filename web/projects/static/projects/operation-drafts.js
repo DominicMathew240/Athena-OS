@@ -42,6 +42,13 @@
     canEdit: () => !busy && window.Athena.can("label"),
     onSave: () => form.requestSubmit()
   });
+  /* The bay editor (T17) shares the recording and the save form with the line
+     editor: bays and the line are one geometry on one picture. */
+  const bayEditor = window.createOperationBayEditor({
+    video: recordingPreview,
+    canEdit: () => !busy && window.Athena.can("label"),
+    onSave: () => form.requestSubmit()
+  });
   function renderReferenceEvents() {
     const line = (() => { try { return lineEditor.read(); } catch (_) { return null; } })();
     const positive = line?.positive_label || "towards the arrow";
@@ -72,11 +79,11 @@
       ? `${referenceEvents.length} manually marked ${referenceEvents.length === 1 ? "crossing" : "crossings"}. Save the draft to keep them.`
       : "No reference crossings marked.";
   }
-  const setBusy = value => { busy = value; lineEditor.setBusy(value); renderReferenceEvents(); };
+  const setBusy = value => { busy = value; lineEditor.setBusy(value); if (bayEditor) bayEditor.setBusy(value); renderReferenceEvents(); };
   const dirty = () => name.value !== savedName || recordingFile.files.length > 0
-    || lineEditor.dirty() || JSON.stringify(referenceEvents) !== savedReferenceEvents;
+    || lineEditor.dirty() || (bayEditor ? bayEditor.dirty() : false) || JSON.stringify(referenceEvents) !== savedReferenceEvents;
   const mayLeave = () => !dirty() ? Promise.resolve(true) : window.Athena.askConfirm({
-    title: "Discard unsaved changes?", message: "Your name, line or selected recording has not been saved.",
+    title: "Discard unsaved changes?", message: "Your name, line, bays or selected recording has not been saved.",
     keepLabel: "Keep editing", confirmLabel: "Discard changes"
   });
 
@@ -85,10 +92,15 @@
      until it is saved. Reference marks draw as vertical ticks at their saved times on the scrub bar. */
   function syncReplay(draft) {
     const line = draft?.line;
-    replay.show(
-      line ? [{ id: "line", label: `${line.name} — ${line.positive_label} / ${line.negative_label} line`, kind: "line", start: line.start, end: line.end, name: line.name, positive_label: line.positive_label, negative_label: line.negative_label }] : [],
-      draft?.reference_events || []
-    );
+    const bays = draft?.bays || [];
+    const objects = [];
+    if (line) {
+      objects.push({ id: "line", label: `${line.name} — ${line.positive_label} / ${line.negative_label} line`, kind: "line", start: line.start, end: line.end, name: line.name, positive_label: line.positive_label, negative_label: line.negative_label });
+    }
+    for (const bay of bays) {
+      objects.push({ id: `bay-${bay.id}`, label: `${bay.name} — bay`, kind: "bay", corners: bay.corners, name: bay.name });
+    }
+    replay.show(objects, draft?.reference_events || []);
   }
 
   function showDraft(draft, keepFile = false) {
@@ -111,6 +123,7 @@
       recordingPreview.load();
     }
     lineEditor.load(draft);
+    if (bayEditor) bayEditor.load(draft);
     referenceEvents = (draft?.reference_events || []).map(event => ({ time: Number(event.time), direction: event.direction }));
     savedReferenceEvents = JSON.stringify(referenceEvents);
     renderReferenceEvents();
@@ -119,6 +132,18 @@
     error.textContent = "";
     document.dispatchEvent(new CustomEvent("athena:draft-shown", { detail: draft }));
   }
+
+  /* Duplicate/rename persist on the server and reload only the bay editor.
+     Adopt the saved revision and overlay without reloading name, line, or
+     reference editors, so unrelated unsaved edits stay and the next Save
+     draft does not send a stale revision. Do not re-emit: versions already
+     announces this event after pin/attach. */
+  function adoptPersistedDraft(draft) {
+    if (!draft || !current || current.id !== draft.id) return;
+    current = draft;
+    syncReplay(draft);
+  }
+  document.addEventListener("athena:draft-updated", event => adoptPersistedDraft(event.detail));
 
   async function loadList() {
     try {
@@ -156,6 +181,9 @@
     let line;
     try { line = lineEditor.read(); lineEditor.setError(""); }
     catch (problem) { lineEditor.setError(problem.message); return; }
+    let bays;
+    try { bays = bayEditor ? bayEditor.read() : (current?.bays || []); if (bayEditor) bayEditor.setError(""); }
+    catch (problem) { if (bayEditor) bayEditor.setError(problem.message); return; }
     /* Field-order-independent copy of the editor's line, for comparing against the
      saved one; both sides of the comparison come from read()/the server, which
      produce the same five keys. */
@@ -169,8 +197,9 @@
     name.disabled = true;
     error.textContent = "";
     status.textContent = "Saving…";
-    const payload = { name: name.value, line, reference_events: referenceEventsInvalidated ? [] : referenceEvents };
+    const payload = { name: name.value, line, bays, reference_events: referenceEventsInvalidated ? [] : referenceEvents };
     if (current) payload.revision = current.revision;
+    let savedDraft = false;
     try {
       const result = await api(current ? `/api/operation-drafts/${current.id}` : "/api/operation-drafts", {
         method: current ? "PUT" : "POST", json: payload
@@ -178,12 +207,17 @@
       showDraft(result.draft, true);
       document.dispatchEvent(new CustomEvent("athena:draft-saved", { detail: result.draft }));
       if (referenceEventsInvalidated) status.textContent = "Line changed; the old reference crossings were cleared. Mark them again against the saved line.";
-      await loadList();
+      savedDraft = true;
     } catch (problem) {
       status.textContent = "Not saved. Your changes are still here.";
       error.textContent = problem.message;
       lineEditor.setError(problem.message);
+      if (bayEditor) bayEditor.setError(problem.message);
     } finally { setBusy(false); save.disabled = false; name.disabled = false; }
+    /* Refresh the sidebar after busy clears: holding busy through loadList made
+       Upload recording ignore keyboard Enter with no message, because that
+       button stays enabled while Save draft does not. */
+    if (savedDraft) await loadList();
   });
 
   start.addEventListener("click", async () => {
@@ -229,10 +263,10 @@
   recordingDelete.addEventListener("click", async () => {
     if (busy || !current?.recording) return;
     recordingError.textContent = "";
-    if (name.value !== savedName || lineEditor.dirty()) { recordingError.textContent = "Save the draft and line before removing the recording."; return; }
+    if (name.value !== savedName || lineEditor.dirty() || (bayEditor ? bayEditor.dirty() : false)) { recordingError.textContent = "Save the draft, line and bays before removing the recording."; return; }
     setBusy(true);
     try {
-      const accepted = await window.Athena.askConfirm({ title: "Remove recording?", message: "This also clears any line saved for this view.", keepLabel: "Keep recording", confirmLabel: "Remove recording" });
+      const accepted = await window.Athena.askConfirm({ title: "Remove recording?", message: "This also clears any line and bays saved for this view.", keepLabel: "Keep recording", confirmLabel: "Remove recording" });
       if (!accepted) return;
       name.disabled = true;
       const result = await api(`/api/operation-drafts/${current.id}/recording`, { method: "DELETE", json: { revision: current.revision } });

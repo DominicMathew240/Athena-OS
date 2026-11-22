@@ -265,7 +265,7 @@
     button.addEventListener("click", () => guarded(async () => {
       if (!select.value) throw new Error("Choose an operation to attach this draft to.");
       const payload = {
-        name: draft.name, line: draft.line, reference_events: draft.reference_events,
+        name: draft.name, line: draft.line, bays: draft.bays || [], reference_events: draft.reference_events,
         revision: draft.revision, operation_id: select.value
       };
       const result = await api(`/api/operation-drafts/${draft.id}`, { method: "PUT", json: payload });
@@ -306,9 +306,11 @@
     const versions = operationVersions[draft.operation_id]
       || { source_views: [], geometry: [], recipes: [], policies: [], model_bindings: [], screens: [] };
     const line = draft.line;
+    const bays = draft.bays || [];
     const geometryChoices = versions.geometry
       .filter(g => !line || JSON.stringify(g.geometry.line) === JSON.stringify(line))
-      .map(g => ({ id: g.id, label: `Version ${g.version} of this line` }));
+      .filter(g => JSON.stringify(g.geometry.bays || []) === JSON.stringify(bays))
+      .map(g => ({ id: g.id, label: `Version ${g.version} of this line and its ${g.geometry.bays?.length || 0} ${g.geometry.bays?.length === 1 ? "bay" : "bays"}` }));
     const pins = [
       ["geometry", "Counting-line version", draft.pins.geometry_version_id, geometryChoices, "No frozen version of this exact line yet. Save the line on the draft, then freeze it below."],
       ["recipe", "Counting rules", draft.pins.recipe_version_id, versions.recipes.map(r => ({ id: r.id, label: `Version ${r.version}` })), "No counting rules frozen yet. Create them below."],
@@ -331,7 +333,7 @@
     const chosen = select.dataset.empty === "1" ? null : select.value === "" ? undefined : select.value === "none" ? null : select.value;
     if (chosen === undefined) return;
     const payload = {
-      name: draft.name, line: draft.line, reference_events: draft.reference_events,
+      name: draft.name, line: draft.line, bays: draft.bays || [], reference_events: draft.reference_events,
       revision: draft.revision, [field]: chosen
     };
     await guarded(async () => {
@@ -393,9 +395,9 @@
         formRow("Orientation", rotation), flips, button);
     }));
 
-    box.append(creatorCard("create-geometry", "Freeze the counting line", "A frozen line is this exact line kept forever. Freeze it after saving the line on the draft, so later analysis counts crossings of the same line.", body => {
+    box.append(creatorCard("create-geometry", "Freeze the counting line and bays", "A frozen version is this exact line and bay list kept forever. Freeze it after saving them on the draft, so later analysis uses the same geometry.", body => {
       if (!draft.line) {
-        body.append(el("p", { class: "a-help", text: "Save a counting line on the draft first; then it can be frozen here." }));
+        body.append(el("p", { class: "a-help", text: "Save a counting line on the draft first; then it can be frozen here. The draft's bays are frozen with it." }));
         return;
       }
       const views = versions.source_views;
@@ -403,18 +405,22 @@
         ? el("select", { class: "a-input", id: "geometry-view", "data-needs": "label" },
           ...views.map(v => option(v.id, `View version ${v.version} (${v.configuration.width}×${v.configuration.height})`)))
         : null;
-      const button = gate(el("button", { class: "a-btn", type: "button", text: "Freeze this line", "data-testid": "create-geometry" }), "label");
+      const button = gate(el("button", { class: "a-btn", type: "button", text: "Freeze this geometry", "data-testid": "create-geometry" }), "label");
       button.addEventListener("click", () => guarded(async () => {
-        if (!select || !select.value) throw new Error("Freeze the camera view first; the counting line is stored against it.");
+        if (!select || !select.value) throw new Error("Freeze the camera view first; the geometry is stored against it.");
         await api(`/api/operations/${draft.operation_id}/geometry-versions`, {
-          method: "POST", json: { source_view_version_id: select.value, geometry: { line: draft.line } }
+          method: "POST", json: { source_view_version_id: select.value, geometry: { line: draft.line, bays: draft.bays || [] } }
         });
         await refreshVersions();
-        areas.creators.note.textContent = "Counting line frozen. Pin it on the draft above to use it.";
-      }, "Freezing the line…", areas.creators));
-      const summary = `The line saved on this draft will be frozen exactly as marked: from ${Math.round(draft.line.start[0] * 100)}%, ${Math.round(draft.line.start[1] * 100)}% to ${Math.round(draft.line.end[0] * 100)}%, ${Math.round(draft.line.end[1] * 100)}%, naming movement "${draft.line.positive_label}" and "${draft.line.negative_label}".`;
+        areas.creators.note.textContent = "Geometry frozen. Pin it on the draft above to use it.";
+      }, "Freezing the geometry…", areas.creators));
+      const bays = draft.bays || [];
+      const summary = `The line saved on this draft will be frozen exactly as marked: from ${Math.round(draft.line.start[0] * 100)}%, ${Math.round(draft.line.start[1] * 100)}% to ${Math.round(draft.line.end[0] * 100)}%, ${Math.round(draft.line.end[1] * 100)}%, naming movement "${draft.line.positive_label}" and "${draft.line.negative_label}"`
+        + (bays.length
+          ? `, together with ${bays.length} named ${bays.length === 1 ? "bay" : "bays"} (${bays.map(b => b.name).join(", ")}), each keeping its stable ID.`
+          : ", with no bays.");
       body.append(
-        select ? formRow("Frozen against view", select) : el("p", { class: "a-help", text: "Freeze the camera view first; the counting line is stored against it." }),
+        select ? formRow("Frozen against view", select) : el("p", { class: "a-help", text: "Freeze the camera view first; the geometry is stored against it." }),
         el("p", { class: "a-help", text: summary }),
         button);
     }));
@@ -819,6 +825,7 @@
      Pin and attach saves change the draft too, so their results are announced the
      same way for anything watching (the guided setup re-reads state from them). */
   document.addEventListener("athena:draft-shown", event => setDraft(event.detail));
+  document.addEventListener("athena:draft-updated", event => setDraft(event.detail));
   const announceDraft = draft => document.dispatchEvent(new CustomEvent("athena:draft-updated", { detail: draft }));
 
   window.addEventListener("beforeunload", event => {

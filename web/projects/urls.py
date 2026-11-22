@@ -43,6 +43,13 @@ urlpatterns = [
         operation_views.operation_draft_versions,
         name="operation-draft-versions",
     ),
+    # Named single-purpose bay actions (T17): duplicate mints a fresh stable ID,
+    # rename keeps the ID. A plain draft save carries corner edits and add/remove.
+    path(
+        "api/operation-drafts/<uuid:draft_id>/bays/actions",
+        operation_views.operation_draft_bay_actions,
+        name="operation-draft-bay-actions",
+    ),
     path("api/operation-sites", operation_views.operation_sites, name="operation-sites"),
     path("api/operation-sources", operation_views.operation_sources, name="operation-sources"),
     path(

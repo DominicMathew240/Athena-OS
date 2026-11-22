@@ -123,10 +123,10 @@ def remap_change_reason(old_configuration: dict, new_configuration: dict) -> str
         return (
             "The new view has different pixel dimensions "
             f"({old['width']}\u00d7{old['height']} to {new['width']}\u00d7{new['height']}); "
-            "redraw the line on the new view."
+            "redraw the line and bays on the new view."
         )
     if not _is_exact_step(old["rotation"], new["rotation"]):
-        return "Only 90-degree rotation steps can be remapped; redraw the line on the new view."
+        return "Only 90-degree rotation steps can be remapped; redraw the line and bays on the new view."
     return None
 
 

@@ -557,6 +557,7 @@ class EveryRouteDeclaresItsRole(RoleBase):
         "api/operation-drafts/<uuid:draft_id>": {"PUT": LABEL, "DELETE": LABEL},
         "api/operation-preflight": {},
         "api/operation-drafts/<uuid:draft_id>/versions": {},
+        "api/operation-drafts/<uuid:draft_id>/bays/actions": {"POST": LABEL},
         "api/operation-sites": {"POST": LABEL},
         "api/operation-sources": {"POST": LABEL},
         "api/operation-sources/<uuid:source_id>/credential": {"PUT": LABEL, "DELETE": LABEL},
