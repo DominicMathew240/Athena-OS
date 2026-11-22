@@ -12,16 +12,36 @@ live counting or operator boards are complete.
 
 from __future__ import annotations
 
+import hashlib
+import json
 from datetime import timedelta
+from pathlib import Path
 from unittest import skipUnless
+from unittest.mock import patch
 
+from django.conf import settings
 from django.test import SimpleTestCase
 from django.utils import timezone
 
-from .models import OperationEvent, OperationExecution
+from .models import (
+    DatasetVersion,
+    GeometryVersion,
+    ModelVersion,
+    OperationDraft,
+    OperationEvent,
+    OperationExecution,
+    OperationModelBinding,
+    OperationReleaseBundle,
+    Project,
+    RecipeVersion,
+    SourceViewVersion,
+    TrainingRun,
+)
 from .operations import crossings, executions, ledger
+from .operations.inference import AdapterReport, FrameDetections
 from .operations.tracking import Track, TrackObservation
-from .tests_t19_durable import DurableExecutionBase, REQUIRE_FFMPEG
+from .source_time import Frame, FrameTimeline, Session
+from .tests_t19_durable import REQUIRE_FFMPEG, DurableExecutionBase
 
 
 def _obs(pts: float, x: float, y: float, *, size: float = 0.1, frame_index: int | None = None) -> TrackObservation:
@@ -314,3 +334,182 @@ class DetectorCrossingLeaseFencingTests(DurableExecutionBase):
             ).count(),
             1,
         )
+
+
+class WorkerCrossingIntegrationTests(DurableExecutionBase):
+    """Controlled detector frames traverse the real worker-to-ledger path."""
+
+    def _pin_detector_and_geometry(self) -> None:
+        project = Project.objects.create(
+            name="T25 Counting", modality="image", task="Detect", labels=["person"]
+        )
+        dataset = DatasetVersion.objects.create(
+            project=project,
+            version=1,
+            created_by=self.user,
+            manifest={},
+            manifest_sha256="c" * 64,
+            label_names=["person"],
+        )
+        training_run = TrainingRun.objects.create(
+            project=project,
+            dataset_version=dataset,
+            dataset_manifest_sha256="c" * 64,
+            backend="t25-controlled-detector",
+            config={},
+            config_sha256="d" * 64,
+            created_by=self.user,
+        )
+        artifact_rel = f"models/{project.id}/v1/model.bin"
+        artifact_path = Path(settings.DATA_HOME) / artifact_rel
+        artifact_path.parent.mkdir(parents=True, exist_ok=True)
+        artifact_bytes = b"t25-controlled-detector-artifact"
+        artifact_path.write_bytes(artifact_bytes)
+        self.addCleanup(artifact_path.unlink, missing_ok=True)
+        model = ModelVersion.objects.create(
+            project=project,
+            version=1,
+            training_run=training_run,
+            backend="t25-controlled-detector",
+            task=None,
+            artifact_path=artifact_rel,
+            artifact_sha256=hashlib.sha256(artifact_bytes).hexdigest(),
+            artifact_size_bytes=len(artifact_bytes),
+            label_names=["person"],
+            stage=ModelVersion.APPROVED,
+        )
+        binding = OperationModelBinding.objects.create(
+            operation=self.operation,
+            version=1,
+            created_by=self.user,
+            model_version=model,
+            compatibility={"compatible": True, "model_version_id": str(model.id)},
+            compatibility_sha256="b" * 64,
+        )
+        source_view = SourceViewVersion.objects.create(
+            source=self.source,
+            version=1,
+            created_by=self.user,
+            configuration={},
+            configuration_sha256="1" * 64,
+        )
+        geometry = GeometryVersion.objects.create(
+            operation=self.operation,
+            source_view_version=source_view,
+            version=1,
+            created_by=self.user,
+            geometry={"line": {"start": list(LINE_START), "end": list(LINE_END)}},
+            geometry_sha256="2" * 64,
+        )
+        self.geometry = geometry
+        recipe = RecipeVersion.objects.create(
+            operation=self.operation,
+            recipe_key="people_counting",
+            version=1,
+            created_by=self.user,
+            configuration=RECIPE,
+            configuration_sha256="3" * 64,
+        )
+        draft = OperationDraft.objects.create(
+            created_by=self.user, operation=self.operation, name="T25 worker integration"
+        )
+        snapshot = dict(self.bundle.snapshot)
+        pins = dict(snapshot["component_pins"])
+        pins["geometry"] = {
+            "id": str(geometry.id),
+            "version": geometry.version,
+            "sha256": geometry.geometry_sha256,
+        }
+        pins["recipe"] = {
+            "id": str(recipe.id),
+            "version": recipe.version,
+            "recipe_key": recipe.recipe_key,
+            "sha256": recipe.configuration_sha256,
+            "configuration": recipe.configuration,
+        }
+        pins["model"] = {
+            "id": str(binding.id),
+            "version": binding.version,
+            "model_version_id": str(model.id),
+            "sha256": binding.compatibility_sha256,
+        }
+        snapshot["component_pins"] = pins
+        encoded = json.dumps(
+            snapshot, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
+        self.bundle = OperationReleaseBundle.objects.create(
+            operation=self.operation,
+            draft=draft,
+            draft_revision=1,
+            number=OperationReleaseBundle.objects.filter(operation=self.operation).count() + 1,
+            created_by=self.user,
+            snapshot=snapshot,
+            snapshot_sha256=hashlib.sha256(encoded.encode()).hexdigest(),
+        )
+
+    def test_run_execution_commits_crossing_episode_from_pinned_geometry(self) -> None:
+        self._pin_detector_and_geometry()
+        execution = self.enqueue_and_claim("worker-a")
+        centers_y = (0.35, 0.40, 0.45, 0.55, 0.60, 0.65)
+        timeline = FrameTimeline(
+            recording_sha256=self.recording.sha256,
+            gap_threshold_seconds=1.0,
+            captured_at=None,
+            frames=[Frame(i, i / 10, 0.1, None, 1, True) for i in range(len(centers_y))],
+            sessions=[Session(1, 0, 5, 6, 0.0, 0.5, None, None)],
+        )
+        detections = tuple(
+            FrameDetections(
+                frame_index=i,
+                pts=i / 10,
+                session=1,
+                wall_clock=None,
+                detections=(
+                    {
+                        "label": "person",
+                        "x": 0.45,
+                        "y": center_y - 0.05,
+                        "width": 0.1,
+                        "height": 0.1,
+                        "score": 0.9,
+                    },
+                ),
+            )
+            for i, center_y in enumerate(centers_y)
+        )
+        report = AdapterReport(
+            model_version_id=str(
+                execution.bundle.snapshot["component_pins"]["model"]["model_version_id"]
+            ),
+            model_version_number=1,
+            backend="t25-controlled-detector",
+            artifact_sha256="4" * 64,
+            recipe_key="people_counting",
+            expected_labels=("person",),
+            model_labels=("person",),
+            frame_count=len(detections),
+            frames=detections,
+        )
+        with (
+            patch.object(executions, "_recording_digest", return_value=self.recording.sha256),
+            patch.object(executions.source_time, "build_timeline", return_value=timeline),
+            patch.object(executions.inference, "crosscheck_duration", return_value={"ok": True}),
+            patch.object(executions.inference, "run_detector", return_value=report),
+        ):
+            finished = executions.run_execution(execution, "worker-a", heartbeat_seconds=60)
+
+        self.assertEqual(finished.status, OperationExecution.SUCCEEDED, finished.error)
+        self.assertEqual(finished.result["tracks"]["crossing_episode_count"], 1, finished.result["tracks"])
+        rows = OperationEvent.objects.filter(
+            execution=finished, kind=OperationEvent.KIND_DETECTOR
+        )
+        self.assertEqual(rows.count(), 1)
+        row = rows.get()
+        self.assertEqual(row.source, f"recording:{self.recording.id}")
+        self.assertEqual(row.session, 1)
+        self.assertEqual(row.payload["direction"], "negative_to_positive")
+        self.assertEqual(row.payload["track_id"], 1)
+        self.assertAlmostEqual(ledger.unquantize_timestamp(row.timestamp), 0.25)
+        self.assertEqual(row.recording_sha256, self.recording.sha256)
+        self.assertEqual(row.bundle_sha256, finished.bundle_sha256)
+        self.assertEqual(row.geometry_sha256, self.geometry.geometry_sha256)

@@ -10,6 +10,8 @@ from __future__ import annotations
 
 import uuid
 
+from django.contrib.auth import get_user_model
+from django.db import transaction
 from django.http import HttpRequest, JsonResponse
 from django.shortcuts import get_object_or_404
 from django.views.decorators.http import require_http_methods
@@ -68,14 +70,28 @@ def bundle_executions(request: HttpRequest, bundle_id):
         return _error("Choose a recording that belongs to this bundle's source.")
     snapshot = bundle.snapshot or {}
     pins = snapshot.get("component_pins") or {}
-    row = OperationExecution.objects.create(
-        bundle=bundle,
-        recording=recording,
-        created_by=request.user,
-        bundle_sha256=bundle.snapshot_sha256,
-        recording_sha256=recording.sha256,
-        pins=pins,
-    )
+    from .operations.executions import ACTIVE_EXECUTION_STATUSES, execution_queue_limit
+
+    with transaction.atomic():
+        # Serialize same-owner enqueues: lock the persisted user row, then count+create.
+        get_user_model().objects.select_for_update().get(pk=request.user.pk)
+        pending = OperationExecution.objects.filter(
+            created_by_id=request.user.pk,
+            status__in=ACTIVE_EXECUTION_STATUSES,
+        ).count()
+        if pending >= execution_queue_limit():
+            return _error(
+                "Too many operation runs are already queued or running. Wait for one to finish and try again.",
+                429,
+            )
+        row = OperationExecution.objects.create(
+            bundle=bundle,
+            recording=recording,
+            created_by=request.user,
+            bundle_sha256=bundle.snapshot_sha256,
+            recording_sha256=recording.sha256,
+            pins=pins,
+        )
     return _no_store(JsonResponse({"execution": _execution_data(row)}, status=202))
 
 

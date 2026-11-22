@@ -32,7 +32,14 @@ contract. Checkpoint eligibility is irreversible for a run: it starts True only
 after a live opening ``_beat`` and is AND-ed with every subsequent live ``_beat``
 and every ``checkpoint_progress`` write. A lost lease raises ``LeaseLost`` and
 aborts; a failed intermediate checkpoint write freezes later stage evidence
-without inventing gaps.
+without inventing gaps. Owner-scoped enqueue is capped (queued+running) at the
+HTTP boundary so overload cannot look like coverage. A successfully fenced
+abandoned-worker failure exposes a bounded interruption/gap summary (incomplete,
+not resumable, no invented missing-frame counts); ordinary cancel/fail are not
+labeled as worker interruption. After ``timeline_built``, a bounded
+``timeline_coverage`` count record (no gap/session arrays, no invented missing
+frames) is stored and preserved on later stage writes. Live-source/full-frame
+policy is still open.
 """
 
 from __future__ import annotations
@@ -40,12 +47,14 @@ from __future__ import annotations
 import hashlib
 import json
 import logging
+import math
 import os
 import socket
 import threading
 import time
 from datetime import timedelta
 
+from django.conf import settings
 from django.core.files.storage import default_storage
 from django.db import close_old_connections, transaction
 from django.utils import timezone
@@ -73,28 +82,159 @@ STAGE_TIMELINE_BUILT = "timeline_built"
 STAGE_REFERENCE_EVENTS_COMMITTED = "reference_events_committed"
 STAGE_DETECTOR_SAMPLED = "detector_sampled"
 STAGE_TRACKS_ASSOCIATED = "tracks_associated"
-KNOWN_STAGES = frozenset(
-    {
-        STAGE_RECORDING_VERIFIED,
-        STAGE_TIMELINE_BUILT,
-        STAGE_REFERENCE_EVENTS_COMMITTED,
-        STAGE_DETECTOR_SAMPLED,
-        STAGE_TRACKS_ASSOCIATED,
-    }
+STAGE_ORDER = (
+    STAGE_RECORDING_VERIFIED,
+    STAGE_TIMELINE_BUILT,
+    STAGE_REFERENCE_EVENTS_COMMITTED,
+    STAGE_DETECTOR_SAMPLED,
+    STAGE_TRACKS_ASSOCIATED,
 )
+KNOWN_STAGES = frozenset(STAGE_ORDER)
+#: Serialization-only marker: in-memory timeline/detections/tracks are not restored.
+IN_MEMORY_DISCARDED_NOT_RESTORED = "discarded_not_restored"
 #: Explicit recovery flags: empty/legacy rows are unknown; a written checkpoint
 #: never claims the run can resume inference mid-flight.
 RECOVERY_UNKNOWN = "unknown"
 RECOVERY_NOT_RESUMABLE = "not_resumable"
+#: Durable marker written only by a successfully fenced abandoned-worker transition.
+ABANDONED_WORKER_ERROR = "The operation worker stopped before this run finished. Start a new run."
+INTERRUPTION_WORKER_ABANDONED = "worker_abandoned"
+#: Owner-scoped cap on queued+running executions at the HTTP enqueue boundary.
+#: ``settings.TRAINING["OPERATION_EXECUTION_QUEUE_LIMIT"]`` overrides this default.
+DEFAULT_EXECUTION_QUEUE_LIMIT = 50
+ACTIVE_EXECUTION_STATUSES = (OperationExecution.QUEUED, OperationExecution.RUNNING)
+
+
+def execution_queue_limit() -> int:
+    """Queued+running cap per owner. Default 50 when TRAINING has no override."""
+    training = getattr(settings, "TRAINING", None) or {}
+    raw = training.get("OPERATION_EXECUTION_QUEUE_LIMIT", DEFAULT_EXECUTION_QUEUE_LIMIT)
+    try:
+        limit = int(raw)
+    except (TypeError, ValueError):
+        return DEFAULT_EXECUTION_QUEUE_LIMIT
+    if limit < 1:
+        return DEFAULT_EXECUTION_QUEUE_LIMIT
+    return limit
 
 
 class CheckpointError(ValueError):
-    """A checkpoint refusal (unknown stage, oversized or non-JSON effects)."""
+    """A checkpoint refusal (unknown stage, oversized or non-JSON effects/coverage)."""
 
 
 def worker_key() -> str:
     """A stable, plain key identifying this worker process in leases and logs."""
     return f"{socket.gethostname()}:{os.getpid()}"
+
+
+def _worker_interruption_summary(*, completed_stages: list | None = None) -> dict:
+    """Bounded interruption: incomplete, not resumable, known unprocessed stages. No frame counts.
+
+    Derived at serialization time. In-memory timeline/detections/tracks from the
+    interrupted worker are discarded and not restored.
+    """
+    completed = set(completed_stages or [])
+    return {
+        "kind": INTERRUPTION_WORKER_ABANDONED,
+        "incomplete": True,
+        "resumable": False,
+        "unprocessed_stages": [stage for stage in STAGE_ORDER if stage not in completed],
+        "in_memory_timeline_detections_tracks": IN_MEMORY_DISCARDED_NOT_RESTORED,
+    }
+
+
+def is_abandoned_worker_failure(execution: OperationExecution) -> bool:
+    """True only for the fenced abandoned-worker failure (exact error, empty result)."""
+    return (
+        execution.status == OperationExecution.FAILED
+        and (execution.error or "") == ABANDONED_WORKER_ERROR
+        and not (execution.result or {})
+    )
+
+
+_TIMELINE_COVERAGE_KEYS = (
+    "gap_threshold_seconds",
+    "gap_count",
+    "jitter_count",
+    "late_frame_count",
+    "session_count",
+    "frame_count",
+    "timeline_sha256",
+)
+_TIMELINE_COVERAGE_KEY_SET = frozenset(_TIMELINE_COVERAGE_KEYS)
+_TIMELINE_COVERAGE_COUNT_KEYS = (
+    "gap_count",
+    "jitter_count",
+    "late_frame_count",
+    "session_count",
+    "frame_count",
+)
+_SHA256_HEX_CHARS = frozenset("0123456789abcdef")
+
+
+def _timeline_coverage_record(timeline) -> dict:
+    """Bounded T20 coverage counts from ``timeline.summary()``. No gap/session arrays."""
+    summary = timeline.summary()
+    return {
+        "gap_threshold_seconds": summary["gap_threshold_seconds"],
+        "gap_count": len(summary.get("gaps") or []),
+        "jitter_count": summary["jitter_count"],
+        "late_frame_count": summary["late_frame_count"],
+        "session_count": len(summary.get("sessions") or []),
+        "frame_count": summary["frame_count"],
+        "timeline_sha256": timeline.timeline_sha256(),
+    }
+
+
+def _normalized_timeline_coverage(record) -> dict:
+    """Accept only the scalar coverage key set; return a fresh dict or raise."""
+    if not isinstance(record, dict):
+        raise CheckpointError("Checkpoint timeline coverage must be a JSON object.")
+    if frozenset(record) != _TIMELINE_COVERAGE_KEY_SET:
+        raise CheckpointError("Checkpoint timeline coverage must be a bounded scalar record.")
+    threshold = record["gap_threshold_seconds"]
+    try:
+        finite_threshold = math.isfinite(threshold)
+    except (OverflowError, TypeError, ValueError):
+        finite_threshold = False
+    if (
+        isinstance(threshold, bool)
+        or not isinstance(threshold, (int, float))
+        or not finite_threshold
+        or threshold < 0
+    ):
+        raise CheckpointError("Checkpoint timeline coverage must be a bounded scalar record.")
+    sha = record["timeline_sha256"]
+    if (
+        not isinstance(sha, str)
+        or len(sha) != 64
+        or any(char not in _SHA256_HEX_CHARS for char in sha)
+    ):
+        raise CheckpointError("Checkpoint timeline coverage must be a bounded scalar record.")
+    counts = {}
+    for key in _TIMELINE_COVERAGE_COUNT_KEYS:
+        value = record[key]
+        if isinstance(value, bool) or not isinstance(value, int) or value < 0:
+            raise CheckpointError("Checkpoint timeline coverage must be a bounded scalar record.")
+        counts[key] = value
+    normalized = {
+        "gap_threshold_seconds": threshold,
+        "gap_count": counts["gap_count"],
+        "jitter_count": counts["jitter_count"],
+        "late_frame_count": counts["late_frame_count"],
+        "session_count": counts["session_count"],
+        "frame_count": counts["frame_count"],
+        "timeline_sha256": sha,
+    }
+    try:
+        json.dumps(
+            normalized, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+        )
+    except (TypeError, ValueError) as error:
+        raise CheckpointError(
+            "Checkpoint timeline coverage is not canonically JSON-serializable."
+        ) from error
+    return normalized
 
 
 def serialize_progress_checkpoint(execution: OperationExecution) -> dict:
@@ -103,10 +243,15 @@ def serialize_progress_checkpoint(execution: OperationExecution) -> dict:
     An empty/legacy row reports recovery ``unknown``, ``sampled_analysis`` false,
     and never claims coverage. A written checkpoint is returned as stored
     (sampled only after detector completion; not resumable; not full coverage).
+    A stored ``timeline_coverage`` count record is passed through when present
+    and omitted when absent so legacy/empty rows keep their shape. A successfully
+    fenced abandoned-worker failure also exposes a bounded interruption summary
+    (ordered unprocessed stages, discarded in-memory timeline/detections/tracks);
+    ordinary cancel/fail do not.
     """
     raw = execution.progress_checkpoint or {}
     if not raw:
-        return {
+        data = {
             "stage": None,
             "completed_stages": [],
             # Empty/legacy: no detector ran — never claim sampled analysis.
@@ -115,15 +260,26 @@ def serialize_progress_checkpoint(execution: OperationExecution) -> dict:
             "recovery": RECOVERY_UNKNOWN,
             "effects": {},
         }
-    return {
-        "stage": raw.get("stage"),
-        "completed_stages": list(raw.get("completed_stages") or []),
-        "sampled_analysis": bool(raw.get("sampled_analysis", False)),
-        "full_frame_coverage": bool(raw.get("full_frame_coverage", False)),
-        "recovery": raw.get("recovery") or RECOVERY_NOT_RESUMABLE,
-        "effects": dict(raw.get("effects") or {}),
-        **({"updated_at": raw["updated_at"]} if raw.get("updated_at") else {}),
-    }
+    else:
+        data = {
+            "stage": raw.get("stage"),
+            "completed_stages": list(raw.get("completed_stages") or []),
+            "sampled_analysis": bool(raw.get("sampled_analysis", False)),
+            "full_frame_coverage": bool(raw.get("full_frame_coverage", False)),
+            "recovery": raw.get("recovery") or RECOVERY_NOT_RESUMABLE,
+            "effects": dict(raw.get("effects") or {}),
+            **({"updated_at": raw["updated_at"]} if raw.get("updated_at") else {}),
+        }
+        coverage = raw.get("timeline_coverage")
+        if isinstance(coverage, dict) and coverage:
+            data["timeline_coverage"] = dict(coverage)
+    if is_abandoned_worker_failure(execution):
+        data["interruption"] = _worker_interruption_summary(
+            completed_stages=data.get("completed_stages") or []
+        )
+        data["full_frame_coverage"] = False
+        data["recovery"] = RECOVERY_NOT_RESUMABLE
+    return data
 
 
 def checkpoint_progress(
@@ -132,6 +288,7 @@ def checkpoint_progress(
     stage: str,
     *,
     effects: dict | None = None,
+    timeline_coverage: dict | None = None,
 ) -> bool:
     """Persist a bounded progress checkpoint while this worker owns a live lease.
 
@@ -142,13 +299,19 @@ def checkpoint_progress(
     after ``STAGE_DETECTOR_SAMPLED`` has completed; earlier / no-detector stages
     stay false. Full frame coverage is always false and recovery is
     ``not_resumable`` — a checkpoint is progress evidence, not a resume token
-    and not proof of full footage coverage.
+    and not proof of full footage coverage. A previously stored
+    ``timeline_coverage`` record is preserved unless this write supplies a new one.
+    Incoming and preserved records are normalized to the scalar key set; invalid
+    records are refused rather than stored or copied.
     """
     if stage not in KNOWN_STAGES:
         raise CheckpointError(f"Unknown progress stage: {stage}.")
     effects = effects or {}
     if not isinstance(effects, dict):
         raise CheckpointError("Checkpoint effects must be a JSON object.")
+    incoming_coverage = (
+        _normalized_timeline_coverage(timeline_coverage) if timeline_coverage is not None else None
+    )
     try:
         encoded_effects = json.dumps(
             effects, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
@@ -187,9 +350,20 @@ def checkpoint_progress(
             "effects": effects,
             "updated_at": now.isoformat(),
         }
-        encoded = json.dumps(
-            payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
-        )
+        if incoming_coverage is not None:
+            coverage = incoming_coverage
+        elif "timeline_coverage" in previous:
+            coverage = _normalized_timeline_coverage(previous.get("timeline_coverage"))
+        else:
+            coverage = None
+        if coverage is not None:
+            payload["timeline_coverage"] = coverage
+        try:
+            encoded = json.dumps(
+                payload, ensure_ascii=False, sort_keys=True, separators=(",", ":"), allow_nan=False
+            )
+        except (TypeError, ValueError) as error:
+            raise CheckpointError("Checkpoint is not canonically JSON-serializable.") from error
         if len(encoded.encode("utf-8")) > MAX_CHECKPOINT_BYTES:
             raise CheckpointError(
                 f"Checkpoint exceeds the {MAX_CHECKPOINT_BYTES}-byte bound "
@@ -282,21 +456,37 @@ def _finish_abandoned(execution, *, deadline) -> bool:
 
     The deadline re-check is the fencing against a stale iterator: if another
     path extended ``lease_expires_at`` after this row was selected, the UPDATE
-    matches nothing and the live owner is left alone.
+    matches nothing and the live owner is left alone. Only a matching UPDATE
+    writes the abandoned-worker error; the API derives the bounded interruption
+    summary from that terminal state, leaving the bounded checkpoint unchanged.
     """
-    changed = OperationExecution.objects.filter(
-        pk=execution.pk,
-        status=OperationExecution.RUNNING,
-        lease_expires_at__lt=deadline,
-    ).update(
-        status=OperationExecution.FAILED,
-        finished_at=timezone.now(),
-        error="The operation worker stopped before this run finished. Start a new run.",
-        result={},
-        lease_owner="",
-        lease_expires_at=None,
-    )
-    return bool(changed)
+    now = timezone.now()
+    with transaction.atomic():
+        row = (
+            OperationExecution.objects.select_for_update()
+            .filter(
+                pk=execution.pk,
+                status=OperationExecution.RUNNING,
+                lease_expires_at__lt=deadline,
+            )
+            .first()
+        )
+        if row is None:
+            return False
+        updates = {
+            "status": OperationExecution.FAILED,
+            "finished_at": now,
+            "error": ABANDONED_WORKER_ERROR,
+            "result": {},
+            "lease_owner": "",
+            "lease_expires_at": None,
+        }
+        changed = OperationExecution.objects.filter(
+            pk=row.pk,
+            status=OperationExecution.RUNNING,
+            lease_expires_at__lt=deadline,
+        ).update(**updates)
+        return bool(changed)
 
 
 # Backward-compatible name used by a few tests that probe the post-terminal guard.
@@ -454,9 +644,11 @@ def commit_reference_events_owned(execution, owner_key: str, drafts) -> list:
     return commit_events_owned(execution, owner_key, drafts)
 
 
-def _require_live_lease(execution, owner_key: str, lease_seconds: int) -> None:
+def _require_live_lease(execution, owner_key: str, lease_seconds: int, heartbeat=None) -> None:
     """Heartbeat once; raise ``LeaseLost`` when the lease is not live for ``owner_key``."""
     if not _beat(execution, owner_key, lease_seconds):
+        raise LeaseLost("The lease for this execution is not live for this worker.")
+    if heartbeat is not None and heartbeat.lost:
         raise LeaseLost("The lease for this execution is not live for this worker.")
 
 
@@ -643,10 +835,9 @@ def run_execution(
                         # Explicit: a built timeline is not proof every frame was analysed.
                         "full_frame_coverage": False,
                     },
+                    timeline_coverage=_timeline_coverage_record(timeline),
                 )
-            _require_live_lease(execution, owner_key, lease_seconds)
-            if heartbeat.lost:
-                raise LeaseLost("The lease for this execution is not live for this worker.")
+            _require_live_lease(execution, owner_key, lease_seconds, heartbeat)
             if _cancelled(execution):
                 raise ExecutionCancelled("Cancelled by request.")
             reference = _reference_events(snapshot)
@@ -682,9 +873,7 @@ def run_execution(
                         "extra": len(comparison.extra),
                     },
                 )
-            _require_live_lease(execution, owner_key, lease_seconds)
-            if heartbeat.lost:
-                raise LeaseLost("The lease for this execution is not live for this worker.")
+            _require_live_lease(execution, owner_key, lease_seconds, heartbeat)
             if _cancelled(execution):
                 raise ExecutionCancelled("Cancelled by request.")
             # T21: a pinned model binding means real detector inference on sampled
@@ -707,9 +896,7 @@ def run_execution(
                             "full_frame_coverage": False,
                         },
                     )
-                _require_live_lease(execution, owner_key, lease_seconds)
-                if heartbeat.lost:
-                    raise LeaseLost("The lease for this execution is not live for this worker.")
+                _require_live_lease(execution, owner_key, lease_seconds, heartbeat)
                 detector = {
                     "model_version_id": report.model_version_id,
                     "model_version_number": report.model_version_number,
@@ -766,9 +953,7 @@ def run_execution(
                 # fabricates. Commits stay behind the live-lease fence.
                 line = _pinned_line(execution)
                 if line is not None:
-                    _require_live_lease(execution, owner_key, lease_seconds)
-                    if heartbeat.lost:
-                        raise LeaseLost("The lease for this execution is not live for this worker.")
+                    _require_live_lease(execution, owner_key, lease_seconds, heartbeat)
                     recipe_params = _crossing_recipe_params(snapshot)
                     episodes = crossings.episodes_from_tracks(
                         tracking_report.tracks,
