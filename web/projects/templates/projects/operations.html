@@ -283,6 +283,7 @@
   <p id="release-status" class="a-help" role="status" aria-live="polite"></p>
   <p id="release-error" class="a-error" role="alert"></p>
   <div id="release-area"></div>
+  <div id="diagnosis-panel" class="op-diagnosis" data-testid="diagnosis-panel" hidden aria-live="polite"></div>
 </section>
 <section class="a-card step" id="preflight-section" aria-labelledby="preflight-heading" hidden>
   <h2 class="a-h2" id="preflight-heading">Is this server ready?</h2>
@@ -298,4 +299,4 @@
   <div id="view-health-sources"></div>
 </section>
 {% endblock %}
-{% block scripts %}<script src="{% static 'projects/replay-surface.js' %}"></script><script src="{% static 'projects/operation-bays-util.js' %}"></script><script src="{% static 'projects/operation-line.js' %}"></script><script src="{% static 'projects/operation-bays.js' %}"></script><script src="{% static 'projects/operation-drafts.js' %}"></script><script src="{% static 'projects/operation-versions.js' %}"></script><script src="{% static 'projects/operation-setup-guide.js' %}"></script><script src="{% static 'projects/operation-preflight.js' %}"></script><script src="{% static 'projects/view-health.js' %}"></script>{% endblock %}
+{% block scripts %}<script src="{% static 'projects/replay-surface.js' %}"></script><script src="{% static 'projects/operation-bays-util.js' %}"></script><script src="{% static 'projects/operation-line.js' %}"></script><script src="{% static 'projects/operation-bays.js' %}"></script><script src="{% static 'projects/operation-drafts.js' %}"></script><script src="{% static 'projects/operation-diagnosis.js' %}"></script><script src="{% static 'projects/operation-versions.js' %}"></script><script src="{% static 'projects/operation-setup-guide.js' %}"></script><script src="{% static 'projects/operation-preflight.js' %}"></script><script src="{% static 'projects/view-health.js' %}"></script>{% endblock %}

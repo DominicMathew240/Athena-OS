@@ -1,7 +1,9 @@
 """The operations console page: scope setup, pin pickers and release candidates."""
 
 import json
+from pathlib import Path
 
+from django.conf import settings
 from django.contrib.auth import get_user_model
 from django.test import Client, TestCase
 
@@ -129,10 +131,32 @@ class OperationsPageTests(TestCase):
             'id="pin-fields"',
             'id="operation-creators"',
             'id="release-area"',
+            'id="diagnosis-panel"',
             "operation-versions.js",
+            "operation-diagnosis.js",
         ):
             with self.subTest(needle=needle):
                 self.assertContains(page, needle)
+
+    def test_page_includes_t32_diagnosis_surface(self):
+        """Operators can distinguish source/geometry/rules/recognition without opening raw JSON."""
+        page = self.client.get("/operations")
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, 'data-testid="diagnosis-panel"')
+        self.assertContains(page, "operation-diagnosis.js")
+        script = (Path(settings.BASE_DIR) / "projects/static/projects/operation-diagnosis.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("recommend_training", script)
+        self.assertIn("do not start training", script)
+        self.assertIn("source_view", script)
+        self.assertIn("geometry", script)
+        self.assertIn("recognition", script)
+        versions = (Path(settings.BASE_DIR) / "projects/static/projects/operation-versions.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("run-bundle-test", versions)
+        self.assertIn("AthenaOperationDiagnosis", versions)
 
     def test_page_includes_the_guided_setup_surfaces(self):
         page = self.client.get("/operations")

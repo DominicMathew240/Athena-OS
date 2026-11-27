@@ -63,6 +63,7 @@ from .. import source_time
 from ..models import OperationEvent, OperationExecution
 from . import crossings, inference, ledger, parking, tracking
 from .comparison import Crossing, compare_crossings
+from . import diagnosis as replay_diagnosis
 
 logger = logging.getLogger(__name__)
 
@@ -1051,6 +1052,7 @@ def run_execution(
                 analysed_frame_count=detector["frame_count"] if detector is not None else 0,
                 max_coverage_gap_seconds=policy_cfg["max_coverage_gap_seconds"],
             )
+            comparison_summary = final_comparison.summary(predicted_source=predicted_source)
             result = {
                 "kind": "reference_replay",
                 "recording_sha256": digest,
@@ -1059,7 +1061,16 @@ def run_execution(
                 "timeline_sha256": timeline.timeline_sha256(),
                 "duration_check": duration_check,
                 "gap_accounting": gap_accounting,
-                "comparison": final_comparison.summary(predicted_source=predicted_source),
+                "comparison": comparison_summary,
+                # T32: route misses/extras to source/view, geometry, rules or recognition
+                # so correct recognition does not push operators into unnecessary training.
+                "diagnosis": replay_diagnosis.build_execution_diagnosis(
+                    comparison_summary=comparison_summary,
+                    gap_accounting=gap_accounting,
+                    detector=detector,
+                    has_geometry=_pinned_line(execution) is not None,
+                    parking=parking_report,
+                ),
                 # T23: the ledger aggregates for THIS execution, recorded from the
                 # committed raw events (a rebuild from the rows must equal this).
                 "event_ledger": ledger.rebuild_aggregates(events).summary(),
@@ -1539,7 +1550,9 @@ def recover_execution(
             detector = None
             tracks = None
             policy_plan = None
+            parking_report = None
             reconnect_gaps: list[dict] = []
+            predicted_source = "reference_placeholder"
 
             # Compute the restart/reconnect gap and session boundary on the timeline.
             on_time_frames = [f for f in timeline.frames if f.on_time]
@@ -1700,6 +1713,20 @@ def recover_execution(
                     )
                     tracks = dict(tracks)
                     tracks["crossing_episode_count"] = len(episodes)
+                    predicted_crossings = [
+                        Crossing(direction=ep.direction, time=float(ep.time))
+                        for ep in episodes
+                    ]
+                    comparison = compare_crossings(
+                        reference, predicted_crossings, tolerance=tolerance
+                    )
+                    predicted_source = "detector_crossing_episodes"
+                pinned_bays = _pinned_bays(execution)
+                if pinned_bays:
+                    parking_report = parking.evaluate_temporal_bay_states(
+                        pinned_bays,
+                        report.frames,
+                    )
 
             all_ledger_rows = list(OperationEvent.objects.filter(execution=execution).order_by("timestamp", "id"))
             rebuilt_ledger = ledger.rebuild_aggregates(all_ledger_rows).summary()
@@ -1714,6 +1741,7 @@ def recover_execution(
                 max_coverage_gap_seconds=policy_cfg["max_coverage_gap_seconds"],
                 reconnect_gaps=reconnect_gaps,
             )
+            comparison_summary = comparison.summary(predicted_source=predicted_source)
             result = {
                 "kind": "reference_replay",
                 "recording_sha256": digest,
@@ -1733,12 +1761,14 @@ def recover_execution(
                     "reconnect_gap_count": len(reconnect_gaps),
                     "aggregates_match_ledger": True,
                 },
-                "comparison": {
-                    "tolerance_seconds": tolerance,
-                    "matched": len(comparison.matches),
-                    "missed": len(comparison.missed),
-                    "extra": len(comparison.extra),
-                },
+                "comparison": comparison_summary,
+                "diagnosis": replay_diagnosis.build_execution_diagnosis(
+                    comparison_summary=comparison_summary,
+                    gap_accounting=gap_accounting,
+                    detector=detector,
+                    has_geometry=_pinned_line(execution) is not None,
+                    parking=parking_report,
+                ),
                 "event_ledger": rebuilt_ledger,
                 "note": _outcome_note(binding, detector, tracks),
             }
@@ -1746,6 +1776,8 @@ def recover_execution(
                 result["detector"] = detector
             if tracks is not None:
                 result["tracks"] = tracks
+            if parking_report is not None:
+                result["parking"] = parking_report
             _finish_owned(execution, new_owner_key, status=OperationExecution.SUCCEEDED, result=result)
         except LeaseLost:
             logger.info("Operation execution %s recovery aborted: lease lost for %s", execution.pk, new_owner_key)

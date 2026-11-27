@@ -751,7 +751,79 @@
     }));
   }
 
-  /* ---------- release candidates ---------- */
+  /* ---------- release candidates + T32 diagnosis ---------- */
+
+  const diagnosisPanel = byId("diagnosis-panel");
+  const sleep = ms => new Promise(resolve => setTimeout(resolve, ms));
+
+  async function waitForExecution(executionId, { attempts = 90, delayMs = 1000 } = {}) {
+    for (let i = 0; i < attempts; i += 1) {
+      const body = await api(`/api/operation-executions/${executionId}`);
+      const row = body.execution;
+      if (!row) throw new Error("The server did not return this run.");
+      if (row.status === "succeeded" || row.status === "failed" || row.status === "cancelled") {
+        return row;
+      }
+      await sleep(delayMs);
+    }
+    throw new Error("This test run is still working. Check again in a moment.");
+  }
+
+  function showDiagnosisFromExecution(row) {
+    const diag = window.AthenaOperationDiagnosis;
+    if (!diag || !diagnosisPanel) return;
+    if (!row || row.status !== "succeeded") {
+      diagnosisPanel.hidden = false;
+      diagnosisPanel.replaceChildren();
+      const p = el("p", {
+        class: "a-help",
+        text: row?.error || "This run did not succeed, so there is no diagnosis yet."
+      });
+      p.dataset.testid = "diagnosis-body";
+      diagnosisPanel.append(p);
+      return;
+    }
+    const block = row.result && row.result.diagnosis;
+    diag.renderDiagnosis(diagnosisPanel, block || null);
+  }
+
+  async function loadLatestDiagnosis(bundleId) {
+    if (!bundleId || !diagnosisPanel) return;
+    try {
+      const body = await api(`/api/operation-release-bundles/${bundleId}/executions`);
+      const rows = body.executions || [];
+      const latest = rows.find(r => r.status === "succeeded" && r.result && r.result.diagnosis)
+        || rows.find(r => r.status === "succeeded")
+        || rows[0];
+      if (latest) showDiagnosisFromExecution(latest);
+    } catch (_ignore) {
+      /* Diagnosis is optional chrome; leave the panel alone on list errors. */
+    }
+  }
+
+  async function runBundleTest(bundle) {
+    if (!draft?.recording?.id) {
+      throw new Error("Attach the draft recording before running a test.");
+    }
+    const queued = await api(`/api/operation-release-bundles/${bundle.id}/executions`, {
+      method: "POST",
+      json: { recording_id: draft.recording.id }
+    });
+    const executionId = queued.execution?.id;
+    if (!executionId) throw new Error("The server did not queue a test run.");
+    areas.release.note.textContent = "Test run queued. Waiting for the worker…";
+    const finished = await waitForExecution(executionId);
+    if (finished.status !== "succeeded") {
+      throw new Error(finished.error || `Test run ended as ${finished.status}.`);
+    }
+    showDiagnosisFromExecution(finished);
+    const view = window.AthenaOperationDiagnosis?.formatDiagnosis(finished.result?.diagnosis);
+    if (view?.recommend_training) {
+      areas.release.note.textContent = "Test finished. Diagnosis says recognition needs work — capture examples before training.";
+    } else {
+      areas.release.note.textContent = "Test finished. Diagnosis says recognition does not need training from this result.";
+    }
+  }
 
   async function renderBundleArea() {
     const box = byId("release-area");
@@ -780,12 +852,29 @@
       list.append(el("li", { class: "a-help", text: "No release candidates yet." }));
     } else {
       for (const bundle of bundles) {
+        const run = gate(el("button", {
+          class: "a-btn",
+          type: "button",
+          text: "Run test on draft recording",
+          "data-testid": "run-bundle-test",
+          "data-bundle-id": bundle.id
+        }), "label");
+        if (run.tagName === "BUTTON") {
+          run.addEventListener("click", () => guarded(
+            () => runBundleTest(bundle),
+            "Starting test run…",
+            areas.release
+          ));
+        }
         list.append(el("li", { class: "op-row" },
           el("div", { class: "op-row-main" },
             el("strong", { text: `Release candidate ${bundle.number}` }),
-            el("span", { class: "a-help", text: `Assembled from draft revision ${bundle.draft_revision}. A candidate only: nothing runs or publishes it yet.` })),
+            el("span", { class: "a-help", text: `Assembled from draft revision ${bundle.draft_revision}. Run a test to see whether misses are source, geometry, rules or recognition — correct recognition never starts training.` }),
+            run),
           el("span", { class: "a-tag", text: "Candidate" })));
       }
+      // Show the latest diagnosis for the newest bundle without another click.
+      loadLatestDiagnosis(bundles[0].id);
     }
     const assemble = missing.length
       ? el("p", { class: "a-help", text: `Pin every part of the operation before assembling a release candidate (still missing: ${missing.join(", ")}).` })
@@ -800,7 +889,7 @@
       }, "Assembling…", areas.release));
     }
     box.append(
-      el("p", { class: "a-help", text: "A release candidate bundles every frozen choice and the recording into one sealed record. Assembling one needs the Approver role and never changes the draft. Publishing and running a candidate are not built yet." }),
+      el("p", { class: "a-help", text: "A release candidate bundles every frozen choice and the recording into one sealed record. Assembling one needs the Approver role and never changes the draft. A test run diagnoses misses so correct recognition does not push you into unnecessary training." }),
       list, assemble);
   }
 
