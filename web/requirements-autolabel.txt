@@ -5,7 +5,7 @@
 numpy==2.5.5
 torch==2.9.1
 torchvision==0.24.1
-transformers==5.24.0
+transformers==5.24.1
 
 # Opt-in D-FINE training backend ("dfine-coco", projects/training/dfine.py). It runs on the four pins above and needs
 # exactly ONE more package: scipy, because transformers' Hungarian matcher (used by the D-FINE training loss)
