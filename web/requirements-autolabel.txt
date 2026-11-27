@@ -28,7 +28,7 @@ scipy==1.18.1
 # spectrogram is computed with numpy directly), soundfile (WAV validation is stdlib `wave` in the web process).
 # Licence: MIT. Version shown is the one the ML venv that ran the audio tests had. Listed in docs/LICENSE_AUDIT.md
 # (addendum 2026-11-19; the binary wheel's bundled notices were not read there).
-onnxruntime==1.20.1
+onnxruntime==1.32.0
 
 # Handwriting OCR backend ("ocr-trocr", projects/training/ocr_trocr.py; added 2026-11-19). Runs on the pins above
 # (torch, transformers) plus Pillow from web/requirements.txt; needs NOTHING new: the fine-tuning loop is Athena's
