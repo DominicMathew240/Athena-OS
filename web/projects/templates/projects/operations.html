@@ -247,6 +247,25 @@
     <p id="source-error" class="a-error" role="alert"></p>
     <button class="a-btn" type="button" id="source-create" data-needs="label" data-testid="create-source">Add source</button>
   </details>
+  <details class="op-details" id="live-rtsp-details" data-testid="live-rtsp-panel">
+    <summary>Live RTSP preview (camera sources)</summary>
+    <p class="a-help">Connect one approved RTSP camera for a short check. Only H.264 over TCP is supported. Put the password in the source credential — never in the URL. The server operator must list the camera host in <code>ATHENA_APPROVED_RTSP_HOSTS</code>.</p>
+    <div class="line-fields">
+      <div class="a-field"><label class="a-label" for="live-rtsp-source">Camera source</label><select class="a-input" id="live-rtsp-source" data-needs="label" data-testid="live-rtsp-source"></select></div>
+      <div class="a-field"><label class="a-label" for="live-rtsp-url">RTSP URL (no password)</label><input class="a-input" id="live-rtsp-url" maxlength="512" placeholder="rtsp://cam.site.local/stream1" data-needs="label" data-testid="live-rtsp-url"></div>
+      <div class="a-field"><label class="a-label" for="live-rtsp-username">Username (optional)</label><input class="a-input" id="live-rtsp-username" maxlength="128" autocomplete="username" data-needs="label" data-testid="live-rtsp-username"></div>
+      <div class="a-field"><label class="a-label" for="live-rtsp-password">Password (stored as source credential)</label><input class="a-input" id="live-rtsp-password" type="password" maxlength="256" autocomplete="current-password" data-needs="label" data-testid="live-rtsp-password"></div>
+    </div>
+    <p id="live-rtsp-status" class="a-help" role="status" aria-live="polite" data-testid="live-rtsp-status"></p>
+    <p id="live-rtsp-error" class="a-error" role="alert" data-testid="live-rtsp-error"></p>
+    <p id="live-rtsp-category" class="a-help" hidden data-testid="live-rtsp-category"></p>
+    <button class="a-btn" type="button" id="live-rtsp-save-password" data-needs="label" data-testid="live-rtsp-save-password">Save password</button>
+    <button class="a-btn a-btn--primary" type="button" id="live-rtsp-preview" data-needs="label" data-testid="live-rtsp-preview">Connect &amp; preview</button>
+    <div id="live-rtsp-preview-wrap" hidden data-testid="live-rtsp-preview-wrap">
+      <p id="live-rtsp-stream-info" class="a-help" data-testid="live-rtsp-stream-info"></p>
+      <img id="live-rtsp-frame" alt="Live camera preview frame" data-testid="live-rtsp-frame" style="max-width:100%;height:auto;border:1px solid var(--border, #ccc);">
+    </div>
+  </details>
   <details class="op-details" id="create-operation-details">
     <summary>Create an operation</summary>
     <p class="a-help">An operation ties one site and one source to a name; a draft is attached to exactly one operation.</p>
@@ -299,4 +318,4 @@
   <div id="view-health-sources"></div>
 </section>
 {% endblock %}
-{% block scripts %}<script src="{% static 'projects/replay-surface.js' %}"></script><script src="{% static 'projects/operation-bays-util.js' %}"></script><script src="{% static 'projects/operation-line.js' %}"></script><script src="{% static 'projects/operation-bays.js' %}"></script><script src="{% static 'projects/operation-drafts.js' %}"></script><script src="{% static 'projects/operation-diagnosis.js' %}"></script><script src="{% static 'projects/operation-versions.js' %}"></script><script src="{% static 'projects/operation-setup-guide.js' %}"></script><script src="{% static 'projects/operation-preflight.js' %}"></script><script src="{% static 'projects/view-health.js' %}"></script>{% endblock %}
+{% block scripts %}<script src="{% static 'projects/replay-surface.js' %}"></script><script src="{% static 'projects/operation-bays-util.js' %}"></script><script src="{% static 'projects/operation-line.js' %}"></script><script src="{% static 'projects/operation-bays.js' %}"></script><script src="{% static 'projects/operation-drafts.js' %}"></script><script src="{% static 'projects/operation-diagnosis.js' %}"></script><script src="{% static 'projects/operation-versions.js' %}"></script><script src="{% static 'projects/live-rtsp.js' %}"></script><script src="{% static 'projects/operation-setup-guide.js' %}"></script><script src="{% static 'projects/operation-preflight.js' %}"></script><script src="{% static 'projects/view-health.js' %}"></script>{% endblock %}

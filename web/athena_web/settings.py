@@ -43,7 +43,7 @@ def _list(name: str, default: list[str] | None = None) -> list[str]:
 # packaging; it never hides or replaces the released version. Read it via
 # ``athena_web.version.current()`` (see athena_web/version.py) — plain module functions are
 # not visible through ``django.conf.settings``.
-RELEASE_VERSION = "1.8.0"
+RELEASE_VERSION = "1.9.0"
 
 
 DEBUG = _flag("DJANGO_DEBUG", False)
@@ -165,9 +165,12 @@ if ATHENA_UNASSIGNED_ROLE not in {"labeler", "viewer"}:
 ATHENA_APPROVAL_REQUIRES_SECOND_PERSON = _flag("ATHENA_APPROVAL_REQUIRES_SECOND_PERSON", False)
 
 # Approved outbound destinations (T11): the ONLY hosts operation integrations may ever contact.
-# Empty by default — no live-source or webhook integration exists yet (T10+), so nothing is approved.
+# Empty by default — no webhook/export integration is enabled until hosts are listed.
 # Entries are "scheme://host" with exact-host matching; see projects/destinations.py.
 ATHENA_APPROVED_DESTINATIONS = _list("ATHENA_APPROVED_DESTINATIONS")
+# Approved RTSP camera hosts (T10): exact hostnames or IPv4 literals the live preview may contact.
+# Empty by default. Entries may be bare hosts or rtsp(s)://host forms; see projects/live_rtsp.py.
+ATHENA_APPROVED_RTSP_HOSTS = _list("ATHENA_APPROVED_RTSP_HOSTS")
 
 LANGUAGE_CODE = "en-us"
 TIME_ZONE = "UTC"

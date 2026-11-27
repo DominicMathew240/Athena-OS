@@ -8,6 +8,7 @@ from . import (
     feedback_views,
     inference_pages,
     inference_views,
+    live_rtsp_views,
     operation_preflight,
     operation_views,
     recording_views,
@@ -56,6 +57,16 @@ urlpatterns = [
         "api/operation-sources/<uuid:source_id>/credential",
         operation_views.source_credential,
         name="source-credential",
+    ),
+    path(
+        "api/operation-sources/<uuid:source_id>/live-rtsp/preview",
+        live_rtsp_views.source_live_rtsp_preview,
+        name="source-live-rtsp-preview",
+    ),
+    path(
+        "api/live-rtsp/support",
+        live_rtsp_views.live_rtsp_support,
+        name="live-rtsp-support",
     ),
     path(
         "api/approved-destinations",

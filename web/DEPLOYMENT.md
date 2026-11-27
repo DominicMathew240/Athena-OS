@@ -365,6 +365,12 @@ browser walks on a disposable instance, not by a real administrator on a deploye
 been run end to end. The time shown next to Quick and Better is an estimate worked out from one laptop-class processor (an Apple M3,
 with other programs running); a different computer will take longer or shorter.
 
+## Live RTSP cameras (T10)
+
+Installers can connect and preview one approved RTSP/RTSPS H.264 camera per camera source.
+Configure `ATHENA_APPROVED_RTSP_HOSTS` (exact hosts). Full codec and placement notes: [docs/guides/live-rtsp.md](../docs/guides/live-rtsp.md).
+Continuous live counting is not enabled by T10.
+
 ## Known limits
 
 - Access roles (Viewer, Labeler, Trainer, Approver; see [`docs/guides/access-roles.md`](../docs/guides/access-roles.md)): every signed-in user can **see** every project, but changing things needs a role. Roles are Django groups, optionally overridden per project, assigned by a superuser on the console's **Access** screen or with `manage.py athena_roles`; every change is recorded. People in no role group count as Labelers (`ATHENA_UNASSIGNED_ROLE`) and can never approve a model. Give the Approver role only to people you trust with that decision, and give superuser rights sparingly: a superuser can do everything and is the only kind of account that can change roles.

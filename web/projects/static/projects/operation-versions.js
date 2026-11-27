@@ -227,6 +227,7 @@
       byId("source-name").value = "";
       byId("source-status").textContent = "Source added.";
       await loadScope();
+      document.dispatchEvent(new CustomEvent("athena:sources-changed"));
     }, "Adding the source…", { note: byId("source-status"), err: byId("source-error") }));
     byId("operation-create").addEventListener("click", () => guarded(async () => {
       const siteId = byId("operation-site").value;

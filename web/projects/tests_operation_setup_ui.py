@@ -158,6 +158,19 @@ class OperationsPageTests(TestCase):
         self.assertIn("run-bundle-test", versions)
         self.assertIn("AthenaOperationDiagnosis", versions)
 
+    def test_page_includes_t10_live_rtsp_surface(self):
+        """Installer can reach live RTSP connect/preview chrome on Operations."""
+        page = self.client.get("/operations")
+        self.assertEqual(page.status_code, 200)
+        self.assertContains(page, 'data-testid="live-rtsp-panel"')
+        self.assertContains(page, "live-rtsp.js")
+        self.assertContains(page, 'data-testid="live-rtsp-preview"')
+        script = (Path(settings.BASE_DIR) / "projects/static/projects/live-rtsp.js").read_text(
+            encoding="utf-8"
+        )
+        self.assertIn("live-rtsp/preview", script)
+        self.assertIn("category", script)
+
     def test_page_includes_the_guided_setup_surfaces(self):
         page = self.client.get("/operations")
         self.assertEqual(page.status_code, 200)
