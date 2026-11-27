@@ -43,7 +43,7 @@ def _list(name: str, default: list[str] | None = None) -> list[str]:
 # packaging; it never hides or replaces the released version. Read it via
 # ``athena_web.version.current()`` (see athena_web/version.py) — plain module functions are
 # not visible through ``django.conf.settings``.
-RELEASE_VERSION = "1.9.0"
+RELEASE_VERSION = "1.9.1"
 
 
 DEBUG = _flag("DJANGO_DEBUG", False)

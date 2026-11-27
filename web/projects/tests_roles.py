@@ -561,6 +561,8 @@ class EveryRouteDeclaresItsRole(RoleBase):
         "api/operation-sites": {"POST": LABEL},
         "api/operation-sources": {"POST": LABEL},
         "api/operation-sources/<uuid:source_id>/credential": {"PUT": LABEL, "DELETE": LABEL},
+        "api/operation-sources/<uuid:source_id>/live-rtsp/preview": {"POST": LABEL},
+        "api/live-rtsp/support": {},
         "api/approved-destinations": {},
         "api/operations": {"POST": LABEL},
         "api/operations/<uuid:operation_id>": {},
