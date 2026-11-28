@@ -1,47 +1,53 @@
 # Athena OS
 
-**Current release: 1.10.1** — the version is declared once in [`web/athena_web/settings.py`](web/athena_web/settings.py) (`RELEASE_VERSION`) and shown in the console sidebar footer, the public [`GET /api/version`](web/projects/views.py) endpoint, and the `/healthz` probe. A deployment may set `ATHENA_VERSION` only to *add* a packaging suffix (for example `1.10.1+acme`); it can never mask the released version.
+**Current release: 1.10.2** — the version is declared once in [`web/athena_web/settings.py`](web/athena_web/settings.py) (`RELEASE_VERSION`) and shown in the console sidebar footer, the public [`GET /api/version`](web/projects/views.py) endpoint, and the `/healthz` probe. A deployment may set `ATHENA_VERSION` only to *add* a packaging suffix (for example `1.10.2+acme`); it can never mask the released version.
 
-Athena OS is an open-source (Apache-2.0) toolkit for building reviewed datasets and models for industrial
-data. Operators teach the system through **task recipes** (vision, sound, handwriting, tables, text,
-signals, and document fields), freeze versioned training sets, train CPU backends, and run
-human-gated check screens. A second **operations** track covers recorded-video people-counting drafts,
-release bundles, durable workers, and live RTSP installer preview. It is early: see
-[`ROADMAP.md`](ROADMAP.md) for what is done and what is not. This README only claims what the source
-tree and its tests demonstrate. The separate [vision-workflow tracker](docs/plans/2026-11-15-vision-workflows-task-list.md)
+Athena OS is an open-source (Apache-2.0) toolkit for industrial visual inspection and reviewed
+model training. The console home starts with **photo inspections** (ask in plain language or a
+ready-made check). **Custom detectors** teach models through task recipes (vision, sound, handwriting,
+tables, text, signals, document fields): freeze versioned training sets, train CPU backends, and run
+human-gated check screens. A third **people-counting** track covers recorded-video drafts, release
+bundles, durable workers, and live RTSP installer preview. It is early: see [`ROADMAP.md`](ROADMAP.md)
+for what is done and what is not. This README only claims what the source tree and its tests
+demonstrate. The separate [vision-workflow tracker](docs/plans/2026-11-15-vision-workflows-task-list.md)
 records locally verified slices and remaining release gates; it is not a production-readiness claim.
 
 The public marketing site is a static React app on the [`landing`](https://github.com/DominicMathew240/Athena-OS/tree/landing) branch (no backend). It deploys to GitHub Pages. This `main` branch is the product source: contracts, SDK, CLI, and the Django console in `web/`.
 
 ## Preview: how the system works
 
-The console walks a nontechnical operator through six plain-language steps. Each step only becomes
-usable when the ones before it have real content, and nothing is ever approved or published automatically.
+The live console is **Athena OS** — light page, white panels, one blue accent from the Athena mark,
+Hanken Grotesk, sidebar brand `Athena OS` (see [`docs/design/DESIGN.md`](docs/design/DESIGN.md)).
+It is **not** the older “Athena Data Labelling” black-sidebar prototype still present in some
+historical dogfood captures under `docs/dogfood/screenshots/`.
 
-1. **Create a project** — pick a recipe, a goal, and the labels for the things you want found.
-2. **Add data** — pictures, WAV clips, a CSV/XLSX file, or other recipe inputs — checked and hashed.
-3. **Label** — boxes drawn by hand or suggested by SAM+CLIP, clip labels, transcripts, or column/field maps — always reviewed when the recipe uses suggestions.
-4. **Freeze a training set** — an immutable, numbered, hashed snapshot.
-5. **Teach a model** — a CPU training worker; the web process never loads torch.
-6. **Check & improve** — a check screen runs new inputs through the approved model (image models today); operators mark results right or wrong; corrections return as Needs-review data for the next teaching round.
+Three workspaces share that shell:
 
-![The projects console: every project lists its files, purpose, labels and where the work stands.](docs/dogfood/screenshots/ff-desktop-02-console.png)
-*The projects console (a real capture from a dogfood run, Firefox 158). Every step shows its own state; nothing is hidden behind jargon.*
+1. **Inspect (home)** — ask in plain language, start a ready-made photo check, or open past inspections.
+2. **Build → Custom detectors** — recipe projects: add data, label, freeze a training set, teach on CPU,
+   approve a candidate, then run a human-gated check screen. Nothing is approved or published automatically.
+3. **Build → People counting** — private recorded-video / RTSP-preview operations drafts (in progress).
 
-![Drawing a box: a SAM+CLIP suggestion arrives as "Needs your review" until a person accepts or rejects it.](docs/dogfood/screenshots/07-13-annotation-with-suggestion.png)
-*Step 3, labelling. Auto-suggested boxes always arrive as **Needs review** — nothing becomes ground truth until a person accepts it.*
+![Home: ask in your own words, ready-made inspections, custom-detector entry.](docs/research/2026-11-15-evidence/01-home.png)
+*Home (current shell). “What do you want to check today?” — photo inspections first; custom model training is a separate advanced path.*
 
-![The teach panel: a finished run files only a Candidate model; a person must read the results, move it to trial, and approve it before anything can use it.](docs/dogfood/screenshots/xb-chromium-desktop-10-train-panel.png)
-*Steps 5 and 6. A finished teaching run only ever files a *candidate* model; the approve gate records the approver and the reason.*
+![New inspection: drop photos and optionally mark parking bays on the picture.](docs/research/2026-11-15-evidence/02-parking-areas.png)
+*Photo inspection setup. Mark areas on the picture when a check needs regions (for example parking bays); still frames are not live monitoring.*
 
-![A check screen: a new picture runs through the approved model; a person marks each finding right or wrong before anything is decided.](docs/dogfood/screenshots/35-final-13-operator-result.png)
-*The check screen (step 6). "Not a final decision. This is the computer's opinion. A person decides." Feedback is saved as evidence; it never changes the model by itself.*
+![Teach the computer: readiness warnings before a training run; models stay candidates until a person approves.](docs/research/2026-11-15-evidence/03-teach.png)
+*Custom detectors → Teach the computer. A finished run only ever files a **candidate**; the approve gate records the approver and the reason.*
 
-**What a first run looks like.** Install, run first-run setup (the first account becomes the
-administrator), and the console opens on a plain-language checklist: create a project, add pictures,
-draw boxes around the things you want found, save a training set, teach the computer, check the
-results. Check-screen corrections are kept as evidence and can be pulled back into the project for
-the next round — the live model is never changed by feedback alone.
+![Set up your check screen: choose the screen, switch it on, try it before others use it.](docs/research/2026-11-15-evidence/04-check-screen-builder.png)
+*Check-screen builder. “Not a final decision — the computer's opinion; a person decides.” Feedback is evidence; it never changes the live model by itself.*
+
+**Custom-detector loop (Build → Custom detectors).** Create a project → add data (pictures, WAV, CSV/XLSX, …) →
+label (boxes, clip labels, transcripts, field maps; SAM+CLIP suggestions stay **Needs review**) → freeze a
+hashed training set → teach on a CPU worker (the web process never loads torch) → approve → check & improve.
+Check-screen corrections can be pulled back as Needs-review data for the next round.
+
+**What a first run looks like.** Install, complete first-run setup (first account is administrator), open
+home, connect an AI model if you want instant photo inspections, or open **Custom detectors** for the
+teach loop. Screenshots above are local prototype captures (synthetic / smoke data), current shell.
 
 ### Teaching recipes (`GET /api/recipes`)
 
@@ -73,7 +79,7 @@ immutable, versioned component chain — source view, geometry, recipe, policy, 
 approved-model binding — that can be assembled into an append-only **release bundle** (a release
 candidate; full publication/runtime of live counting is not complete).
 
-**What is in 1.7.0–1.10.1 (tree + tests):**
+**What is in 1.7.0–1.10.2 (tree + tests):**
 
 | Slice | What it does | Honest limit |
 |---|---|---|
@@ -106,7 +112,7 @@ Docker, S3, live RTSP): [`web/DEPLOYMENT.md`](web/DEPLOYMENT.md). To try the SDK
 
 | Piece | What it does |
 |---|---|
-| **Console** (`web/`) | The product: sign-in, projects across seven recipes, labelling, review, dataset versions, teaching, check screens, operations drafts/preview, four access roles (Viewer, Labeler, Trainer, Approver) enforced server-side on every write. |
+| **Console** (`web/`) | The product shell: Home (inspections), Custom detectors (seven recipes), People counting, AI model settings, Access, Docs. Sign-in; four roles (Viewer, Labeler, Trainer, Approver) enforced server-side on every write. Design: [`docs/design/DESIGN.md`](docs/design/DESIGN.md). |
 | **Durable workers** (`web/`) | Training, inference, auto-label and operation-execution workers that run outside the web process, claim jobs atomically, and recover from crashes. See [`web/DEPLOYMENT.md`](web/DEPLOYMENT.md). |
 | **Contracts and SDK** (`sdk/python`, `contracts/`) | Versioned Pydantic contracts for observations, assets, models, findings, evidence, policies and actions; generated JSON Schema checked in. Needs Pydantic 2.11+. |
 | **CLI and examples** (`cli/`, `examples/`) | Contract validation and synthetic image/audio pipelines. The YOLO example adapter needs `ultralytics` (**AGPL-3.0**) — read the warning in [`docs/getting-started.md`](docs/getting-started.md) first. |
@@ -118,15 +124,16 @@ The console follows **semantic versioning** starting at `1.0.0`. The version liv
 place (`RELEASE_VERSION` in [`web/athena_web/settings.py`](web/athena_web/settings.py)) and is read
 through [`athena_web/version.py`](web/athena_web/version.py):
 
-- `GET /api/version` → `{"name": "athena-console", "version": "1.10.1"}` (public; a bug report
+- `GET /api/version` → `{"name": "athena-console", "version": "1.10.2"}` (public; a bug report
   should not need an account)
 - `GET /healthz` → the version alongside the database/media readiness checks
-- the console sidebar footer → `Athena OS 1.10.1` on every page
+- the console sidebar footer → `Athena OS 1.10.2` on every page
 
 Recent console tags on `main` (feature commits):
 
 | Version | Headline |
 |---|---|
+| **1.10.2** | README preview uses current Athena OS shell (not old Data Labelling dogfood shots) |
 | **1.10.1** | CI: T33 role table, migration index names, label gate on learning-example writes |
 | **1.10.0** | T33 event-linked learning examples and verified negatives; docs honesty for seven recipes |
 | **1.9.1** | T10 live-rtsp routes declared in the role/access table |
@@ -140,10 +147,11 @@ contracts stabilise.
 
 ## What exists today
 
-- **Athena console** (`web/`, Django): sign-in, project registry, a plain-language console, JPEG/PNG/WebP image
-  import with checksums, a label editor, manual bounding boxes, and optional SAM + CLIP auto-suggested boxes that
-  stay **Needs review** until a person accepts them. Self-hosting guide: [`web/DEPLOYMENT.md`](web/DEPLOYMENT.md);
-  developer notes: [`web/README.md`](web/README.md).
+- **Athena console** (`web/`, Django): **Athena OS** shell (light theme + optional control-room dark mode), home for photo
+  inspections, custom-detector projects across seven recipes, labelling with optional SAM + CLIP suggestions that stay
+  **Needs review** until accepted, people-counting drafts, AI model settings, access roles. Self-hosting:
+  [`web/DEPLOYMENT.md`](web/DEPLOYMENT.md); developer notes: [`web/README.md`](web/README.md); design contract:
+  [`docs/design/DESIGN.md`](docs/design/DESIGN.md).
 - **Dataset versioning and export (JSON API plus a "Make a training set" console panel)**: immutable numbered versions of the
   accepted labels/boxes, deterministic train/val/test splits, a hashed manifest, and COCO or YOLO zip export for
   image detection (generic `manifest` export for non-box recipes).
