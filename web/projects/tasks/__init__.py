@@ -2,12 +2,11 @@
 
 A recipe is looked up by ``key`` from a registry that is filled from (1) the built-in recipes
 below, (2) ``settings.RECIPES`` (``"module:Class"`` strings, same style as
-``settings.TRAINING["BACKENDS"]``), and (3) ``register_recipe()`` calls. A Wave 1 agent that
-lands an audio or OCR plugin flips its placeholder to available (or replaces it wholesale)
-with a one-line change here, or - better - registers its own recipe from its own module:
+``settings.TRAINING["BACKENDS"]``), and (3) ``register_recipe()`` calls. Plugins may replace or
+extend a built-in with:
 
     from projects.tasks import register_recipe
-    register_recipe(TaskRecipe(key="audio-classification", ...))
+    register_recipe(TaskRecipe(key="audio-classification", ...), replace=True)
 
 ``available=False`` recipes are still listed (the console shows them as "Coming soon"); a
 project created with one keeps its name and labels but its upload/teach tools refuse plainly.
@@ -27,7 +26,7 @@ logger = logging.getLogger(__name__)
 
 KEY_PATTERN = re.compile(r"^[a-z0-9][a-z0-9-]{0,63}$")
 
-#: Vision detection. The one recipe that is fully available today (Wave 0).
+#: Vision detection (Wave 0). Default recipe for image projects that do not pick one.
 VISION_DETECTION = TaskRecipe(
     key="vision-detection",
     title="Recognize objects in pictures",
@@ -39,8 +38,7 @@ VISION_DETECTION = TaskRecipe(
 )
 
 #: Sound classification (Wave 1, OS-AUD-001): WAV clips, one label per clip, taught by the
-#: audio-wav-cnn backend. A project created with it can upload clips, label them, freeze
-#: dataset versions and train today.
+#: audio-wav-cnn backend.
 AUDIO_CLASSIFICATION = TaskRecipe(
     key="audio-classification",
     title="Recognize sounds or equipment faults",
@@ -50,10 +48,9 @@ AUDIO_CLASSIFICATION = TaskRecipe(
     labels_help="One label per sound or fault, e.g. healthy_motor, bearing_fault, belt_slip.",
     available=True,
 )
-#: Handwriting OCR (Wave 1). The labels_help explains the one-label convention: the project's
-#: single label is named "transcript" (it satisfies the snapshot convention's data["label"]),
-#: and the actual corrected text lives in the annotation's "text" key. See
-#: ``projects/modalities/ocr.py`` for the full contract.
+
+#: Handwriting OCR (Wave 1). The project's single label is named "transcript"; corrected text
+#: lives in the annotation's "text" key. See ``projects/modalities/ocr.py``.
 HANDWRITING_OCR = TaskRecipe(
     key="handwriting-ocr",
     title="Read handwriting",
@@ -70,9 +67,8 @@ HANDWRITING_OCR = TaskRecipe(
     available=True,
 )
 
-#: Placeholders for the remaining Wave 1 recipes. To make one available, register a recipe with
-#: the same key from the plugin module that ships its modality plugin and training backend,
-#: e.g. ``register_recipe(replace(...))`` here or ``settings.RECIPES += ["my_pkg.recipes:Table"]``.
+#: Tabular prediction (Wave 1, OS-TAB-001): one CSV/XLSX, target column chosen after upload,
+#: taught by tabular-sklearn.
 TABULAR_PREDICTION = TaskRecipe(
     key="tabular-prediction",
     title="Predict from a spreadsheet",
@@ -89,12 +85,7 @@ TABULAR_PREDICTION = TaskRecipe(
     available=True,
 )
 
-BUILTIN_RECIPES = (VISION_DETECTION, AUDIO_CLASSIFICATION, HANDWRITING_OCR, TABULAR_PREDICTION)
-
-#: Text classification (Wave 2, OS-NLP-001 - classification only; NER is future work): one
-#: CSV of {text, label} rows, taught by the text-sklearn backend (bag-of-words/TF-IDF + a
-#: linear classifier). A project created with it can upload its CSV, confirm the label list,
-#: freeze dataset versions and train today.
+#: Text classification (Wave 2, OS-NLP-001 — classification only; NER is future work).
 TEXT_CLASSIFICATION = TaskRecipe(
     key="text-classification",
     title="Sort text by topic or outcome",
@@ -111,13 +102,8 @@ TEXT_CLASSIFICATION = TaskRecipe(
     available=True,
 )
 
-BUILTIN_RECIPES = (VISION_DETECTION, AUDIO_CLASSIFICATION, HANDWRITING_OCR, TABULAR_PREDICTION, TEXT_CLASSIFICATION)
-
-#: Signal classification (Wave 2, OS-SIG-001 - classification only; forecasting and anomaly
-#: detection are future work): one CSV of labelled series (wide format: a series column, one
-#: value column per time step, a label column), taught by the signal-sklearn backend (window
-#: statistics + a linear classifier). A project created with it can upload its CSV, confirm
-#: the label list, freeze dataset versions and train today.
+#: Signal classification (Wave 2, OS-SIG-001 — classification only; forecasting and anomaly
+#: detection are future work).
 SIGNAL_CLASSIFICATION = TaskRecipe(
     key="signal-classification",
     title="Tell signal patterns apart",
@@ -134,18 +120,10 @@ SIGNAL_CLASSIFICATION = TaskRecipe(
     available=True,
 )
 
-BUILTIN_RECIPES = (
-    VISION_DETECTION, AUDIO_CLASSIFICATION, HANDWRITING_OCR, TABULAR_PREDICTION,
-    TEXT_CLASSIFICATION, SIGNAL_CLASSIFICATION,
-)
-
-#: Document fields (Wave 2, OS-DOC-001 - table/CSV only; no PDF, no OCR, no layout analysis,
-#: and no model training: extraction here is rule-based validation and normalization, and the
-#: slice's "evaluation" is the version-to-version table comparison in
-#: ``projects.training.document_eval``, not a trained model). The recipe shares the ``text``
-#: modality with text classification (the console's "Text / documents" kind): its plugin is
-#: registered by annotation kind (``document_fields``) and dispatches through the recipe, the
-#: OCR pattern, so text classification keeps its own plugin untouched.
+#: Document fields (Wave 2, OS-DOC-001 — table/CSV only; no PDF, no OCR, no layout analysis,
+#: and no model training: rule-based validation/normalization; evaluation is version-to-version
+#: table comparison in ``projects.training.document_eval``). Shares the ``text`` modality with
+#: text classification; plugin dispatches by annotation kind ``document_fields``.
 DOCUMENT_FIELDS = TaskRecipe(
     key="document-fields",
     title="Check fields in document tables",
@@ -163,9 +141,15 @@ DOCUMENT_FIELDS = TaskRecipe(
     available=True,
 )
 
+#: Single source of truth for built-ins. Order is stable for API listings and tests.
 BUILTIN_RECIPES = (
-    VISION_DETECTION, AUDIO_CLASSIFICATION, HANDWRITING_OCR, TABULAR_PREDICTION,
-    TEXT_CLASSIFICATION, SIGNAL_CLASSIFICATION, DOCUMENT_FIELDS,
+    VISION_DETECTION,
+    AUDIO_CLASSIFICATION,
+    HANDWRITING_OCR,
+    TABULAR_PREDICTION,
+    TEXT_CLASSIFICATION,
+    SIGNAL_CLASSIFICATION,
+    DOCUMENT_FIELDS,
 )
 
 #: The recipe assumed for image projects created before recipes existed, and for any image

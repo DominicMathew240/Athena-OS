@@ -1,8 +1,9 @@
 """Approved network destination guard for operation integrations (T11).
 
-No outbound endpoint exists yet (live sources are T10's work); this module is the
-single choke point every future outbound call must pass through. A destination is
-allowed only when its scheme and exact host appear in the approved list from
+HTTPS outbound destinations (webhooks, exports, future remote calls) must pass
+through this choke point. Live camera RTSP is a separate allow-list
+(``ATHENA_APPROVED_RTSP_HOSTS`` / :mod:`projects.live_rtsp`, T10). A destination
+is allowed only when its scheme and exact host appear in
 ``settings.ATHENA_APPROVED_DESTINATIONS``. Hostname matching is exact — no
 subdomain wildcards, no userinfo, no non-default-port tricks.
 """

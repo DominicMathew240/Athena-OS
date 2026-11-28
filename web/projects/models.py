@@ -1402,6 +1402,109 @@ class OperationEvent(_AppendOnlyModel):
         return f"{self.kind}:{self.identity_sha256[:12]}"
 
 
+class OperationLearningExample(models.Model):
+    """One event-linked learning example or verified negative for an operation (T33).
+
+    Examples are the deliberate bridge from diagnosis (T32) into review queues (T34)
+    and dataset splits (T35). Every row keeps recording/time/site provenance and only
+    authorized evidence references (no raw media bytes, no credentials). Selections are
+    content-addressed so capture retries and re-diagnoses do not invent duplicates.
+    Explicitly verified negatives (empty entrance, empty bay) are first-class rows —
+    never inferred merely from a silent frame.
+    """
+
+    POLARITY_POSITIVE, POLARITY_NEGATIVE = "positive", "negative"
+    POLARITY_CHOICES = [
+        (POLARITY_POSITIVE, "Positive (object/event present)"),
+        (POLARITY_NEGATIVE, "Negative (verified empty / false alarm)"),
+    ]
+
+    KIND_MISS = "miss"
+    KIND_EXTRA = "extra"
+    KIND_MATCHED = "matched"
+    KIND_VERIFIED_NEGATIVE = "verified_negative"
+    KIND_OPERATOR = "operator"
+    KIND_CHOICES = [
+        (KIND_MISS, "Missed detection / event"),
+        (KIND_EXTRA, "Extra / false positive"),
+        (KIND_MATCHED, "Matched (optional keep)"),
+        (KIND_VERIFIED_NEGATIVE, "Verified negative"),
+        (KIND_OPERATOR, "Operator selection"),
+    ]
+
+    STATUS_CANDIDATE, STATUS_VERIFIED, STATUS_REJECTED = "candidate", "verified", "rejected"
+    STATUS_CHOICES = [
+        (STATUS_CANDIDATE, "Candidate"),
+        (STATUS_VERIFIED, "Verified"),
+        (STATUS_REJECTED, "Rejected"),
+    ]
+
+    id = models.UUIDField(primary_key=True, default=uuid.uuid4, editable=False)
+    operation = models.ForeignKey(Operation, on_delete=models.CASCADE, related_name="learning_examples")
+    site = models.ForeignKey(Site, on_delete=models.PROTECT, related_name="learning_examples")
+    execution = models.ForeignKey(
+        OperationExecution,
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="learning_examples",
+    )
+    event = models.ForeignKey(
+        OperationEvent,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="learning_examples",
+    )
+    recording = models.ForeignKey(
+        "OperationSourceRecording",
+        on_delete=models.PROTECT,
+        null=True,
+        blank=True,
+        related_name="learning_examples",
+    )
+    # Provenance frozen at capture — later source edits do not rewrite history.
+    recording_sha256 = models.CharField(max_length=64)
+    bundle_sha256 = models.CharField(max_length=64, blank=True, default="")
+    time_pts = models.FloatField(help_text="Seconds into the recording (source timeline).")
+    polarity = models.CharField(max_length=16, choices=POLARITY_CHOICES)
+    selection_kind = models.CharField(max_length=32, choices=KIND_CHOICES)
+    status = models.CharField(max_length=16, choices=STATUS_CHOICES, default=STATUS_CANDIDATE)
+    # Content-addressed identity for dedupe within one operation.
+    content_sha256 = models.CharField(max_length=64)
+    # Authorized evidence only: frame refs, event identity keys, diagnosis reasons — never secrets.
+    evidence = models.JSONField(default=dict, blank=True)
+    event_identity = models.JSONField(default=dict, blank=True)
+    note = models.CharField(max_length=500, blank=True, default="")
+    created_by = models.ForeignKey(settings.AUTH_USER_MODEL, on_delete=models.CASCADE, related_name="+")
+    verified_by = models.ForeignKey(
+        settings.AUTH_USER_MODEL,
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="+",
+    )
+    verified_at = models.DateTimeField(null=True, blank=True)
+    created_at = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        ordering = ("-created_at", "-id")
+        constraints = (
+            models.UniqueConstraint(
+                fields=("operation", "content_sha256"),
+                name="operationlearningexample_unique_content",
+            ),
+        )
+        indexes = (
+            models.Index(fields=("operation", "status", "polarity")),
+            models.Index(fields=("recording_sha256", "time_pts")),
+            models.Index(fields=("site", "created_at")),
+        )
+
+    def __str__(self) -> str:
+        return f"{self.polarity}:{self.selection_kind}:{self.content_sha256[:12]}"
+
+
 class OperationRecording(models.Model):
     """One private test recording attached to an unpublished draft."""
 
