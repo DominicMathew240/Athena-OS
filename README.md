@@ -1,6 +1,6 @@
 # Athena OS
 
-**Current release: 1.10.0** — the version is declared once in [`web/athena_web/settings.py`](web/athena_web/settings.py) (`RELEASE_VERSION`) and shown in the console sidebar footer, the public [`GET /api/version`](web/projects/views.py) endpoint, and the `/healthz` probe. A deployment may set `ATHENA_VERSION` only to *add* a packaging suffix (for example `1.10.0+acme`); it can never mask the released version.
+**Current release: 1.10.1** — the version is declared once in [`web/athena_web/settings.py`](web/athena_web/settings.py) (`RELEASE_VERSION`) and shown in the console sidebar footer, the public [`GET /api/version`](web/projects/views.py) endpoint, and the `/healthz` probe. A deployment may set `ATHENA_VERSION` only to *add* a packaging suffix (for example `1.10.1+acme`); it can never mask the released version.
 
 Athena OS is an open-source (Apache-2.0) toolkit for building reviewed datasets and models for industrial
 data. Operators teach the system through **task recipes** (vision, sound, handwriting, tables, text,
@@ -73,7 +73,7 @@ immutable, versioned component chain — source view, geometry, recipe, policy, 
 approved-model binding — that can be assembled into an append-only **release bundle** (a release
 candidate; full publication/runtime of live counting is not complete).
 
-**What is in 1.7.0–1.10.0 (tree + tests):**
+**What is in 1.7.0–1.10.1 (tree + tests):**
 
 | Slice | What it does | Honest limit |
 |---|---|---|
@@ -81,7 +81,7 @@ candidate; full publication/runtime of live counting is not complete).
 | **Drafts & geometry** | Guided resumable stepper; counting line; keyboard-accessible geometry; named four-corner bays (T17); localStorage autosave (T15) | Draft cannot publish a live count by itself |
 | **T18 + T24–T31 (1.7.0)** | Recorded runtime path, aggregates, parking surfaces, docs/wiki for the operations track | Continuous live counting not enabled |
 | **T32 (1.8.0)** | Replay / parking miss diagnosis with a console surface | Diagnostic aid — not a full SOC |
-| **T33 (1.10.0)** | Event-linked learning examples and verified negatives from diagnosis; content-hash dedupe; owner-scoped capture/list/status APIs | No review-queue UI (T34); no dataset-split wiring (T35); evidence is references only (no frame bytes) |
+| **T33 (1.10.0 / 1.10.1)** | Event-linked learning examples and verified negatives from diagnosis; content-hash dedupe; owner-scoped capture/list/status APIs | No review-queue UI (T34); no dataset-split wiring (T35); evidence is references only (no frame bytes) |
 | **T19 durable workers** | `OperationExecution` jobs; `manage.py operation_worker` / `operation_supervisor`; DB lease, multi-worker safe, crash reclaim, finish-once | Execution step is still a **verified-replay placeholder** (byte-verify recording + replay human reference events) |
 | **T23 event ledger** | Append-only `OperationEvent` ledger; idempotent commit; aggregates from raw events | Wired through the worker step for reference events |
 | **T10 live RTSP (1.9.0 / 1.9.1)** | Allow-listed `rtsp://` / `rtsps://` probe via ffprobe (TCP, H.264); single JPEG installer preview; credentials via T11 vault (no userinfo in URL); role table includes live-rtsp routes | **No continuous live execution, tracking, or counting from RTSP** |
@@ -118,15 +118,16 @@ The console follows **semantic versioning** starting at `1.0.0`. The version liv
 place (`RELEASE_VERSION` in [`web/athena_web/settings.py`](web/athena_web/settings.py)) and is read
 through [`athena_web/version.py`](web/athena_web/version.py):
 
-- `GET /api/version` → `{"name": "athena-console", "version": "1.10.0"}` (public; a bug report
+- `GET /api/version` → `{"name": "athena-console", "version": "1.10.1"}` (public; a bug report
   should not need an account)
 - `GET /healthz` → the version alongside the database/media readiness checks
-- the console sidebar footer → `Athena OS 1.10.0` on every page
+- the console sidebar footer → `Athena OS 1.10.1` on every page
 
 Recent console tags on `main` (feature commits):
 
 | Version | Headline |
 |---|---|
+| **1.10.1** | CI: T33 role table, migration index names, label gate on learning-example writes |
 | **1.10.0** | T33 event-linked learning examples and verified negatives; docs honesty for seven recipes |
 | **1.9.1** | T10 live-rtsp routes declared in the role/access table |
 | **1.9.0** | T10 live RTSP connect + installer JPEG preview |
@@ -156,7 +157,7 @@ contracts stabilise.
   Synthetic-verified; no real-operator usability session. See [`docs/guides/model-quality.md`](docs/guides/model-quality.md).
 - **Seven teaching recipes (synthetic-verified)**: vision, audio, handwriting OCR, tabular, text, signal, and
   document-fields — all registered `available: true` via `projects.tasks` / `GET /api/recipes`.
-- **Operations track through 1.10.0**: private sites/sources, recorded-video drafts, release-bundle chain,
+- **Operations track through 1.10.1**: private sites/sources, recorded-video drafts, release-bundle chain,
   durable workers (T19), event ledger (T23), parking/replay diagnosis (T32), event-linked learning examples and
   verified negatives (T33), and live RTSP installer preview (T10). Design notes under [`docs/plans/`](docs/plans/)
   and [`docs/guides/live-rtsp.md`](docs/guides/live-rtsp.md). T33 APIs:

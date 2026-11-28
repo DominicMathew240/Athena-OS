@@ -18,7 +18,7 @@ def _owner_operation(request, operation_id) -> Operation:
     return get_object_or_404(Operation, id=operation_id, created_by=request.user)
 
 
-@access()
+@access(POST="label")
 @require_http_methods(["GET", "POST"])
 def operation_learning_examples(request: HttpRequest, operation_id):
     """List or create learning examples for one owned operation."""
