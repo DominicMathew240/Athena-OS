@@ -1,6 +1,6 @@
 # Athena OS
 
-**Current release: 1.10.2** — the version is declared once in [`web/athena_web/settings.py`](web/athena_web/settings.py) (`RELEASE_VERSION`) and shown in the console sidebar footer, the public [`GET /api/version`](web/projects/views.py) endpoint, and the `/healthz` probe. A deployment may set `ATHENA_VERSION` only to *add* a packaging suffix (for example `1.10.2+acme`); it can never mask the released version.
+**Current release: 1.10.3** — the version is declared once in [`web/athena_web/settings.py`](web/athena_web/settings.py) (`RELEASE_VERSION`) and shown in the console sidebar footer, the public [`GET /api/version`](web/projects/views.py) endpoint, and the `/healthz` probe. A deployment may set `ATHENA_VERSION` only to *add* a packaging suffix (for example `1.10.3+acme`); it can never mask the released version.
 
 Athena OS is an open-source (Apache-2.0) toolkit for industrial visual inspection and reviewed
 model training. The console home starts with **photo inspections** (ask in plain language or a
@@ -16,10 +16,10 @@ The public marketing site is a static React app on the [`landing`](https://githu
 
 ## Preview: how the system works
 
-The live console is **Athena OS** — light page, white panels, one blue accent from the Athena mark,
-Hanken Grotesk, sidebar brand `Athena OS` (see [`docs/design/DESIGN.md`](docs/design/DESIGN.md)).
-It is **not** the older “Athena Data Labelling” black-sidebar prototype still present in some
-historical dogfood captures under `docs/dogfood/screenshots/`.
+The live console is **Athena OS** — desktop web shell with a fixed left sidebar, light main canvas,
+one blue accent from the Athena mark (see [`docs/design/DESIGN.md`](docs/design/DESIGN.md)). Screenshots
+below are **1440×900 Chromium web views** of a disposable smoke seed (synthetic data), not phone
+layouts and not the retired “Athena Data Labelling” dogfood chrome under `docs/dogfood/screenshots/`.
 
 Three workspaces share that shell:
 
@@ -28,17 +28,23 @@ Three workspaces share that shell:
    approve a candidate, then run a human-gated check screen. Nothing is approved or published automatically.
 3. **Build → People counting** — private recorded-video / RTSP-preview operations drafts (in progress).
 
-![Home: ask in your own words, ready-made inspections, custom-detector entry.](docs/research/2026-11-15-evidence/01-home.png)
-*Home (current shell). “What do you want to check today?” — photo inspections first; custom model training is a separate advanced path.*
+![Home desktop: left sidebar Athena OS, ask in your own words, ready-made inspections.](docs/readme-screenshots/01-home-desktop.png)
+*Home (desktop web). Sidebar: Inspect / Build / Settings / Learn. “What do you want to check today?”*
 
-![New inspection: drop photos and optionally mark parking bays on the picture.](docs/research/2026-11-15-evidence/02-parking-areas.png)
-*Photo inspection setup. Mark areas on the picture when a check needs regions (for example parking bays); still frames are not live monitoring.*
+![Custom detectors desktop: project list and completed Overview for a smoke project.](docs/readme-screenshots/02-detectors-desktop.png)
+*Build → Custom detectors (desktop web). Projects table, role banner, Overview counts when a project is open.*
 
-![Teach the computer: readiness warnings before a training run; models stay candidates until a person approves.](docs/research/2026-11-15-evidence/03-teach.png)
-*Custom detectors → Teach the computer. A finished run only ever files a **candidate**; the approve gate records the approver and the reason.*
+![Teach the computer desktop: readiness warnings; finished run files a candidate only.](docs/readme-screenshots/03-teach-desktop.png)
+*Teach the computer (desktop web). A finished run only ever files a **candidate**; a person must approve before use.*
 
-![Set up your check screen: choose the screen, switch it on, try it before others use it.](docs/research/2026-11-15-evidence/04-check-screen-builder.png)
-*Check-screen builder. “Not a final decision — the computer's opinion; a person decides.” Feedback is evidence; it never changes the live model by itself.*
+![Check-screen builder desktop: four-step setup and live preview.](docs/readme-screenshots/04-check-builder-desktop.png)
+*Check-screen builder (desktop web). Configure input, approved model, findings, and human decision; preview matches the saved screen.*
+
+![New inspection desktop: drop photos and optional mark-areas on the picture.](docs/readme-screenshots/05-inspect-new-desktop.png)
+*New inspection (desktop web). Still-frame photo checks; not live monitoring.*
+
+![Operator check screen desktop: upload a picture; model opinion needs a person.](docs/readme-screenshots/06-check-operator-desktop.png)
+*Operator check screen (desktop web). “Not a final determination — a person decides.”*
 
 **Custom-detector loop (Build → Custom detectors).** Create a project → add data (pictures, WAV, CSV/XLSX, …) →
 label (boxes, clip labels, transcripts, field maps; SAM+CLIP suggestions stay **Needs review**) → freeze a
@@ -47,7 +53,7 @@ Check-screen corrections can be pulled back as Needs-review data for the next ro
 
 **What a first run looks like.** Install, complete first-run setup (first account is administrator), open
 home, connect an AI model if you want instant photo inspections, or open **Custom detectors** for the
-teach loop. Screenshots above are local prototype captures (synthetic / smoke data), current shell.
+teach loop. Preview images: local prototype, synthetic smoke data, current shell, desktop viewport.
 
 ### Teaching recipes (`GET /api/recipes`)
 
@@ -79,7 +85,7 @@ immutable, versioned component chain — source view, geometry, recipe, policy, 
 approved-model binding — that can be assembled into an append-only **release bundle** (a release
 candidate; full publication/runtime of live counting is not complete).
 
-**What is in 1.7.0–1.10.2 (tree + tests):**
+**What is in 1.7.0–1.10.3 (tree + tests):**
 
 | Slice | What it does | Honest limit |
 |---|---|---|
@@ -124,15 +130,16 @@ The console follows **semantic versioning** starting at `1.0.0`. The version liv
 place (`RELEASE_VERSION` in [`web/athena_web/settings.py`](web/athena_web/settings.py)) and is read
 through [`athena_web/version.py`](web/athena_web/version.py):
 
-- `GET /api/version` → `{"name": "athena-console", "version": "1.10.2"}` (public; a bug report
+- `GET /api/version` → `{"name": "athena-console", "version": "1.10.3"}` (public; a bug report
   should not need an account)
 - `GET /healthz` → the version alongside the database/media readiness checks
-- the console sidebar footer → `Athena OS 1.10.2` on every page
+- the console sidebar footer → `Athena OS 1.10.3` on every page
 
 Recent console tags on `main` (feature commits):
 
 | Version | Headline |
 |---|---|
+| **1.10.3** | README Preview: 1440 desktop web captures (sidebar shell), not phone/evidence crops |
 | **1.10.2** | README preview uses current Athena OS shell (not old Data Labelling dogfood shots) |
 | **1.10.1** | CI: T33 role table, migration index names, label gate on learning-example writes |
 | **1.10.0** | T33 event-linked learning examples and verified negatives; docs honesty for seven recipes |
